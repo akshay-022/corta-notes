@@ -1,6 +1,7 @@
 'use client'
 
-import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, MoreHorizontal } from 'lucide-react'
+import { useState } from 'react'
+import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, MoreHorizontal, Plus, Edit3 } from 'lucide-react'
 import { Page } from '@/lib/supabase/types'
 
 interface ContextMenu {
@@ -21,6 +22,8 @@ interface SidebarProps {
   sidebarOpen: boolean
   setSidebarOpen: (open: boolean) => void
   createNewItem: (isFolder: boolean, parentId?: string) => void
+  setRenaming: (page: Page) => void
+  deleteItem: (page: Page) => void
   logout: () => void
 }
 
@@ -35,8 +38,30 @@ export default function Sidebar({
   sidebarOpen,
   setSidebarOpen,
   createNewItem,
+  setRenaming,
+  deleteItem,
   logout
 }: SidebarProps) {
+  const [renamingItem, setRenamingItem] = useState<Page | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+
+  const startRename = (item: Page) => {
+    setRenamingItem(item)
+    setRenameValue(item.title)
+  }
+
+  const handleRenameSubmit = () => {
+    if (renamingItem && renameValue.trim()) {
+      setRenaming({ ...renamingItem, title: renameValue.trim() })
+    }
+    setRenamingItem(null)
+    setRenameValue('')
+  }
+
+  const handleRenameCancel = () => {
+    setRenamingItem(null)
+    setRenameValue('')
+  }
 
   const handleContextMenu = (e: React.MouseEvent, type: 'folder' | 'file' | 'root', item?: Page) => {
     e.preventDefault()
@@ -61,33 +86,44 @@ export default function Sidebar({
     })
   }
 
-  const buildTree = (items: Page[], parentId?: string) => {
-    return items
-      .filter(item => item.parent_uuid === parentId)
-      .sort((a, b) => {
-        const aIsFolder = (a.metadata as any)?.isFolder
-        const bIsFolder = (b.metadata as any)?.isFolder
-        if (aIsFolder && !bIsFolder) return -1
-        if (!aIsFolder && bIsFolder) return 1
-        return a.title.localeCompare(b.title)
-      })
+  const buildTree = (items: Page[], parentId?: string | null) => {
+    const filtered = items.filter(item => {
+      // If no parentId provided, get root level items (no parent or null parent)
+      if (parentId === undefined || parentId === null) {
+        return item.parent_uuid === null || item.parent_uuid === undefined
+      }
+      // Otherwise, get items with the specific parent
+      return item.parent_uuid === parentId
+    })
+    
+    console.log(`Building tree for parentId: ${parentId}, found ${filtered.length} items:`, 
+      filtered.map(item => ({ title: item.title, uuid: item.uuid, parent_uuid: item.parent_uuid })))
+    
+    return filtered.sort((a, b) => {
+      const aIsFolder = (a.metadata as any)?.isFolder
+      const bIsFolder = (b.metadata as any)?.isFolder
+      // Folders first
+      if (aIsFolder && !bIsFolder) return -1
+      if (!aIsFolder && bIsFolder) return 1
+      // Then alphabetical
+      return a.title.localeCompare(b.title)
+    })
   }
 
   const renderTreeItem = (item: Page, level: number = 0) => {
     const isFolder = (item.metadata as any)?.isFolder
     const isExpanded = expandedFolders.has(item.uuid)
-    const hasChildren = pages.some(p => p.parent_uuid === item.uuid)
+    const children = buildTree(pages, item.uuid)
+    const hasChildren = children.length > 0
 
     return (
       <div key={item.uuid}>
         <div
-          className={`flex items-center hover:bg-[#2a2a2a] cursor-pointer text-sm ${
-            activePage?.uuid === item.uuid && !isFolder ? 'bg-[#2a2a2a]' : ''
-          }`}
-          style={{ paddingLeft: `${level * 12 + 8}px` }}
+          className="flex items-center hover:bg-[#2a2d2e] cursor-pointer text-sm group transition-colors"
+          style={{ paddingLeft: `${16 + level * 16}px`, paddingRight: '16px' }}
           onClick={() => {
             if (isFolder) {
-              if (hasChildren) toggleFolder(item.uuid)
+              toggleFolder(item.uuid)
             } else {
               setActivePage(item)
               setSidebarOpen(false)
@@ -96,36 +132,43 @@ export default function Sidebar({
           onContextMenu={(e) => handleContextMenu(e, isFolder ? 'folder' : 'file', item)}
         >
           <div className="flex items-center gap-1 py-1 flex-1 min-w-0">
-            {isFolder && hasChildren && (
-              <div className="w-4 h-4 flex items-center justify-center">
-                {isExpanded ? (
-                  <ChevronDown size={12} className="text-gray-400" />
-                ) : (
-                  <ChevronRight size={12} className="text-gray-400" />
-                )}
-              </div>
-            )}
-            {isFolder && !hasChildren && <div className="w-4" />}
-            
+            {/* Chevron for folders OR file icon for files - aligned in same position */}
             <div className="w-4 h-4 flex items-center justify-center">
               {isFolder ? (
                 isExpanded ? (
-                  <FolderOpen size={14} className="text-gray-400" />
+                  <ChevronDown size={12} className="text-[#cccccc]" />
                 ) : (
-                  <Folder size={14} className="text-gray-400" />
+                  <ChevronRight size={12} className="text-[#cccccc]" />
                 )
               ) : (
-                <FileText size={14} className="text-gray-400" />
+                <FileText size={14} className="text-[#519aba]" />
               )}
             </div>
             
-            <span className="text-gray-300 truncate text-xs">{item.title}</span>
+            {/* Title - with inline editing */}
+            {renamingItem?.uuid === item.uuid ? (
+              <input
+                type="text"
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onBlur={handleRenameSubmit}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleRenameSubmit()
+                  if (e.key === 'Escape') handleRenameCancel()
+                }}
+                className="bg-[#3c3c3c] text-[#cccccc] text-sm border border-[#007acc] rounded px-1 py-0 ml-1 flex-1 min-w-0"
+                autoFocus
+              />
+            ) : (
+              <span className="text-[#cccccc] truncate text-sm font-normal ml-1">{item.title}</span>
+            )}
           </div>
         </div>
         
-        {isFolder && isExpanded && hasChildren && (
+        {/* Children - show when folder is expanded */}
+        {isFolder && isExpanded && (
           <div>
-            {buildTree(pages, item.uuid).map(child => 
+            {children.map(child => 
               renderTreeItem(child, level + 1)
             )}
           </div>
@@ -136,28 +179,44 @@ export default function Sidebar({
 
   return (
     <>
-      {/* Sidebar - Cursor style */}
+      {/* Sidebar - VS Code style */}
       <div className={`
-        fixed lg:relative inset-y-0 left-0 z-40 w-64 bg-[#161616] border-r border-gray-800 transform transition-transform duration-200 ease-in-out
+        fixed lg:relative inset-y-0 left-0 z-40 w-64 bg-[#1e1e1e] border-r border-[#333333] transform transition-transform duration-200 ease-in-out
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         <div className="flex flex-col h-full">
-          {/* Minimal header */}
-          <div className="px-3 py-2 border-b border-gray-800">
-            <div className="flex items-center justify-between">
-              <span className="text-gray-400 text-xs font-medium uppercase tracking-wider">Explorer</span>
-              <button
-                onClick={logout}
-                className="text-gray-500 hover:text-gray-300 p-1"
-              >
-                <MoreHorizontal size={14} />
-              </button>
-            </div>
+          {/* Clean Header */}
+          <div className="p-4 flex justify-end">
+            <button
+              onClick={logout}
+              className="text-[#969696] hover:text-[#cccccc] p-1 rounded transition-colors"
+            >
+              <MoreHorizontal size={14} />
+            </button>
+          </div>
+          
+          {/* New Note Button - ChatGPT style */}
+          <div className="pb-8">
+            <button
+              onClick={() => createNewItem(false)}
+              className="w-full bg-transparent hover:bg-[#2a2a2a] text-[#cccccc] rounded-lg py-1 text-sm flex items-center gap-1 transition-all duration-200"
+              style={{ paddingLeft: '16px', paddingRight: '16px' }}
+            >
+              <div className="w-4 h-4 flex items-center justify-center">
+                <Edit3 size={14} className="text-[#cccccc]" />
+              </div>
+              <span className="ml-1">New Note</span>
+            </button>
+          </div>
+
+          {/* Section Header */}
+          <div className="px-4 pb-2">
+            <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">Auto-organized notes</h3>
           </div>
 
           {/* File tree */}
           <div 
-            className="flex-1 overflow-y-auto py-1"
+            className="flex-1 overflow-y-auto"
             onContextMenu={(e) => handleContextMenu(e, 'root')}
           >
             {buildTree(pages).map(item => renderTreeItem(item))}
@@ -186,6 +245,33 @@ export default function Sidebar({
             <Folder size={12} />
             New Folder
           </button>
+          
+          {/* Show rename and delete options when right-clicking on an item */}
+          {contextMenu.item && (
+            <>
+              <div className="border-t border-gray-600 my-1" />
+              <button
+                className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-[#3a3a3a] flex items-center gap-2"
+                onClick={() => {
+                  startRename(contextMenu.item!)
+                  setContextMenu(null)
+                }}
+              >
+                <span className="w-3 h-3 text-center">✏️</span>
+                Rename
+              </button>
+              <button
+                className="w-full text-left px-3 py-1.5 text-sm text-red-400 hover:bg-[#3a3a3a] flex items-center gap-2"
+                onClick={() => {
+                  deleteItem(contextMenu.item!)
+                  setContextMenu(null)
+                }}
+              >
+                <span className="w-3 h-3 text-center">🗑️</span>
+                Delete
+              </button>
+            </>
+          )}
         </div>
       )}
     </>

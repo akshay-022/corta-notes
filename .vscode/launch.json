@@ -1,0 +1,75 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Next.js Dev (with Debugger)",
+        "type": "node-terminal",
+        "request": "launch",
+        "command": "npm run dev",  // changed from pnpm to npm
+        "cwd": "${workspaceFolder}",
+        "skipFiles": [
+          "<node_internals>/**",
+          "**/node_modules/**"
+        ]
+      },
+      {
+        "name": "Next.js Prod (with Debugger)",
+        "type": "node-terminal",
+        "request": "launch",
+        "command": "npm start",  // changed from pnpm to npm
+        "cwd": "${workspaceFolder}",
+        "skipFiles": [
+          "<node_internals>/**",
+          "**/node_modules/**"
+        ]
+      },
+      {
+        "name": "Chrome client: debug",
+        "type": "chrome",
+        "request": "launch",
+        "url": "http://localhost:3000",
+        "webRoot": "${workspaceFolder}",
+        "userDataDir": "${workspaceFolder}/.vscode/chrome-debug-profile",
+        "runtimeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "runtimeArgs": [
+          "--remote-debugging-port=9222",
+          "--no-default-browser-check",
+          "--no-first-run",
+          "--disable-extensions",
+          "--disable-default-apps"
+        ],
+        "sourceMaps": true,
+        "skipFiles": [
+          "**/node_modules/**",
+          "<node_internals>/**",
+          "**/.next/**",
+          "**/webpack/**"
+        ],
+        "smartStep": true,
+        "skipConditions": true,
+        "enableSourceMapCaching": true,
+        "justMyCode": true,
+        "breakOnLoadStrategy": "off",
+        "disableNetworkCache": true,
+        "browserLaunchLocation": "workspace",
+        "trace": false,
+        "showAsyncStacks": false,
+        "breakOnFirstLine": false,
+        "resolveSourceMapLocations": [
+          "!**/node_modules/**",
+          "!**/.next/**",
+          "!**/webpack/**"
+        ],
+        "console": "integratedTerminal",
+        "internalConsoleOptions": "neverOpen",
+        "outputCapture": "std",
+        "asyncStackTraces": true
+      }
+    ],
+    "compounds": [
+      {
+        "name": "Debug Full Stack",
+        "configurations": ["Next.js Dev (with Debugger)", "Chrome client: debug"]
+      }
+    ]
+}

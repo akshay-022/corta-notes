@@ -28,7 +28,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     checkUser()
-    loadPages()
   }, [])
 
   useEffect(() => {
@@ -38,23 +37,43 @@ export default function DashboardPage() {
   }, [])
 
   const checkUser = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser()
+      
+      if (error || !user) {
+        console.log('No user found, redirecting to login')
+        router.push('/login')
+        return
+      }
+      
+      console.log('User found:', user.id)
+      setUser(user)
+      setLoading(false)
+      
+      // Load pages directly with the user from the API call
+      await loadPagesForUser(user)
+    } catch (error) {
+      console.error('Auth error:', error)
       router.push('/login')
-      return
     }
-    setUser(user)
-    setLoading(false)
   }
 
-  const loadPages = async () => {
+  const loadPagesForUser = async (userObj: any) => {
+    console.log('Loading pages for user:', userObj.id)
     const { data, error } = await supabase
       .from('pages')
       .select('*')
+      .eq('user_id', userObj.id)
       .eq('is_deleted', false)
       .order('title', { ascending: true })
 
+    if (error) {
+      console.error('Error loading pages:', error)
+      return
+    }
+
     if (data) {
+      console.log('Loaded pages:', data.length)
       setPages(data)
       if (data.length > 0 && !activePage) {
         // Find first file (not folder)
@@ -62,6 +81,15 @@ export default function DashboardPage() {
         if (firstFile) setActivePage(firstFile)
       }
     }
+  }
+
+  const loadPages = async () => {
+    if (!user) {
+      console.log('No user, skipping loadPages')
+      return
+    }
+    
+    await loadPagesForUser(user)
   }
 
   const createNewItem = async (isFolder: boolean, parentId?: string) => {
@@ -90,6 +118,51 @@ export default function DashboardPage() {
       }
     }
     setContextMenu(null)
+  }
+
+  const renameItem = async (updatedPage: Page) => {
+    if (!user) return
+    
+    console.log('Renaming item:', updatedPage.title)
+    const { error } = await supabase
+      .from('pages')
+      .update({ title: updatedPage.title })
+      .eq('uuid', updatedPage.uuid)
+      .eq('user_id', user.id)
+
+    if (!error) {
+      setPages(pages.map(p => p.uuid === updatedPage.uuid ? updatedPage : p))
+      if (activePage?.uuid === updatedPage.uuid) {
+        setActivePage(updatedPage)
+      }
+    } else {
+      console.error('Error renaming item:', error)
+    }
+  }
+
+  const deleteItem = async (pageToDelete: Page) => {
+    if (!user) return
+    
+    // Confirm deletion
+    if (!confirm(`Are you sure you want to delete "${pageToDelete.title}"?`)) {
+      return
+    }
+    
+    console.log('Deleting item:', pageToDelete.title)
+    const { error } = await supabase
+      .from('pages')
+      .update({ is_deleted: true })
+      .eq('uuid', pageToDelete.uuid)
+      .eq('user_id', user.id)
+
+    if (!error) {
+      setPages(pages.filter(p => p.uuid !== pageToDelete.uuid))
+      if (activePage?.uuid === pageToDelete.uuid) {
+        setActivePage(null)
+      }
+    } else {
+      console.error('Error deleting item:', error)
+    }
   }
 
   const logout = async () => {
@@ -127,6 +200,8 @@ export default function DashboardPage() {
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
         createNewItem={createNewItem}
+        setRenaming={renameItem}
+        deleteItem={deleteItem}
         logout={logout}
       />
 
