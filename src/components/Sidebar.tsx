@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, MoreHorizontal, Plus, Edit3 } from 'lucide-react'
+import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, MoreHorizontal, Plus, Edit3, Edit, Check, X } from 'lucide-react'
 import { Page } from '@/lib/supabase/types'
 
 interface ContextMenu {
@@ -24,6 +24,8 @@ interface SidebarProps {
   createNewItem: (isFolder: boolean, parentId?: string) => void
   setRenaming: (page: Page) => void
   deleteItem: (page: Page) => void
+  updatePageMetadata: (page: Page, metadata: any) => void
+  sendForOrganization: (page: Page) => void
   logout: () => void
 }
 
@@ -40,10 +42,14 @@ export default function Sidebar({
   createNewItem,
   setRenaming,
   deleteItem,
+  updatePageMetadata,
+  sendForOrganization,
   logout
 }: SidebarProps) {
   const [renamingItem, setRenamingItem] = useState<Page | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [organizingItem, setOrganizingItem] = useState<Page | null>(null)
+  const [organizationInstructions, setOrganizationInstructions] = useState('')
 
   const startRename = (item: Page) => {
     setRenamingItem(item)
@@ -61,6 +67,29 @@ export default function Sidebar({
   const handleRenameCancel = () => {
     setRenamingItem(null)
     setRenameValue('')
+  }
+
+  const startOrganizing = (item: Page) => {
+    setOrganizingItem(item)
+    setOrganizationInstructions((item.metadata as any)?.organizationInstructions || '')
+  }
+
+  const handleOrganizationSubmit = () => {
+    if (organizingItem && organizationInstructions.trim()) {
+      const currentMetadata = organizingItem.metadata as any || {}
+      const updatedMetadata = {
+        ...currentMetadata,
+        organizationInstructions: organizationInstructions.trim()
+      }
+      updatePageMetadata(organizingItem, updatedMetadata)
+    }
+    setOrganizingItem(null)
+    setOrganizationInstructions('')
+  }
+
+  const handleOrganizationCancel = () => {
+    setOrganizingItem(null)
+    setOrganizationInstructions('')
   }
 
   const handleContextMenu = (e: React.MouseEvent, type: 'folder' | 'file' | 'root', item?: Page) => {
@@ -209,17 +238,77 @@ export default function Sidebar({
             </button>
           </div>
 
-          {/* Section Header */}
+          {/* Soon to be organized notes */}
+          {pages.filter(page => !((page.metadata as any)?.isFolder) && (page.metadata as any)?.organizeStatus === 'soon').length > 0 && (
+            <>
+              <div className="px-4 pb-2">
+                <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">Recent notes</h3>
+              </div>
+              <div className="pb-6">
+                {pages
+                  .filter(page => !((page.metadata as any)?.isFolder) && (page.metadata as any)?.organizeStatus === 'soon')
+                  .map(item => (
+                    <div
+                      key={item.uuid}
+                      className="flex items-center hover:bg-[#2a2d2e] text-sm group transition-colors py-1 cursor-pointer"
+                      style={{ paddingLeft: '16px', paddingRight: '16px' }}
+                      onClick={() => {
+                        setActivePage(item)
+                        setSidebarOpen(false)
+                      }}
+                      onContextMenu={(e) => handleContextMenu(e, 'file', item)}
+                    >
+                      <div className="flex items-center gap-1 flex-1 min-w-0">
+                        <div className="w-4 h-4 flex items-center justify-center">
+                          <FileText size={14} className="text-[#519aba]" />
+                        </div>
+                        <span className="text-[#cccccc] truncate text-sm font-normal ml-1">{item.title}</span>
+                      </div>
+                      
+                      {/* Action buttons - hidden by default, shown on hover */}
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            startOrganizing(item)
+                          }}
+                          className="p-1 hover:bg-[#404040] rounded text-[#969696] hover:text-[#cccccc] transition-colors"
+                          title="Add organization instructions"
+                        >
+                          <Edit size={12} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            sendForOrganization(item)
+                          }}
+                          className="p-1 hover:bg-[#404040] rounded text-[#969696] hover:text-[#cccccc] transition-colors"
+                          title="Send for organization"
+                        >
+                          <Check size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </>
+          )}
+
+          {/* Auto-organized notes section */}
           <div className="px-4 pb-2">
             <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">Auto-organized notes</h3>
           </div>
 
-          {/* File tree */}
+          {/* File tree - only organized notes and folders */}
           <div 
             className="flex-1 overflow-y-auto"
             onContextMenu={(e) => handleContextMenu(e, 'root')}
           >
-            {buildTree(pages).map(item => renderTreeItem(item))}
+            {buildTree(pages.filter(page => 
+              (page.metadata as any)?.isFolder || 
+              (page.metadata as any)?.organizeStatus === 'yes' ||
+              !(page.metadata as any)?.hasOwnProperty('organizeStatus') // For backwards compatibility with existing notes
+            )).map(item => renderTreeItem(item))}
           </div>
         </div>
       </div>
@@ -272,6 +361,57 @@ export default function Sidebar({
               </button>
             </>
           )}
+        </div>
+      )}
+
+      {/* Organization Instructions Dialog */}
+      {organizingItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-[#2a2a2a] border border-[#404040] rounded-lg p-6 w-96 max-w-[90vw]">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-[#cccccc] font-medium">Organization Instructions</h3>
+              <button
+                onClick={handleOrganizationCancel}
+                className="text-[#969696] hover:text-[#cccccc] transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-[#969696] text-sm mb-2">
+                How should "{organizingItem.title}" be organized?
+              </p>
+              <p className="text-[#888888] text-xs mb-4">
+                Provide instructions on what folder this note should go into, 
+                or how it should be categorized. For example: "Put this in the 
+                'Work Projects' folder" or "Create a new 'Meeting Notes' folder".
+              </p>
+              <textarea
+                value={organizationInstructions}
+                onChange={(e) => setOrganizationInstructions(e.target.value)}
+                placeholder="Enter organization instructions..."
+                className="w-full bg-[#1a1a1a] border border-[#404040] rounded px-3 py-2 text-[#cccccc] text-sm resize-none"
+                rows={4}
+                autoFocus
+              />
+            </div>
+            
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={handleOrganizationCancel}
+                className="px-3 py-1.5 text-sm text-[#969696] hover:text-[#cccccc] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleOrganizationSubmit}
+                className="px-3 py-1.5 bg-[#007acc] hover:bg-[#005a9e] text-white text-sm rounded transition-colors"
+              >
+                Save Instructions
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </>

@@ -102,7 +102,10 @@ export default function DashboardPage() {
         user_id: user.id,
         content: { type: 'doc', content: [] },
         parent_uuid: parentId || null,
-        metadata: { isFolder }
+        metadata: { 
+          isFolder,
+          organizeStatus: isFolder ? undefined : 'soon' // Only add organizeStatus to files, not folders
+        }
       })
       .select()
       .single()
@@ -165,6 +168,35 @@ export default function DashboardPage() {
     }
   }
 
+  const updatePageMetadata = async (page: Page, metadata: any) => {
+    if (!user) return
+    
+    console.log('Updating metadata for:', page.title, metadata)
+    const { error } = await supabase
+      .from('pages')
+      .update({ metadata })
+      .eq('uuid', page.uuid)
+      .eq('user_id', user.id)
+
+    if (!error) {
+      const updatedPage = { ...page, metadata }
+      setPages(pages.map(p => p.uuid === page.uuid ? updatedPage : p))
+      if (activePage?.uuid === page.uuid) {
+        setActivePage(updatedPage)
+      }
+    } else {
+      console.error('Error updating metadata:', error)
+    }
+  }
+
+  const sendForOrganization = async (page: Page) => {
+    if (!user) return
+    
+    console.log('Sending for organization:', page.title)
+    // For now, just show an alert - you can implement actual organization logic later
+    alert(`"${page.title}" has been sent for organization!`)
+  }
+
   const logout = async () => {
     await supabase.auth.signOut()
     router.push('/login')
@@ -202,6 +234,8 @@ export default function DashboardPage() {
         createNewItem={createNewItem}
         setRenaming={renameItem}
         deleteItem={deleteItem}
+        updatePageMetadata={updatePageMetadata}
+        sendForOrganization={sendForOrganization}
         logout={logout}
       />
 
