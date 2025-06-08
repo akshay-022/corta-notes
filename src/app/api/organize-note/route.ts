@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       .update({ 
         metadata: { 
           ...currentNote.metadata,
-          organizeStatus: 'yes',
+          organizeStatus: 'never',
           organizationInstructions: organizationInstructions,
           organizedAt: new Date().toISOString()
         }
@@ -470,24 +470,18 @@ function mergeNoteContents(existingContent: any, newContent: any): any {
   if (!existingContent || !existingContent.content) return newContent
   if (!newContent || !newContent.content) return existingContent
   
-  // Create a separator paragraph
+  // Create a horizontal line separator
   const separator = {
-    type: 'paragraph',
-    content: [
-      {
-        type: 'text',
-        text: '---'
-      }
-    ]
+    type: 'horizontalRule'
   }
   
-  // Merge the content arrays
+  // Merge the content arrays - new content at top, separator, then existing content
   return {
     type: 'doc',
     content: [
-      ...existingContent.content,
+      ...newContent.content,
       separator,
-      ...newContent.content
+      ...existingContent.content
     ]
   }
 }
