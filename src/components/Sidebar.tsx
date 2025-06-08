@@ -26,6 +26,7 @@ interface SidebarProps {
   deleteItem: (page: Page) => void
   updatePageMetadata: (page: Page, metadata: any) => void
   sendForOrganization: (page: Page) => void
+  highlightedFolders: Set<string>
   logout: () => void
 }
 
@@ -44,6 +45,7 @@ export default function Sidebar({
   deleteItem,
   updatePageMetadata,
   sendForOrganization,
+  highlightedFolders,
   logout
 }: SidebarProps) {
   const [renamingItem, setRenamingItem] = useState<Page | null>(null)
@@ -75,11 +77,11 @@ export default function Sidebar({
   }
 
   const handleOrganizationSubmit = () => {
-    if (organizingItem && organizationInstructions.trim()) {
+    if (organizingItem) {
       const currentMetadata = organizingItem.metadata as any || {}
       const updatedMetadata = {
         ...currentMetadata,
-        organizationInstructions: organizationInstructions.trim()
+        organizationInstructions: organizationInstructions.trim() // Can be empty string
       }
       updatePageMetadata(organizingItem, updatedMetadata)
     }
@@ -144,12 +146,31 @@ export default function Sidebar({
     const isExpanded = expandedFolders.has(item.uuid)
     const children = buildTree(pages, item.uuid)
     const hasChildren = children.length > 0
+    const isHighlighted = highlightedFolders.has(item.title)
+    
+    // Debug highlighting
+    if (highlightedFolders.size > 0) {
+      console.log('Highlighting check:', {
+        itemTitle: item.title,
+        isFolder: isFolder,
+        highlightedFolders: Array.from(highlightedFolders),
+        isHighlighted: isHighlighted
+      })
+    }
 
     return (
       <div key={item.uuid}>
         <div
-          className="flex items-center hover:bg-[#2a2d2e] cursor-pointer text-sm group transition-colors"
-          style={{ paddingLeft: `${16 + level * 16}px`, paddingRight: '16px' }}
+          className={`flex items-center cursor-pointer text-sm group transition-all duration-500 ${
+            isHighlighted 
+              ? 'border-l-2 border-[#65a30d]' 
+              : 'hover:bg-[#2a2d2e]'
+          }`}
+          style={{ 
+            paddingLeft: isHighlighted ? `${16 + level * 16 - 2}px` : `${16 + level * 16}px`, // Subtract 2px when highlighted to compensate for border
+            paddingRight: '16px',
+            backgroundColor: isHighlighted ? 'rgba(101, 163, 13, 0.25)' : undefined
+          }}
           onClick={() => {
             if (isFolder) {
               toggleFolder(item.uuid)

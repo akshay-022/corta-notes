@@ -23,6 +23,7 @@ export default function DashboardPage() {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
   const [loading, setLoading] = useState(true)
+  const [highlightedFolders, setHighlightedFolders] = useState<Set<string>>(new Set())
   const router = useRouter()
   const supabase = createClient()
 
@@ -193,8 +194,58 @@ export default function DashboardPage() {
     if (!user) return
     
     console.log('Sending for organization:', page.title)
-    // For now, just show an alert - you can implement actual organization logic later
-    alert(`"${page.title}" has been sent for organization!`)
+    
+    try {
+      // Get organization instructions from metadata (can be empty)
+      const organizationInstructions = (page.metadata as any)?.organizationInstructions || ''
+
+      // Call the organization API
+      const response = await fetch('/api/organize-note', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          noteId: page.uuid,
+          noteContent: page.content,
+          organizationInstructions: organizationInstructions,
+          fileTree: pages
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        console.log('Organization successful:', result.message)
+        console.log('Changed paths:', result.changedPaths)
+        
+        // Highlight folders in the changed paths
+        if (result.changedPaths && result.changedPaths.length > 0) {
+          const foldersToHighlight = new Set<string>()
+          
+          result.changedPaths.forEach((path: string) => {
+            // Split path and add each folder level for highlighting
+            const pathParts = path.split('/')
+            pathParts.forEach((folderName: string) => {
+              foldersToHighlight.add(folderName.trim())
+            })
+          })
+          
+          console.log('Setting highlighted folders:', Array.from(foldersToHighlight))
+          setHighlightedFolders(foldersToHighlight)
+          
+        }
+        
+        // Refresh the pages to show the organized note
+        await loadPages()
+      } else {
+        console.error('Organization failed:', result.error)
+        alert(`Organization failed: ${result.error}`)
+      }
+    } catch (error) {
+      console.error('Error calling organization API:', error)
+      alert('Failed to organize note. Please try again.')
+    }
   }
 
   const logout = async () => {
@@ -236,6 +287,7 @@ export default function DashboardPage() {
         deleteItem={deleteItem}
         updatePageMetadata={updatePageMetadata}
         sendForOrganization={sendForOrganization}
+        highlightedFolders={highlightedFolders}
         logout={logout}
       />
 
