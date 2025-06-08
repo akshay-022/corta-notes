@@ -3,12 +3,15 @@
 import { useState } from 'react'
 import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, MoreHorizontal, Plus, Edit3, Edit, Check, X } from 'lucide-react'
 import { Page } from '@/lib/supabase/types'
+import { DragDropStyles, isValidDrop, DropZoneIndicator } from '@/components/DragDropStyles'
+import type { DragItem, DropTarget } from '@/hooks/useDragAndDrop'
 
 interface ContextMenu {
   x: number
   y: number
   type: 'folder' | 'file' | 'root'
   item?: Page
+  isInOrganizedSection?: boolean
 }
 
 interface SidebarProps {
@@ -21,13 +24,18 @@ interface SidebarProps {
   setContextMenu: (menu: ContextMenu | null) => void
   sidebarOpen: boolean
   setSidebarOpen: (open: boolean) => void
-  createNewItem: (isFolder: boolean, parentId?: string) => void
+  createNewItem: (isFolder: boolean, parentId?: string, shouldBeOrganized?: boolean) => void
   setRenaming: (page: Page) => void
   deleteItem: (page: Page) => void
   updatePageMetadata: (page: Page, metadata: any) => void
   sendForOrganization: (page: Page) => void
   highlightedFolders: Set<string>
   logout: () => void
+  dragAndDrop: {
+    dragState: { isDragging: boolean; dragItem: DragItem | null; dragOverElement: string | null }
+    getDragHandlers: (item: DragItem) => any
+    getDropHandlers: (target: DropTarget) => any
+  }
 }
 
 export default function Sidebar({
@@ -46,7 +54,8 @@ export default function Sidebar({
   updatePageMetadata,
   sendForOrganization,
   highlightedFolders,
-  logout
+  logout,
+  dragAndDrop
 }: SidebarProps) {
   const [renamingItem, setRenamingItem] = useState<Page | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -97,11 +106,31 @@ export default function Sidebar({
   const handleContextMenu = (e: React.MouseEvent, type: 'folder' | 'file' | 'root', item?: Page) => {
     e.preventDefault()
     e.stopPropagation()
+    
+    // Determine if we're in the organized section
+    let isInOrganizedSection = false
+    
+    if (type === 'root') {
+      // Check if the right-click happened in the auto-organized notes area
+      // We can determine this by checking if the target is within the organized section
+      const target = e.target as HTMLElement
+      const organizedSection = target.closest('.flex-1.overflow-y-auto')
+      isInOrganizedSection = !!organizedSection
+    } else if (item) {
+      // If right-clicking on an item, check if that item is organized
+      isInOrganizedSection = !!(
+        (item.metadata as any)?.isFolder || 
+        (item.metadata as any)?.organizeStatus === 'yes' ||
+        !(item.metadata as any)?.hasOwnProperty('organizeStatus')
+      )
+    }
+    
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
       type,
-      item
+      item,
+      isInOrganizedSection
     })
   }
 
@@ -158,29 +187,47 @@ export default function Sidebar({
       })
     }
 
+    // Set up drag and drop for folders
+    const dropTarget: DropTarget = {
+      id: isFolder ? item.uuid : null,
+      type: isFolder ? 'folder' : 'section',
+      section: 'organized'
+    }
+    const dropHandlers = isFolder ? dragAndDrop.getDropHandlers(dropTarget) : {}
+    const isDropTarget = dragAndDrop.dragState.dragOverElement === item.uuid
+    const isValidDropTarget = isFolder && dragAndDrop.dragState.dragItem?.sourceSection === 'recent'
+
     return (
       <div key={item.uuid}>
-        <div
-          className={`flex items-center cursor-pointer text-sm group transition-all duration-500 ${
+        <DragDropStyles
+          isDragging={dragAndDrop.dragState.isDragging}
+          isDraggedItem={false}
+          isDropTarget={isDropTarget}
+          isValidDropTarget={isValidDropTarget}
+          className={`relative flex items-center cursor-pointer text-sm group transition-all duration-300 ${
             isHighlighted 
               ? 'border-l-2 border-[#65a30d]' 
               : 'hover:bg-[#2a2d2e]'
           }`}
-          style={{ 
-            paddingLeft: isHighlighted ? `${16 + level * 16 - 2}px` : `${16 + level * 16}px`, // Subtract 2px when highlighted to compensate for border
-            paddingRight: '16px',
-            backgroundColor: isHighlighted ? 'rgba(101, 163, 13, 0.25)' : undefined
-          }}
-          onClick={() => {
-            if (isFolder) {
-              toggleFolder(item.uuid)
-            } else {
-              setActivePage(item)
-              setSidebarOpen(false)
-            }
-          }}
-          onContextMenu={(e) => handleContextMenu(e, isFolder ? 'folder' : 'file', item)}
         >
+          <div
+            {...dropHandlers}
+            style={{ 
+              paddingLeft: isHighlighted ? `${16 + level * 16 - 2}px` : `${16 + level * 16}px`, // Subtract 2px when highlighted to compensate for border
+              paddingRight: '16px',
+              backgroundColor: isHighlighted ? 'rgba(101, 163, 13, 0.25)' : undefined,
+              width: '100%'
+            }}
+            onClick={() => {
+              if (isFolder) {
+                toggleFolder(item.uuid)
+              } else {
+                setActivePage(item)
+                setSidebarOpen(false)
+              }
+            }}
+            onContextMenu={(e) => handleContextMenu(e, isFolder ? 'folder' : 'file', item)}
+          >
           <div className="flex items-center gap-1 py-1 flex-1 min-w-0">
             {/* Chevron for folders OR file icon for files - aligned in same position */}
             <div className="w-4 h-4 flex items-center justify-center">
@@ -213,7 +260,10 @@ export default function Sidebar({
               <span className="text-[#cccccc] truncate text-sm font-normal ml-1">{item.title}</span>
             )}
           </div>
-        </div>
+          
+
+          </div>
+        </DragDropStyles>
         
         {/* Children - show when folder is expanded */}
         {isFolder && isExpanded && (
@@ -265,52 +315,85 @@ export default function Sidebar({
               <div className="px-4 pb-2">
                 <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">Recent notes</h3>
               </div>
-              <div className="pb-6">
+              <div 
+                className="pb-6 relative"
+                {...dragAndDrop.getDropHandlers({
+                  id: null,
+                  type: 'section',
+                  section: 'recent'
+                })}
+              >
+                <DropZoneIndicator 
+                  isActive={dragAndDrop.dragState.isDragging && 
+                           dragAndDrop.dragState.dragItem?.sourceSection === 'organized' &&
+                           dragAndDrop.dragState.dragOverElement === null}
+                  message="Drop here to move to recent notes"
+                />
                 {pages
                   .filter(page => !((page.metadata as any)?.isFolder) && (page.metadata as any)?.organizeStatus === 'soon')
-                  .map(item => (
-                    <div
-                      key={item.uuid}
-                      className="flex items-center hover:bg-[#2a2d2e] text-sm group transition-colors py-1 cursor-pointer"
-                      style={{ paddingLeft: '16px', paddingRight: '16px' }}
-                      onClick={() => {
-                        setActivePage(item)
-                        setSidebarOpen(false)
-                      }}
-                      onContextMenu={(e) => handleContextMenu(e, 'file', item)}
-                    >
-                      <div className="flex items-center gap-1 flex-1 min-w-0">
-                        <div className="w-4 h-4 flex items-center justify-center">
-                          <FileText size={14} className="text-[#519aba]" />
+                  .map(item => {
+                    const dragItem: DragItem = {
+                      id: item.uuid,
+                      type: 'note',
+                      title: item.title,
+                      sourceSection: 'recent'
+                    }
+                    const dragHandlers = dragAndDrop.getDragHandlers(dragItem)
+                    const isDraggedItem = dragAndDrop.dragState.dragItem?.id === item.uuid
+                    
+                    return (
+                      <DragDropStyles
+                        key={item.uuid}
+                        isDragging={dragAndDrop.dragState.isDragging}
+                        isDraggedItem={isDraggedItem}
+                        isDropTarget={false}
+                        isValidDropTarget={false}
+                        className="flex items-center hover:bg-[#2a2d2e] text-sm group transition-colors py-1 cursor-pointer"
+                      >
+                        <div
+                          {...dragHandlers}
+                          style={{ paddingLeft: '16px', paddingRight: '16px' }}
+                          onClick={() => {
+                            setActivePage(item)
+                            setSidebarOpen(false)
+                          }}
+                          onContextMenu={(e) => handleContextMenu(e, 'file', item)}
+                          className="flex items-center w-full"
+                        >
+                          <div className="flex items-center gap-1 flex-1 min-w-0">
+                            <div className="w-4 h-4 flex items-center justify-center">
+                              <FileText size={14} className="text-[#519aba]" />
+                            </div>
+                            <span className="text-[#cccccc] truncate text-sm font-normal ml-1">{item.title}</span>
+                          </div>
+                          
+                          {/* Action buttons - hidden by default, shown on hover */}
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                startOrganizing(item)
+                              }}
+                              className="p-1 hover:bg-[#404040] rounded text-[#969696] hover:text-[#cccccc] transition-colors"
+                              title="Add organization instructions"
+                            >
+                              <Edit size={12} />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                sendForOrganization(item)
+                              }}
+                              className="p-1 hover:bg-[#404040] rounded text-[#969696] hover:text-[#cccccc] transition-colors"
+                              title="Send for organization"
+                            >
+                              <Check size={12} />
+                            </button>
+                          </div>
                         </div>
-                        <span className="text-[#cccccc] truncate text-sm font-normal ml-1">{item.title}</span>
-                      </div>
-                      
-                      {/* Action buttons - hidden by default, shown on hover */}
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            startOrganizing(item)
-                          }}
-                          className="p-1 hover:bg-[#404040] rounded text-[#969696] hover:text-[#cccccc] transition-colors"
-                          title="Add organization instructions"
-                        >
-                          <Edit size={12} />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            sendForOrganization(item)
-                          }}
-                          className="p-1 hover:bg-[#404040] rounded text-[#969696] hover:text-[#cccccc] transition-colors"
-                          title="Send for organization"
-                        >
-                          <Check size={12} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                      </DragDropStyles>
+                    )
+                  })}
               </div>
             </>
           )}
@@ -322,14 +405,53 @@ export default function Sidebar({
 
           {/* File tree - only organized notes and folders */}
           <div 
-            className="flex-1 overflow-y-auto"
+            className="flex-1 overflow-y-auto relative"
             onContextMenu={(e) => handleContextMenu(e, 'root')}
           >
+            {/* Only show section drop zone when there are no organized items or when specifically hovering empty space */}
             {buildTree(pages.filter(page => 
-              (page.metadata as any)?.isFolder || 
-              (page.metadata as any)?.organizeStatus === 'yes' ||
-              !(page.metadata as any)?.hasOwnProperty('organizeStatus') // For backwards compatibility with existing notes
+              (page.metadata as any)?.organizeStatus === 'yes'
+            )).length === 0 && dragAndDrop.dragState.isDragging && (
+              <div 
+                className="h-full flex items-center justify-center"
+                {...dragAndDrop.getDropHandlers({
+                  id: null,
+                  type: 'section',
+                  section: 'organized'
+                })}
+              >
+                <div className="text-center p-8 border-2 border-blue-400 border-dashed rounded-lg bg-blue-500 bg-opacity-10">
+                  <span className="text-blue-400 text-sm font-medium">
+                    Drop here to organize
+                  </span>
+                </div>
+              </div>
+            )}
+            
+            {/* Render the tree items */}
+            {buildTree(pages.filter(page => 
+              (page.metadata as any)?.organizeStatus === 'yes'
             )).map(item => renderTreeItem(item))}
+            
+            {/* Bottom drop zone for root level when items exist */}
+            {buildTree(pages.filter(page => 
+              (page.metadata as any)?.organizeStatus === 'yes'
+            )).length > 0 && dragAndDrop.dragState.isDragging && (
+              <div 
+                className="h-16 flex items-center justify-center mx-4 mt-2"
+                {...dragAndDrop.getDropHandlers({
+                  id: null,
+                  type: 'section',
+                  section: 'organized'
+                })}
+              >
+                <div className="w-full text-center py-3 border-2 border-blue-400 border-dashed rounded-lg bg-blue-500 bg-opacity-10 opacity-0 hover:opacity-100 transition-opacity">
+                  <span className="text-blue-400 text-xs font-medium">
+                    Drop here for root level
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -343,14 +465,14 @@ export default function Sidebar({
         >
           <button
             className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-[#3a3a3a] flex items-center gap-2"
-            onClick={() => createNewItem(false, contextMenu.item?.uuid)}
+            onClick={() => createNewItem(false, contextMenu.item?.uuid, contextMenu.isInOrganizedSection)}
           >
             <FileText size={12} />
             New File
           </button>
           <button
             className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-[#3a3a3a] flex items-center gap-2"
-            onClick={() => createNewItem(true, contextMenu.item?.uuid)}
+            onClick={() => createNewItem(true, contextMenu.item?.uuid, contextMenu.isInOrganizedSection)}
           >
             <Folder size={12} />
             New Folder

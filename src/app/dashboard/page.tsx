@@ -7,6 +7,7 @@ import { Menu, X, FileText } from 'lucide-react'
 import { Page } from '@/lib/supabase/types'
 import TipTapEditor from '@/components/TipTapEditor'
 import Sidebar from '@/components/Sidebar'
+import { useDragAndDrop } from '@/hooks/useDragAndDrop'
 
 interface ContextMenu {
   x: number
@@ -93,8 +94,21 @@ export default function DashboardPage() {
     await loadPagesForUser(user)
   }
 
-  const createNewItem = async (isFolder: boolean, parentId?: string) => {
+  const createNewItem = async (isFolder: boolean, parentId?: string, shouldBeOrganized?: boolean) => {
     if (!user) return
+
+    console.log('Creating new item:', { isFolder, parentId, shouldBeOrganized })
+
+    // Determine the organize status based on the context
+    let organizeStatus: string | undefined = undefined
+    if (shouldBeOrganized) {
+      // Both files and folders in auto-organized section get 'yes' status
+      organizeStatus = 'yes'
+    } else if (!isFolder) { 
+      // Only files in recent notes section get 'soon' status
+      // Folders elsewhere don't get organize status
+      organizeStatus = 'soon'
+    }
 
     const { data, error } = await supabase
       .from('pages')
@@ -105,13 +119,14 @@ export default function DashboardPage() {
         parent_uuid: parentId || null,
         metadata: { 
           isFolder,
-          organizeStatus: isFolder ? undefined : 'soon' // Only add organizeStatus to files, not folders
+          organizeStatus
         }
       })
       .select()
       .single()
 
     if (data) {
+      console.log('Successfully created item:', data.title, 'with organizeStatus:', organizeStatus)
       setPages([...pages, data])
       if (!isFolder) {
         setActivePage(data)
@@ -120,6 +135,8 @@ export default function DashboardPage() {
       if (parentId) {
         setExpandedFolders(prev => new Set([...prev, parentId]))
       }
+    } else if (error) {
+      console.error('Error creating item:', error)
     }
     setContextMenu(null)
   }
@@ -189,6 +206,57 @@ export default function DashboardPage() {
       console.error('Error updating metadata:', error)
     }
   }
+
+  const moveItem = async (itemId: string, newParentId: string | null, newOrganizeStatus: 'soon' | 'yes') => {
+    if (!user) return
+
+    const itemToMove = pages.find(p => p.uuid === itemId)
+    if (!itemToMove) return
+
+    console.log('Moving item:', itemToMove.title, 'to parent:', newParentId, 'with status:', newOrganizeStatus)
+
+    // Update the item's parent and organize status
+    const newMetadata = {
+      ...(itemToMove.metadata as any),
+      organizeStatus: newOrganizeStatus
+    }
+
+    const { error } = await supabase
+      .from('pages')
+      .update({ 
+        parent_uuid: newParentId,
+        metadata: newMetadata
+      })
+      .eq('uuid', itemId)
+      .eq('user_id', user.id)
+
+    if (!error) {
+      // Update local state
+      const updatedItem = { 
+        ...itemToMove, 
+        parent_uuid: newParentId,
+        metadata: newMetadata
+      }
+      setPages(pages.map(p => p.uuid === itemId ? updatedItem : p))
+      
+      // Update active page if it's the one being moved
+      if (activePage?.uuid === itemId) {
+        setActivePage(updatedItem)
+      }
+
+      // If moving to a folder, expand that folder
+      if (newParentId) {
+        setExpandedFolders(prev => new Set([...prev, newParentId]))
+      }
+
+      console.log('Successfully moved item:', itemToMove.title)
+    } else {
+      console.error('Error moving item:', error)
+    }
+  }
+
+  // Initialize drag and drop functionality
+  const dragAndDrop = useDragAndDrop({ onMoveItem: moveItem })
 
   const sendForOrganization = async (page: Page) => {
     if (!user) return
@@ -289,6 +357,7 @@ export default function DashboardPage() {
         sendForOrganization={sendForOrganization}
         highlightedFolders={highlightedFolders}
         logout={logout}
+        dragAndDrop={dragAndDrop}
       />
 
       {/* Main content */}
