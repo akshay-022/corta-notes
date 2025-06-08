@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, MoreHorizontal, Plus, Edit3, Edit, Check, X } from 'lucide-react'
+import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, MoreHorizontal, Plus, Edit3, Edit, Check, X, RefreshCw } from 'lucide-react'
 import { Page } from '@/lib/supabase/types'
 import { DragDropStyles, isValidDrop, DropZoneIndicator } from '@/components/DragDropStyles'
 import type { DragItem, DropTarget } from '@/hooks/useDragAndDrop'
@@ -33,6 +33,7 @@ interface SidebarProps {
   sendForOrganization: (page: Page) => void
   highlightedFolders: Set<string>
   logout: () => void
+  onManualSync: () => void
   dragAndDrop: {
     dragState: { isDragging: boolean; dragItem: DragItem | null; dragOverElement: string | null }
     getDragHandlers: (item: DragItem) => any
@@ -57,6 +58,7 @@ export default function Sidebar({
   sendForOrganization,
   highlightedFolders,
   logout,
+  onManualSync,
   dragAndDrop
 }: SidebarProps) {
   const [renamingItem, setRenamingItem] = useState<Page | null>(null)
@@ -215,7 +217,17 @@ export default function Sidebar({
       })
     }
 
-    // Set up drag and drop for folders
+    // Set up drag functionality for organized items
+    const dragItem: DragItem = {
+      id: item.uuid,
+      type: isFolder ? 'folder' : 'note',
+      title: item.title,
+      sourceSection: 'organized'
+    }
+    const dragHandlers = dragAndDrop.getDragHandlers(dragItem)
+    const isDraggedItem = dragAndDrop.dragState.dragItem?.id === item.uuid
+
+    // Set up drop functionality for folders
     const dropTarget: DropTarget = {
       id: isFolder ? item.uuid : null,
       type: isFolder ? 'folder' : 'section',
@@ -223,13 +235,16 @@ export default function Sidebar({
     }
     const dropHandlers = isFolder ? dragAndDrop.getDropHandlers(dropTarget) : {}
     const isDropTarget = dragAndDrop.dragState.dragOverElement === item.uuid
-    const isValidDropTarget = isFolder && dragAndDrop.dragState.dragItem?.sourceSection === 'recent'
+    const isValidDropTarget = isFolder && (
+      dragAndDrop.dragState.dragItem?.sourceSection === 'recent' ||
+      dragAndDrop.dragState.dragItem?.sourceSection === 'organized'
+    )
 
     return (
       <div key={item.uuid}>
         <DragDropStyles
           isDragging={dragAndDrop.dragState.isDragging}
-          isDraggedItem={false}
+          isDraggedItem={isDraggedItem}
           isDropTarget={isDropTarget}
           isValidDropTarget={isValidDropTarget}
           className={`relative flex items-center cursor-pointer text-sm group transition-all duration-300 ${
@@ -239,6 +254,7 @@ export default function Sidebar({
           }`}
         >
           <div
+            {...dragHandlers}
             {...dropHandlers}
             style={{ 
               paddingLeft: isHighlighted ? `${16 + level * 16 - 2}px` : `${16 + level * 16}px`, // Subtract 2px when highlighted to compensate for border
@@ -324,7 +340,7 @@ export default function Sidebar({
           </div>
           
           {/* New Note Button - ChatGPT style */}
-          <div className="pb-4">
+          <div className="pb-2">
             <button
               onClick={() => createNewItem(false)}
               className="w-full bg-transparent hover:bg-[#2a2a2a] text-[#cccccc] rounded-lg py-1 text-sm flex items-center gap-1 transition-all duration-200"
@@ -334,6 +350,21 @@ export default function Sidebar({
                 <Edit3 size={14} className="text-[#cccccc]" />
               </div>
               <span className="ml-1">New Note</span>
+            </button>
+          </div>
+
+          {/* Sync Button - For Development */}
+          <div className="pb-4">
+            <button
+              onClick={onManualSync}
+              className="w-full bg-transparent hover:bg-[#2a2a2a] text-[#cccccc] rounded-lg py-1 text-sm flex items-center gap-1 transition-all duration-200"
+              style={{ paddingLeft: '16px', paddingRight: '16px' }}
+              title="Sync notes to SuperMemory (Dev)"
+            >
+              <div className="w-4 h-4 flex items-center justify-center">
+                <RefreshCw size={14} className="text-[#969696]" />
+              </div>
+              <span className="ml-1 text-[#969696]">Sync to Memory</span>
             </button>
           </div>
 
@@ -362,42 +393,99 @@ export default function Sidebar({
                 })}
               >
                 <DropZoneIndicator 
-                  isActive={dragAndDrop.dragState.isDragging && 
-                           dragAndDrop.dragState.dragItem?.sourceSection === 'organized' &&
-                           dragAndDrop.dragState.dragOverElement === null}
+                  isActive={false}
                   message="Drop here to move to recent notes"
                 />
 {isSearchActive ? (
-                  // Show search results
-                  searchResults.map((doc, index) => (
-                    <div
-                      key={`search-${doc.id}-${index}`}
-                      className="flex items-center hover:bg-[#2a2d2e] text-sm group transition-colors py-1 cursor-pointer"
-                      style={{ paddingLeft: '16px', paddingRight: '16px' }}
-                      onClick={() => handleSearchDocumentSelect(doc)}
-                    >
-                      <div className="flex items-center gap-1 flex-1 min-w-0">
-                        <div className="w-4 h-4 flex items-center justify-center">
-                          <FileText size={14} className="text-[#519aba]" />
-                        </div>
-                        <div className="flex-1 min-w-0 ml-1">
-                          <div className="text-[#cccccc] truncate text-sm font-normal">
-                            {doc.title || doc.metadata?.title || 'Untitled'}
-                          </div>
-                          {doc.content && (
-                            <div className="text-[#969696] text-xs truncate">
-                              {doc.content.slice(0, 80)}...
+                  // Show search results - make them draggable
+                  searchResults.map((doc, index) => {
+                    // Find the corresponding page for this search result
+                    const correspondingPage = pages.find(page => 
+                      page.uuid === doc.metadata?.pageUuid
+                    )
+
+                    if (!correspondingPage) {
+                      // If no corresponding page found, show non-draggable result
+                      return (
+                        <div
+                          key={`search-${doc.id}-${index}`}
+                          className="flex items-center hover:bg-[#2a2d2e] text-sm group transition-colors py-1 cursor-pointer"
+                          style={{ paddingLeft: '16px', paddingRight: '16px' }}
+                          onClick={() => handleSearchDocumentSelect(doc)}
+                        >
+                          <div className="flex items-center gap-1 flex-1 min-w-0">
+                            <div className="w-4 h-4 flex items-center justify-center">
+                              <FileText size={14} className="text-[#519aba]" />
                             </div>
-                          )}
-                        </div>
-                        {doc.score && (
-                          <div className="text-[#969696] text-xs">
-                            {Math.round(doc.score * 100)}%
+                            <div className="flex-1 min-w-0 ml-1">
+                              <div className="text-[#cccccc] truncate text-sm font-normal">
+                                {doc.title || doc.metadata?.title || 'Untitled'}
+                              </div>
+                              {doc.content && (
+                                <div className="text-[#969696] text-xs truncate">
+                                  {doc.content.slice(0, 80)}...
+                                </div>
+                              )}
+                            </div>
+                            {doc.score && (
+                              <div className="text-[#969696] text-xs">
+                                {Math.round(doc.score * 100)}%
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    </div>
-                  ))
+                        </div>
+                      )
+                    }
+
+                    // Create drag item for the search result
+                    const dragItem: DragItem = {
+                      id: correspondingPage.uuid,
+                      type: 'note',
+                      title: correspondingPage.title,
+                      sourceSection: 'recent' // Search results act like recent notes for drag purposes
+                    }
+                    const dragHandlers = dragAndDrop.getDragHandlers(dragItem)
+                    const isDraggedItem = dragAndDrop.dragState.dragItem?.id === correspondingPage.uuid
+
+                    return (
+                      <DragDropStyles
+                        key={`search-${doc.id}-${index}`}
+                        isDragging={dragAndDrop.dragState.isDragging}
+                        isDraggedItem={isDraggedItem}
+                        isDropTarget={false}
+                        isValidDropTarget={false}
+                        className="flex items-center hover:bg-[#2a2d2e] text-sm group transition-colors py-1 cursor-pointer"
+                      >
+                        <div
+                          {...dragHandlers}
+                          style={{ paddingLeft: '16px', paddingRight: '16px' }}
+                          onClick={() => handleSearchDocumentSelect(doc)}
+                          className="flex items-center w-full"
+                        >
+                          <div className="flex items-center gap-1 flex-1 min-w-0">
+                            <div className="w-4 h-4 flex items-center justify-center">
+                              <FileText size={14} className="text-[#519aba]" />
+                            </div>
+                            <div className="flex-1 min-w-0 ml-1">
+                              <div className="text-[#cccccc] truncate text-sm font-normal">
+                                {doc.title || doc.metadata?.title || 'Untitled'}
+                              </div>
+                              {doc.content && (
+                                <div className="text-[#969696] text-xs truncate">
+                                  {doc.content.slice(0, 80)}...
+                                </div>
+                              )}
+                            </div>
+                            {doc.score && (
+                              <div className="text-[#969696] text-xs">
+                                {Math.round(doc.score * 100)}%
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </DragDropStyles>
+                    )
+                  })
                 ) : (
                   // Show recent notes
                   pages
@@ -492,8 +580,8 @@ export default function Sidebar({
                   section: 'organized'
                 })}
               >
-                <div className="text-center p-8 border-2 border-blue-400 border-dashed rounded-lg bg-blue-500 bg-opacity-10">
-                  <span className="text-blue-400 text-sm font-medium">
+                <div className="text-center p-8 rounded-lg hover:bg-[#2a2d2e] transition-colors">
+                  <span className="text-[#969696] text-sm">
                     Drop here to organize
                   </span>
                 </div>
@@ -517,8 +605,8 @@ export default function Sidebar({
                   section: 'organized'
                 })}
               >
-                <div className="w-full text-center py-3 border-2 border-blue-400 border-dashed rounded-lg bg-blue-500 bg-opacity-10 opacity-0 hover:opacity-100 transition-opacity">
-                  <span className="text-blue-400 text-xs font-medium">
+                <div className="w-full text-center py-3 rounded-lg bg-[#2a2d2e] opacity-0 hover:opacity-100 transition-opacity">
+                  <span className="text-[#969696] text-xs">
                     Drop here for root level
                   </span>
                 </div>

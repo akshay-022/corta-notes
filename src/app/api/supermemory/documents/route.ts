@@ -8,7 +8,7 @@ const superMemoryClient = new supermemory({
 
 export async function POST(request: NextRequest) {
   try {
-    const { action, pageUuid, content, title, userId } = await request.json()
+    const { action, pageUuid, content, title } = await request.json()
 
     if (!process.env.SUPERMEMORY_API_KEY) {
       return NextResponse.json({ error: 'SuperMemory not configured' }, { status: 503 })
@@ -16,13 +16,19 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient()
 
+    // Get authenticated user server-side
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     switch (action) {
       case 'add':
-        return await addDocument(pageUuid, content, title, userId, supabase)
+        return await addDocument(pageUuid, content, title, user.id, supabase)
       case 'update':
-        return await updateDocument(pageUuid, content, title, userId, supabase)
+        return await updateDocument(pageUuid, content, title, user.id, supabase)
       case 'delete':
-        return await deleteDocument(pageUuid, userId, supabase)
+        return await deleteDocument(pageUuid, user.id, supabase)
       case 'findSimilar':
         return await findSimilarDocuments(content, title, pageUuid)
       default:
@@ -41,19 +47,18 @@ export async function POST(request: NextRequest) {
 async function addDocument(pageUuid: string, content: string, title: string, userId: string, supabase: any) {
   console.log('Adding document to SuperMemory:', { pageUuid, title })
 
-  // Add to SuperMemory
+  // Add to SuperMemory - don't include userId in metadata for privacy
   const response = await superMemoryClient.memories.add({
     content: content,
     metadata: {
       pageUuid: pageUuid,
-      userId: userId,
       source: 'corta-notes',
       title: title
     }
   })
 
   if (response.id) {
-    // Store the mapping in Supabase
+    // Store the mapping in Supabase (userId only for our internal tracking)
     const { error } = await supabase
       .from('document_supermemory_mapping')
       .insert({

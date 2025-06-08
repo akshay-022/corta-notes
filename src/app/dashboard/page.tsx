@@ -8,6 +8,7 @@ import { Page } from '@/lib/supabase/types'
 import TipTapEditor from '@/components/TipTapEditor'
 import Sidebar from '@/components/Sidebar'
 import { useDragAndDrop } from '@/hooks/useDragAndDrop'
+import { superMemorySyncService } from '@/lib/superMemorySync'
 
 interface ContextMenu {
   x: number
@@ -92,6 +93,35 @@ export default function DashboardPage() {
     }
     
     await loadPagesForUser(user)
+  }
+
+  const handleManualSync = async () => {
+    try {
+      console.log('🔄 Manual SuperMemory sync triggered...')
+      
+      // Get pages that need syncing
+      const pendingPages = superMemorySyncService.getPendingSyncPages(pages)
+      console.log(`Found ${pendingPages.length} pages that need syncing to SuperMemory`)
+      
+      if (pendingPages.length === 0) {
+        console.log('✅ All pages are already synced with SuperMemory')
+        return
+      }
+
+      // Log which pages will be synced
+      console.log('📋 Pages to sync:')
+      pendingPages.forEach(page => {
+        const syncStatus = superMemorySyncService.getSyncStatus(page)
+        console.log(`- ${page.title} (status: ${syncStatus})`)
+      })
+
+      // Start sync and await completion for development
+      await superMemorySyncService.syncAllPending(pages)
+      console.log('🎉 Manual sync completed!')
+
+    } catch (error) {
+      console.error('❌ Manual sync failed:', error)
+    }
   }
 
   const createNewItem = async (isFolder: boolean, parentId?: string, shouldBeOrganized?: boolean) => {
@@ -357,6 +387,7 @@ export default function DashboardPage() {
         sendForOrganization={sendForOrganization}
         highlightedFolders={highlightedFolders}
         logout={logout}
+        onManualSync={handleManualSync}
         dragAndDrop={dragAndDrop}
       />
 

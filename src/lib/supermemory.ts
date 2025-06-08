@@ -54,7 +54,7 @@ class SuperMemoryService {
   /**
    * Add a document to SuperMemory and store the mapping
    */
-  async addDocument(pageUuid: string, content: string, title: string, userId: string): Promise<string | null> {
+  async addDocument(pageUuid: string, content: string, title: string): Promise<string | null> {
     try {
       console.log('Adding document to SuperMemory:', { pageUuid, title })
 
@@ -67,8 +67,7 @@ class SuperMemoryService {
           action: 'add',
           pageUuid, 
           content, 
-          title, 
-          userId 
+          title
         })
       })
 
@@ -89,7 +88,7 @@ class SuperMemoryService {
   /**
    * Update a document in SuperMemory
    */
-  async updateDocument(pageUuid: string, content: string, title: string, userId: string): Promise<boolean> {
+  async updateDocument(pageUuid: string, content: string, title: string): Promise<boolean> {
     try {
       const response = await fetch('/api/supermemory/documents', {
         method: 'POST',
@@ -100,8 +99,7 @@ class SuperMemoryService {
           action: 'update',
           pageUuid, 
           content, 
-          title, 
-          userId 
+          title
         })
       })
 
@@ -120,7 +118,7 @@ class SuperMemoryService {
   /**
    * Delete a document from SuperMemory
    */
-  async deleteDocument(pageUuid: string, userId: string): Promise<boolean> {
+  async deleteDocument(pageUuid: string): Promise<boolean> {
     try {
       const response = await fetch('/api/supermemory/documents', {
         method: 'POST',
@@ -129,8 +127,7 @@ class SuperMemoryService {
         },
         body: JSON.stringify({ 
           action: 'delete',
-          pageUuid, 
-          userId 
+          pageUuid
         })
       })
 

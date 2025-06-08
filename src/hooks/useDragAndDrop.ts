@@ -78,10 +78,10 @@ export function useDragAndDrop({ onMoveItem }: UseDragAndDropProps) {
 
     // Only move if there's actually a change
     const isMovingToOrganized = dragItem.sourceSection === 'recent' && dropTarget.section === 'organized'
-    const isMovingToRecent = dragItem.sourceSection === 'organized' && dropTarget.section === 'recent'
     const isMovingWithinOrganized = dragItem.sourceSection === 'organized' && dropTarget.section === 'organized'
 
-    if (isMovingToOrganized || isMovingToRecent || isMovingWithinOrganized) {
+    // Organized items can ONLY move within organized section
+    if (isMovingToOrganized || isMovingWithinOrganized) {
       onMoveItem(dragItem.id, newParentId, newOrganizeStatus)
     }
 

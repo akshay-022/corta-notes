@@ -109,61 +109,21 @@ export default function DocumentSearch({ onSelectDocument, onSearchResults, clas
         </div>
       </form>
 
-      {/* Search Results */}
-      {showExpanded && (
-        <div className="mt-3 space-y-1">
-          {/* Loading State */}
-          {isSearching && (
-            <div className="text-[#969696] text-sm px-2 py-2">
-              Searching...
-            </div>
-          )}
+      {/* Show loading state only */}
+      {isSearching && (
+        <div className="mt-3">
+          <div className="text-[#969696] text-sm px-2 py-2">
+            Searching...
+          </div>
+        </div>
+      )}
 
-          {/* No Results */}
-          {!isSearching && searchQuery.trim() && searchResults.length === 0 && (
-            <div className="text-[#969696] text-sm px-2 py-2">
-              No documents found for "{searchQuery}"
-            </div>
-          )}
-
-          {/* Results */}
-          {!isSearching && searchResults.length > 0 && (
-            <>
-              <div className="text-[#969696] text-xs font-medium uppercase tracking-wider px-2 pb-1">
-                Found {searchResults.length} documents
-              </div>
-              {searchResults.map((doc, index) => (
-                <div
-                  key={`${doc.id}-${index}`}
-                  onClick={() => handleDocumentClick(doc)}
-                  className="flex items-center hover:bg-[#2a2d2e] text-sm group transition-colors py-2 px-2 cursor-pointer rounded"
-                >
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <div className="w-4 h-4 flex items-center justify-center">
-                      <FileText size={14} className="text-[#519aba]" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[#cccccc] truncate text-sm font-normal">
-                        {doc.title || doc.metadata?.title || 'Untitled'}
-                      </div>
-                      {doc.content && (
-                        <div className="text-[#969696] text-xs truncate">
-                          {doc.content.slice(0, 100)}...
-                        </div>
-                      )}
-                    </div>
-                    {doc.score && (
-                      <div className="text-[#969696] text-xs">
-                        {Math.round(doc.score * 100)}%
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </>
-          )}
-
-          {/* SuperMemory Status - we'll check this via the API response instead */}
+      {/* Show no results message only */}
+      {!isSearching && searchQuery.trim() && searchResults.length === 0 && (
+        <div className="mt-3">
+          <div className="text-[#969696] text-sm px-2 py-2">
+            No documents found for "{searchQuery}"
+          </div>
         </div>
       )}
     </div>
