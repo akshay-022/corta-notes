@@ -5,6 +5,8 @@ import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, MoreHorizontal
 import { Page } from '@/lib/supabase/types'
 import { DragDropStyles, isValidDrop, DropZoneIndicator } from '@/components/DragDropStyles'
 import type { DragItem, DropTarget } from '@/hooks/useDragAndDrop'
+import DocumentSearch from '@/components/DocumentSearch'
+import { SuperMemoryDocument } from '@/lib/supermemory'
 
 interface ContextMenu {
   x: number
@@ -61,6 +63,8 @@ export default function Sidebar({
   const [renameValue, setRenameValue] = useState('')
   const [organizingItem, setOrganizingItem] = useState<Page | null>(null)
   const [organizationInstructions, setOrganizationInstructions] = useState('')
+  const [searchResults, setSearchResults] = useState<SuperMemoryDocument[]>([])
+  const [isSearchActive, setIsSearchActive] = useState(false)
 
   const startRename = (item: Page) => {
     setRenamingItem(item)
@@ -101,6 +105,30 @@ export default function Sidebar({
   const handleOrganizationCancel = () => {
     setOrganizingItem(null)
     setOrganizationInstructions('')
+  }
+
+  const handleSearchDocumentSelect = (doc: SuperMemoryDocument) => {
+    console.log('Selected search document:', doc)
+    
+    // Try to find the corresponding page in our local pages
+    const matchingPage = pages.find(page => 
+      page.uuid === doc.metadata?.pageUuid || 
+      page.title === doc.title || 
+      page.title === doc.metadata?.title
+    )
+    
+    if (matchingPage) {
+      setActivePage(matchingPage)
+      setSidebarOpen(false)
+    } else {
+      console.log('No matching local page found for search result:', doc)
+      // Could potentially create a new page or show a message
+    }
+  }
+
+  const handleSearchResults = (results: SuperMemoryDocument[]) => {
+    setSearchResults(results)
+    setIsSearchActive(results.length > 0)
   }
 
   const handleContextMenu = (e: React.MouseEvent, type: 'folder' | 'file' | 'root', item?: Page) => {
@@ -296,7 +324,7 @@ export default function Sidebar({
           </div>
           
           {/* New Note Button - ChatGPT style */}
-          <div className="pb-8">
+          <div className="pb-4">
             <button
               onClick={() => createNewItem(false)}
               className="w-full bg-transparent hover:bg-[#2a2a2a] text-[#cccccc] rounded-lg py-1 text-sm flex items-center gap-1 transition-all duration-200"
@@ -309,11 +337,21 @@ export default function Sidebar({
             </button>
           </div>
 
-          {/* Soon to be organized notes */}
-          {pages.filter(page => !((page.metadata as any)?.isFolder) && (page.metadata as any)?.organizeStatus === 'soon').length > 0 && (
+          {/* Document Search */}
+          <div className="pb-6 px-4">
+            <DocumentSearch 
+              onSelectDocument={handleSearchDocumentSelect}
+              onSearchResults={handleSearchResults}
+            />
+          </div>
+
+          {/* Soon to be organized notes OR Search Results */}
+          {(isSearchActive || pages.filter(page => !((page.metadata as any)?.isFolder) && (page.metadata as any)?.organizeStatus === 'soon').length > 0) && (
             <>
               <div className="px-4 pb-2">
-                <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">Recent notes</h3>
+                <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">
+                  {isSearchActive ? 'Search Results' : 'Recent notes'}
+                </h3>
               </div>
               <div 
                 className="pb-6 relative"
@@ -329,71 +367,105 @@ export default function Sidebar({
                            dragAndDrop.dragState.dragOverElement === null}
                   message="Drop here to move to recent notes"
                 />
-                {pages
-                  .filter(page => !((page.metadata as any)?.isFolder) && (page.metadata as any)?.organizeStatus === 'soon')
-                  .map(item => {
-                    const dragItem: DragItem = {
-                      id: item.uuid,
-                      type: 'note',
-                      title: item.title,
-                      sourceSection: 'recent'
-                    }
-                    const dragHandlers = dragAndDrop.getDragHandlers(dragItem)
-                    const isDraggedItem = dragAndDrop.dragState.dragItem?.id === item.uuid
-                    
-                    return (
-                      <DragDropStyles
-                        key={item.uuid}
-                        isDragging={dragAndDrop.dragState.isDragging}
-                        isDraggedItem={isDraggedItem}
-                        isDropTarget={false}
-                        isValidDropTarget={false}
-                        className="flex items-center hover:bg-[#2a2d2e] text-sm group transition-colors py-1 cursor-pointer"
-                      >
-                        <div
-                          {...dragHandlers}
-                          style={{ paddingLeft: '16px', paddingRight: '16px' }}
-                          onClick={() => {
-                            setActivePage(item)
-                            setSidebarOpen(false)
-                          }}
-                          onContextMenu={(e) => handleContextMenu(e, 'file', item)}
-                          className="flex items-center w-full"
-                        >
-                          <div className="flex items-center gap-1 flex-1 min-w-0">
-                            <div className="w-4 h-4 flex items-center justify-center">
-                              <FileText size={14} className="text-[#519aba]" />
-                            </div>
-                            <span className="text-[#cccccc] truncate text-sm font-normal ml-1">{item.title}</span>
-                          </div>
-                          
-                          {/* Action buttons - hidden by default, shown on hover */}
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                startOrganizing(item)
-                              }}
-                              className="p-1 hover:bg-[#404040] rounded text-[#969696] hover:text-[#cccccc] transition-colors"
-                              title="Add organization instructions"
-                            >
-                              <Edit size={12} />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                sendForOrganization(item)
-                              }}
-                              className="p-1 hover:bg-[#404040] rounded text-[#969696] hover:text-[#cccccc] transition-colors"
-                              title="Send for organization"
-                            >
-                              <Check size={12} />
-                            </button>
-                          </div>
+{isSearchActive ? (
+                  // Show search results
+                  searchResults.map((doc, index) => (
+                    <div
+                      key={`search-${doc.id}-${index}`}
+                      className="flex items-center hover:bg-[#2a2d2e] text-sm group transition-colors py-1 cursor-pointer"
+                      style={{ paddingLeft: '16px', paddingRight: '16px' }}
+                      onClick={() => handleSearchDocumentSelect(doc)}
+                    >
+                      <div className="flex items-center gap-1 flex-1 min-w-0">
+                        <div className="w-4 h-4 flex items-center justify-center">
+                          <FileText size={14} className="text-[#519aba]" />
                         </div>
-                      </DragDropStyles>
-                    )
-                  })}
+                        <div className="flex-1 min-w-0 ml-1">
+                          <div className="text-[#cccccc] truncate text-sm font-normal">
+                            {doc.title || doc.metadata?.title || 'Untitled'}
+                          </div>
+                          {doc.content && (
+                            <div className="text-[#969696] text-xs truncate">
+                              {doc.content.slice(0, 80)}...
+                            </div>
+                          )}
+                        </div>
+                        {doc.score && (
+                          <div className="text-[#969696] text-xs">
+                            {Math.round(doc.score * 100)}%
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  // Show recent notes
+                  pages
+                    .filter(page => !((page.metadata as any)?.isFolder) && (page.metadata as any)?.organizeStatus === 'soon')
+                    .map(item => {
+                      const dragItem: DragItem = {
+                        id: item.uuid,
+                        type: 'note',
+                        title: item.title,
+                        sourceSection: 'recent'
+                      }
+                      const dragHandlers = dragAndDrop.getDragHandlers(dragItem)
+                      const isDraggedItem = dragAndDrop.dragState.dragItem?.id === item.uuid
+                      
+                      return (
+                        <DragDropStyles
+                          key={item.uuid}
+                          isDragging={dragAndDrop.dragState.isDragging}
+                          isDraggedItem={isDraggedItem}
+                          isDropTarget={false}
+                          isValidDropTarget={false}
+                          className="flex items-center hover:bg-[#2a2d2e] text-sm group transition-colors py-1 cursor-pointer"
+                        >
+                          <div
+                            {...dragHandlers}
+                            style={{ paddingLeft: '16px', paddingRight: '16px' }}
+                            onClick={() => {
+                              setActivePage(item)
+                              setSidebarOpen(false)
+                            }}
+                            onContextMenu={(e) => handleContextMenu(e, 'file', item)}
+                            className="flex items-center w-full"
+                          >
+                            <div className="flex items-center gap-1 flex-1 min-w-0">
+                              <div className="w-4 h-4 flex items-center justify-center">
+                                <FileText size={14} className="text-[#519aba]" />
+                              </div>
+                              <span className="text-[#cccccc] truncate text-sm font-normal ml-1">{item.title}</span>
+                            </div>
+                            
+                            {/* Action buttons - hidden by default, shown on hover */}
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  startOrganizing(item)
+                                }}
+                                className="p-1 hover:bg-[#404040] rounded text-[#969696] hover:text-[#cccccc] transition-colors"
+                                title="Add organization instructions"
+                              >
+                                <Edit size={12} />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  sendForOrganization(item)
+                                }}
+                                className="p-1 hover:bg-[#404040] rounded text-[#969696] hover:text-[#cccccc] transition-colors"
+                                title="Send for organization"
+                              >
+                                <Check size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        </DragDropStyles>
+                      )
+                    })
+                )}
               </div>
             </>
           )}
