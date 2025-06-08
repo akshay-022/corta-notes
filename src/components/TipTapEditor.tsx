@@ -170,7 +170,7 @@ export default function TipTapEditor({ page, onUpdate }: TipTapEditorProps) {
   }
 
   return (
-    <div className="flex-1 bg-[#1a1a1a] overflow-hidden">
+    <div className="flex-1 bg-[#1a1a1a] flex flex-col overflow-hidden">
       {/* Minimal toolbar - appears on hover */}
       <div className="absolute top-4 right-6 z-10 opacity-0 hover:opacity-100 transition-opacity">
         <div className="flex items-center gap-1 bg-[#2a2a2a] rounded-lg p-1 border border-gray-700">
@@ -199,9 +199,9 @@ export default function TipTapEditor({ page, onUpdate }: TipTapEditorProps) {
         </div>
       )}
 
-      {/* Editor container */}
-      <div className="h-full overflow-y-auto">
-        <div className="max-w-4xl mx-auto">
+      {/* Editor container with independent scrolling */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto min-h-full">
           {/* Title - Notion style */}
           <div className="px-16 pt-16 pb-2">
             {isEditingTitle ? (

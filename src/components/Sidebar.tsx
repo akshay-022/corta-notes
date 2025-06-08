@@ -1,12 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, MoreHorizontal, Plus, Edit3, Edit, Check, X, RefreshCw } from 'lucide-react'
+import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, MoreHorizontal, Plus, Edit3, Edit, Check, X, RefreshCw, Clock, Trash } from 'lucide-react'
 import { Page } from '@/lib/supabase/types'
 import { DragDropStyles, isValidDrop, DropZoneIndicator } from '@/components/DragDropStyles'
 import type { DragItem, DropTarget } from '@/hooks/useDragAndDrop'
 import DocumentSearch from '@/components/DocumentSearch'
 import { SuperMemoryDocument } from '@/lib/supermemory'
+import ChronologicalSidebar from './ChronologicalSidebar'
 
 interface ContextMenu {
   x: number
@@ -67,6 +68,7 @@ export default function Sidebar({
   const [organizationInstructions, setOrganizationInstructions] = useState('')
   const [searchResults, setSearchResults] = useState<SuperMemoryDocument[]>([])
   const [isSearchActive, setIsSearchActive] = useState(false)
+  const [viewMode, setViewMode] = useState<'normal' | 'chronological'>('normal')
 
   const startRename = (item: Page) => {
     setRenamingItem(item)
@@ -321,6 +323,29 @@ export default function Sidebar({
     )
   }
 
+  // Show chronological view if selected
+  if (viewMode === 'chronological') {
+    return (
+      <>
+        <ChronologicalSidebar
+          pages={pages}
+          activePage={activePage}
+          setActivePage={setActivePage}
+          setSidebarOpen={setSidebarOpen}
+          onBackToNormal={() => setViewMode('normal')}
+        />
+        
+        {/* Mobile overlay */}
+        {sidebarOpen && (
+          <div 
+            className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+      </>
+    )
+  }
+
   return (
     <>
       {/* Sidebar - VS Code style */}
@@ -329,69 +354,74 @@ export default function Sidebar({
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         <div className="flex flex-col h-full">
-          {/* Clean Header */}
-          <div className="p-4 flex justify-end">
-            <button
-              onClick={logout}
-              className="text-[#969696] hover:text-[#cccccc] p-1 rounded transition-colors"
-            >
-              <MoreHorizontal size={14} />
-            </button>
-          </div>
-          
-          {/* New Note Button - ChatGPT style */}
-          <div className="pb-2">
-            <button
-              onClick={() => createNewItem(false)}
-              className="w-full bg-transparent hover:bg-[#2a2a2a] text-[#cccccc] rounded-lg py-1 text-sm flex items-center gap-1 transition-all duration-200"
-              style={{ paddingLeft: '16px', paddingRight: '16px' }}
-            >
-              <div className="w-4 h-4 flex items-center justify-center">
-                <Edit3 size={14} className="text-[#cccccc]" />
-              </div>
-              <span className="ml-1">New Note</span>
-            </button>
-          </div>
-
-          {/* Sync Button - For Development */}
-          <div className="pb-4">
-            <button
-              onClick={onManualSync}
-              className="w-full bg-transparent hover:bg-[#2a2a2a] text-[#cccccc] rounded-lg py-1 text-sm flex items-center gap-1 transition-all duration-200"
-              style={{ paddingLeft: '16px', paddingRight: '16px' }}
-              title="Sync notes to SuperMemory (Dev)"
-            >
-              <div className="w-4 h-4 flex items-center justify-center">
-                <RefreshCw size={14} className="text-[#969696]" />
-              </div>
-              <span className="ml-1 text-[#969696]">Sync to Memory</span>
-            </button>
-          </div>
-
-          {/* Document Search */}
-          <div className="pb-6 px-4">
-            <DocumentSearch 
-              onSelectDocument={handleSearchDocumentSelect}
-              onSearchResults={handleSearchResults}
-            />
-          </div>
-
-          {/* Soon to be organized notes OR Search Results */}
-          {(isSearchActive || pages.filter(page => !((page.metadata as any)?.isFolder) && (page.metadata as any)?.organizeStatus === 'soon').length > 0) && (
-            <>
-              <div className="px-4 pb-2">
-                <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">
-                  {isSearchActive ? 'Search Results' : 'Recent notes'}
-                </h3>
-              </div>
-              <div 
-                className="pb-6 relative"
-                {...dragAndDrop.getDropHandlers({
-                  id: null,
-                  type: 'section',
-                  section: 'recent'
-                })}
+          {/* Fixed Header Section */}
+          <div className="flex-shrink-0">
+            {/* Clean Header */}
+            <div className="p-4 flex justify-end">
+              <button
+                onClick={logout}
+                className="text-[#969696] hover:text-[#cccccc] p-1 rounded transition-colors"
               >
+                <MoreHorizontal size={14} />
+              </button>
+            </div>
+            
+            {/* New Note Button - ChatGPT style */}
+            <div className="pb-2">
+              <button
+                onClick={() => createNewItem(false)}
+                className="w-full bg-transparent hover:bg-[#2a2a2a] text-[#cccccc] rounded-lg py-1 text-sm flex items-center gap-1 transition-all duration-200"
+                style={{ paddingLeft: '16px', paddingRight: '16px' }}
+              >
+                <div className="w-4 h-4 flex items-center justify-center">
+                  <Edit3 size={14} className="text-[#cccccc]" />
+                </div>
+                <span className="ml-1">New Note</span>
+              </button>
+            </div>
+
+            {/* Sync Button - For Development */}
+            <div className="pb-4">
+              <button
+                onClick={onManualSync}
+                className="w-full bg-transparent hover:bg-[#2a2a2a] text-[#cccccc] rounded-lg py-1 text-sm flex items-center gap-1 transition-all duration-200"
+                style={{ paddingLeft: '16px', paddingRight: '16px' }}
+                title="Sync notes to SuperMemory (Dev)"
+              >
+                <div className="w-4 h-4 flex items-center justify-center">
+                  <RefreshCw size={14} className="text-[#969696]" />
+                </div>
+                <span className="ml-1 text-[#969696]">Sync to Memory</span>
+              </button>
+            </div>
+
+            {/* Document Search */}
+            <div className="pb-6 px-4">
+              <DocumentSearch 
+                onSelectDocument={handleSearchDocumentSelect}
+                onSearchResults={handleSearchResults}
+              />
+            </div>
+          </div>
+
+          {/* Scrollable Content Section */}
+          <div className="flex-1 overflow-y-auto">
+            {/* Soon to be organized notes OR Search Results */}
+            {(isSearchActive || pages.filter(page => !((page.metadata as any)?.isFolder) && (page.metadata as any)?.organizeStatus === 'soon').length > 0) && (
+              <>
+                <div className="px-4 pb-2">
+                  <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">
+                    {isSearchActive ? 'Search Results' : 'Recent notes'}
+                  </h3>
+                </div>
+                <div 
+                  className="pb-6 relative"
+                  {...dragAndDrop.getDropHandlers({
+                    id: null,
+                    type: 'section',
+                    section: 'recent'
+                  })}
+                >
                 <DropZoneIndicator 
                   isActive={false}
                   message="Drop here to move to recent notes"
@@ -558,60 +588,73 @@ export default function Sidebar({
             </>
           )}
 
-          {/* Auto-organized notes section */}
-          <div className="px-4 pb-2">
-            <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">Auto-organized notes</h3>
+            {/* Auto-organized notes section */}
+            <div className="px-4 pb-2">
+              <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">Auto-organized notes</h3>
+            </div>
+
+            {/* File tree - only organized notes and folders */}
+            <div 
+              className="relative"
+              onContextMenu={(e) => handleContextMenu(e, 'root')}
+            >
+              {/* Only show section drop zone when there are no organized items or when specifically hovering empty space */}
+              {buildTree(pages.filter(page => 
+                (page.metadata as any)?.organizeStatus === 'yes'
+              )).length === 0 && dragAndDrop.dragState.isDragging && (
+                <div 
+                  className="h-full flex items-center justify-center"
+                  {...dragAndDrop.getDropHandlers({
+                    id: null,
+                    type: 'section',
+                    section: 'organized'
+                  })}
+                >
+                  <div className="text-center p-8 rounded-lg hover:bg-[#2a2d2e] transition-colors">
+                    <span className="text-[#969696] text-sm">
+                      Drop here to organize
+                    </span>
+                  </div>
+                </div>
+              )}
+              
+              {/* Render the tree items */}
+              {buildTree(pages.filter(page => 
+                (page.metadata as any)?.organizeStatus === 'yes'
+              )).map(item => renderTreeItem(item))}
+              
+              {/* Bottom drop zone for root level when items exist */}
+              {buildTree(pages.filter(page => 
+                (page.metadata as any)?.organizeStatus === 'yes'
+              )).length > 0 && dragAndDrop.dragState.isDragging && (
+                <div 
+                  className="h-16 flex items-center justify-center mx-4 mt-2"
+                  {...dragAndDrop.getDropHandlers({
+                    id: null,
+                    type: 'section',
+                    section: 'organized'
+                  })}
+                >
+                  <div className="w-full text-center py-3 rounded-lg bg-[#2a2d2e] opacity-0 hover:opacity-100 transition-opacity">
+                    <span className="text-[#969696] text-xs">
+                      Drop here for root level
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* File tree - only organized notes and folders */}
-          <div 
-            className="flex-1 overflow-y-auto relative"
-            onContextMenu={(e) => handleContextMenu(e, 'root')}
-          >
-            {/* Only show section drop zone when there are no organized items or when specifically hovering empty space */}
-            {buildTree(pages.filter(page => 
-              (page.metadata as any)?.organizeStatus === 'yes'
-            )).length === 0 && dragAndDrop.dragState.isDragging && (
-              <div 
-                className="h-full flex items-center justify-center"
-                {...dragAndDrop.getDropHandlers({
-                  id: null,
-                  type: 'section',
-                  section: 'organized'
-                })}
+          {/* Fixed Footer Section - See All Button */}
+          <div className="flex-shrink-0 p-4">
+            <div className="flex justify-end">
+              <button
+                onClick={() => setViewMode('chronological')}
+                className="text-[#969696] hover:text-[#cccccc] text-xs transition-colors"
               >
-                <div className="text-center p-8 rounded-lg hover:bg-[#2a2d2e] transition-colors">
-                  <span className="text-[#969696] text-sm">
-                    Drop here to organize
-                  </span>
-                </div>
-              </div>
-            )}
-            
-            {/* Render the tree items */}
-            {buildTree(pages.filter(page => 
-              (page.metadata as any)?.organizeStatus === 'yes'
-            )).map(item => renderTreeItem(item))}
-            
-            {/* Bottom drop zone for root level when items exist */}
-            {buildTree(pages.filter(page => 
-              (page.metadata as any)?.organizeStatus === 'yes'
-            )).length > 0 && dragAndDrop.dragState.isDragging && (
-              <div 
-                className="h-16 flex items-center justify-center mx-4 mt-2"
-                {...dragAndDrop.getDropHandlers({
-                  id: null,
-                  type: 'section',
-                  section: 'organized'
-                })}
-              >
-                <div className="w-full text-center py-3 rounded-lg bg-[#2a2d2e] opacity-0 hover:opacity-100 transition-opacity">
-                  <span className="text-[#969696] text-xs">
-                    Drop here for root level
-                  </span>
-                </div>
-              </div>
-            )}
+                See All
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -641,7 +684,6 @@ export default function Sidebar({
           {/* Show rename and delete options when right-clicking on an item */}
           {contextMenu.item && (
             <>
-              <div className="border-t border-gray-600 my-1" />
               <button
                 className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-[#3a3a3a] flex items-center gap-2"
                 onClick={() => {
@@ -649,17 +691,17 @@ export default function Sidebar({
                   setContextMenu(null)
                 }}
               >
-                <span className="w-3 h-3 text-center">✏️</span>
+                <Edit size={12} />
                 Rename
               </button>
               <button
-                className="w-full text-left px-3 py-1.5 text-sm text-red-400 hover:bg-[#3a3a3a] flex items-center gap-2"
+                className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-[#3a3a3a] flex items-center gap-2"
                 onClick={() => {
                   deleteItem(contextMenu.item!)
                   setContextMenu(null)
                 }}
               >
-                <span className="w-3 h-3 text-center">🗑️</span>
+                <Trash size={12} />
                 Delete
               </button>
             </>

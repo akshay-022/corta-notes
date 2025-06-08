@@ -360,7 +360,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#1a1a1a] flex">
+    <div className="h-screen bg-[#1a1a1a] flex overflow-hidden">
       {/* Mobile menu button */}
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -392,7 +392,7 @@ export default function DashboardPage() {
       />
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col lg:ml-0">
+      <div className="flex-1 flex flex-col min-w-0">
         {activePage ? (
           <TipTapEditor 
             page={activePage} 
