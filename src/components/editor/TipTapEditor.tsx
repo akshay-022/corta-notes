@@ -5,7 +5,7 @@ import StarterKit from '@tiptap/starter-kit'
 import HorizontalRule from '@tiptap/extension-horizontal-rule'
 import Placeholder from '@tiptap/extension-placeholder'
 import Typography from '@tiptap/extension-typography'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { Page, PageUpdate } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/supabase-client'
 import { Calendar, Minus } from 'lucide-react'
@@ -51,9 +51,6 @@ export default function TipTapEditor({ page, onUpdate }: TipTapEditorProps) {
     onUpdate: ({ editor }) => {
       setIsUserTyping(true)
       debounceUpdate(editor.getJSON(), editor.getText())
-    },
-    onSelectionUpdate: () => {
-      handleSelectionChange()
     },
   })
 
@@ -151,11 +148,52 @@ export default function TipTapEditor({ page, onUpdate }: TipTapEditorProps) {
       .run()
   }
 
+  // Capture current selection when opening chat (only when Command+K is pressed)
+  const captureCurrentSelection = useCallback(() => {
+    if (!editor) {
+      console.log('No editor available for capturing selection')
+      return
+    }
+    
+    const { from, to } = editor.state.selection
+    console.log('Selection range:', { from, to })
+    
+    if (from === to) {
+      // No selection, clear selections
+      console.log('No text selected, clearing selections')
+      setSelections([])
+      return
+    }
+
+    const selectedText = editor.state.doc.textBetween(from, to)
+    console.log('Selected text:', selectedText)
+    
+    if (selectedText.trim()) {
+      const selectionId = `selection-${Date.now()}`
+      const newSelection = {
+        id: selectionId,
+        text: selectedText.trim(),
+        startLine: 1, // TipTap doesn't have line numbers, so we use 1
+        endLine: 1
+      }
+      console.log('Adding selection to context:', newSelection)
+      setSelections(prev => [...prev, newSelection]) // Append to existing selections
+    } else {
+      console.log('Selected text is empty after trimming')
+      // Don't clear existing selections if current selection is empty
+    }
+  }, [editor])
+
   // Command+K keyboard shortcut to open chat
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.metaKey && e.key === 'k') {
         e.preventDefault()
+        console.log('Command+K pressed, capturing selection...')
+        
+        // Capture current selection when opening chat
+        captureCurrentSelection()
+        
         setIsChatOpen(true)
         // Focus chat input after a short delay to allow panel to render
         setTimeout(() => {
@@ -166,30 +204,9 @@ export default function TipTapEditor({ page, onUpdate }: TipTapEditorProps) {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [captureCurrentSelection])
 
-  // Handle text selection for chat context
-  const handleSelectionChange = () => {
-    if (!editor) return
-    
-    const { from, to } = editor.state.selection
-    if (from === to) {
-      // No selection, clear selections
-      setSelections([])
-      return
-    }
 
-    const selectedText = editor.state.doc.textBetween(from, to)
-    if (selectedText.trim()) {
-      const selectionId = `selection-${Date.now()}`
-      setSelections([{
-        id: selectionId,
-        text: selectedText.trim(),
-        startLine: 1, // TipTap doesn't have line numbers, so we use 1
-        endLine: 1
-      }])
-    }
-  }
 
   // Apply AI response to editor
   const handleApplyAiResponse = async (responseText: string, targetSelections?: Array<{id: string, text: string, startLine: number, endLine: number}>) => {
