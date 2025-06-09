@@ -1,5 +1,40 @@
 import { createClient } from '@/lib/supabase/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
+import supermemory from 'supermemory'
+
+// Helper function to get the actual folder path by looking up page hierarchy
+async function getFolderPathFromPageUuid(supabase: any, pageUuid: string, allPages: any[]): Promise<string> {
+  if (!pageUuid) return 'Unknown Location'
+  
+  try {
+    // Find the page in the provided file tree first (for performance)
+    const page = allPages.find(p => p.uuid === pageUuid)
+    if (!page) return 'Unknown Location'
+    
+    // Build the folder path by following parent relationships
+    const path: string[] = []
+    let currentPage = page
+    
+    // Traverse up the parent chain
+    while (currentPage && currentPage.parent_uuid) {
+      const parentPage = allPages.find(p => p.uuid === currentPage.parent_uuid)
+      if (parentPage) {
+        path.unshift(parentPage.title) // Add to beginning of array
+        currentPage = parentPage
+      } else {
+        break
+      }
+    }
+    
+    // Add the current page's title at the end
+    path.push(page.title)
+    
+    return path.length > 1 ? path.join('/') : page.title
+  } catch (error) {
+    console.error('Error building folder path:', error)
+    return 'Unknown Location'
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,11 +67,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Note not found' }, { status: 404 })
     }
 
-    // Use AI to analyze and organize the content
+    // Use AI to analyze and organize the content (with SuperMemory context)
     const organizationPlan = await analyzeAndOrganize(
       noteContent,
       organizationInstructions,
-      fileTree
+      fileTree,
+      supabase
     )
 
     // Execute the organization plan
@@ -74,14 +110,81 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function analyzeAndOrganize(noteContent: any, instructions: string, fileTree: any[]) {
-  console.log('Analyzing content for organization with GPT-4o...')
+async function analyzeAndOrganize(noteContent: any, instructions: string, fileTree: any[], supabase?: any) {
+  console.log('Analyzing content for organization with GPT-4o and SuperMemory...')
   
   // Extract text content from TipTap JSON
   const textContent = extractTextFromTipTap(noteContent)
   
   // Create a clean file tree hierarchy for GPT
   const cleanFileTree = createCleanFileTree(fileTree)
+  
+  // Search SuperMemory for relevant documents to help with organization
+  let superMemoryContext = ''
+  
+  if (process.env.SUPERMEMORY_API_KEY) {
+    try {
+      console.log('Searching SuperMemory for relevant organization context...')
+      const superMemoryClient = new supermemory({
+        apiKey: process.env.SUPERMEMORY_API_KEY,
+      })
+      
+      // Search for relevant content to understand organization patterns
+      const searchQuery = instructions || textContent.substring(0, 200) // Use instructions or content preview
+      const searchResponse = await superMemoryClient.search.execute({ 
+        q: searchQuery,
+        limit: 5
+      })
+      
+                    if (searchResponse.results && searchResponse.results.length > 0) {
+        console.log(`Found ${searchResponse.results.length} relevant documents for organization context`)
+        console.log('Raw SuperMemory search result structure:', JSON.stringify(searchResponse.results[0], null, 2))
+          
+          // Build relevant documents with actual folder paths
+          const relevantDocuments = await Promise.all(
+            searchResponse.results.map(async (result: any, index: number) => {
+              if (index === 0) {
+                console.log('Available fields in search result:', Object.keys(result))
+                console.log('Metadata fields:', result.metadata ? Object.keys(result.metadata) : 'No metadata')
+              }
+              
+              const pageUuid = result.metadata?.pageUuid
+              const folderPath = pageUuid ? await getFolderPathFromPageUuid(supabase, pageUuid, fileTree) : 'Unknown Location'
+              
+              return {
+                title: result.title || result.metadata?.title || 'Untitled Document',
+                summary: result.chunks?.[0]?.content || 'No content available',
+                content: result.chunks?.[0]?.content || '',
+                pageUuid: pageUuid,
+                relevance: result.score || result._score,
+                folderPath: folderPath
+              }
+            })
+          )
+          
+          // Create context summary for GPT with actual folder paths and content-based reasoning
+          superMemoryContext = `
+RELEVANT DOCUMENTS FOUND IN YOUR KNOWLEDGE BASE:
+These documents are similar to the content being organized. Consider their locations when deciding where to organize the new content:
+
+${relevantDocuments
+  .map((doc, index) => 
+    `${index + 1}. "${doc.title}"
+   Current Location: ${doc.folderPath}
+   Page UUID: ${doc.pageUuid}
+   Relevance: ${(doc.relevance * 100).toFixed(1)}% match
+   What it contains: ${doc.summary}
+   Content Preview: ${doc.content.substring(0, 100)}...`
+  )
+  .join('\n\n')}
+
+Use these examples to understand your typical organization patterns and place similar content in appropriate folders.`
+        }
+    } catch (error) {
+      console.error('SuperMemory search failed during organization:', error)
+      // Continue without SuperMemory context if it fails
+    }
+  }
   
   try {
     // Call GPT-4o API
@@ -121,7 +224,12 @@ Rules:
 9. For each unique targetFolder path, have only ONE contentSection with cumulative content
 10. Content can be the same or different portions of the original note
 11. Always provide clear reasoning for the folder path and filename choice (especially if choosing existing vs new file)
-12. Respond with ONLY the JSON, no markdown formatting or extra text`
+12. Respond with ONLY the JSON, no markdown formatting or extra text
+
+Now EXTREMELY EXTREMELY IMPORTANT : 
+You may think of splitting the content of the current note a lot. However, EVERY RELATED IDEA IN THE CURRENT NOTE MUST STAY TOGETHER. 
+In some notes subsequent lines or different paragraphs may be unrelated, there you can split. But typically each note will be in groups of coherence. That coherence must NOT get separated. 
+`
           },
           {
             role: 'user',
@@ -132,11 +240,17 @@ Organization Instructions: ${instructions || 'No specific instructions - use you
 Current File Tree:
 ${JSON.stringify(cleanFileTree, null, 2)}
 
-Please organize this note according to ${instructions ? 'the instructions and' : ''} the current file structure and content analysis. 
+${superMemoryContext ? superMemoryContext : ''}
 
-IMPORTANT: Look carefully at the existing files in the file tree. If the new content is related to or would fit well with an existing file, use that existing file's name and path. Only create new files when the content is truly different or unrelated to existing files.
+Please organize this note according to ${instructions ? 'the instructions and' : ''} the current file structure, content analysis${superMemoryContext ? ', and the relevant documents context' : ''}. 
 
-${!instructions ? 'Since no specific instructions were provided, analyze the content and suggest the most logical organization based on the content type, topic, and existing file structure.' : ''}`
+IMPORTANT: 
+1. Look carefully at the existing files in the file tree. If the new content is related to or would fit well with an existing file, use that existing file's name and path.
+2. ${superMemoryContext ? 'Consider the similar documents found in your knowledge base - they show where similar content is typically organized.' : ''}
+3. Only create new files when the content is truly different or unrelated to existing files.
+4. If SuperMemory found similar documents, strongly consider organizing this content in a similar folder structure unless user instructions explicitly say otherwise.
+
+${!instructions ? 'Since no specific instructions were provided, analyze the content and suggest the most logical organization based on the content type, topic, existing file structure, and similar document patterns.' : ''}`
           }
         ],
         temperature: 0.3,

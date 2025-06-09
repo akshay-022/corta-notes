@@ -5,6 +5,7 @@ import { XIcon, SendIcon, Edit2, MessageSquare, ArrowUp } from 'lucide-react'
 import { createClient } from '@/lib/supabase/supabase-client'
 import { Conversation, ChatMessage, Page } from '@/lib/supabase/types'
 import conversationsService from '@/lib/conversations/conversations'
+import ReactMarkdown from 'react-markdown'
 
 // Define the SelectionObject type
 type SelectionObject = {
@@ -28,11 +29,21 @@ export interface ChatPanelHandle {
   focusInput: () => void
 }
 
+type RelevantDocument = {
+  id: string
+  title: string
+  content: string
+  score?: number
+  pageUuid?: string | null
+  metadata?: any
+}
+
 type Message = {
   role: 'user' | 'assistant'
   content: string
   selections?: SelectionObject[]
   timestamp?: string | null
+  relevantDocuments?: RelevantDocument[]
 }
 
 const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({ 
@@ -117,6 +128,11 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                    'selections' in msg.metadata ? 
                    (msg.metadata.selections as SelectionObject[]) : 
                    undefined,
+        relevantDocuments: msg.metadata && 
+                          typeof msg.metadata === 'object' && 
+                          'relevantDocuments' in msg.metadata ? 
+                          (msg.metadata.relevantDocuments as RelevantDocument[]) : 
+                          undefined,
         timestamp: msg.created_at
       }))
       
@@ -321,19 +337,34 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
 
       const data = await apiResponse.json()
       const assistantMessageContent = data.response
+      const relevantDocuments = data.relevantDocuments || []
+
+      console.log('LLM API response:', { 
+        responseLength: assistantMessageContent?.length,
+        documentsFound: relevantDocuments.length 
+      })
 
       // Add assistant response to messages
       const assistantMessage: Message = { 
         role: 'assistant' as const, 
-        content: assistantMessageContent 
+        content: assistantMessageContent,
+        relevantDocuments: relevantDocuments.length > 0 ? relevantDocuments : undefined
       }
       setMessages(prev => [...prev, assistantMessage])
       
-      // Save assistant message to database
+      // Save assistant message to database with relevant documents metadata
+      const assistantMetadata = relevantDocuments.length > 0 ? {
+        relevantDocuments: relevantDocuments.map((doc: RelevantDocument) => ({
+          title: doc.title,
+          pageUuid: doc.pageUuid
+        }))
+      } : {}
+
       await conversationsService.addMessage(
         activeConversation.id,
         assistantMessageContent,
-        false
+        false,
+        assistantMetadata
       )
 
       // Scroll to bottom after assistant response
@@ -506,7 +537,52 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
 
                     {message.role === "assistant" ? (
                       <div className="text-xs text-[#cccccc] leading-relaxed">
-                        <div className="whitespace-pre-wrap">{message.content}</div>
+                        <div className="prose prose-invert prose-xs max-w-none">
+                          <ReactMarkdown 
+                            components={{
+                            p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                            strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+                            em: ({ children }) => <em className="italic">{children}</em>,
+                            ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+                            ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+                            li: ({ children }) => <li className="text-[#cccccc]">{children}</li>,
+                            code: ({ children }) => <code className="bg-[#2a2a2a] px-1 py-0.5 rounded text-[#60a5fa] text-[10px]">{children}</code>,
+                            pre: ({ children }) => <pre className="bg-[#2a2a2a] p-2 rounded overflow-x-auto text-[10px] mb-2">{children}</pre>,
+                            blockquote: ({ children }) => <blockquote className="border-l-2 border-[#60a5fa] pl-3 mb-2 italic text-[#969696]">{children}</blockquote>,
+                            h1: ({ children }) => <h1 className="text-sm font-bold mb-2 text-white">{children}</h1>,
+                            h2: ({ children }) => <h2 className="text-sm font-semibold mb-2 text-white">{children}</h2>,
+                            h3: ({ children }) => <h3 className="text-xs font-semibold mb-1 text-white">{children}</h3>,
+                          }}
+                                                    >
+                              {message.content}
+                            </ReactMarkdown>
+                          </div>
+                        
+                        {/* Display relevant documents as simple links */}
+                        {message.relevantDocuments && message.relevantDocuments.length > 0 && (
+                          <div className="mt-3 pt-2 border-t border-[#333333]">
+                            <div className="flex flex-wrap gap-2">
+                              {message.relevantDocuments.map((doc, docIndex) => (
+                                <button
+                                  key={doc.id || docIndex}
+                                  className="text-[10px] text-[#60a5fa] hover:text-[#4a9fff] underline transition-colors"
+                                  onClick={() => {
+                                    if (doc.pageUuid) {
+                                      console.log('Navigating to page:', doc.title, doc.pageUuid)
+                                      // Navigate to the page
+                                      window.location.href = `/page/${doc.pageUuid}`
+                                    } else {
+                                      console.log('No page UUID available for document:', doc.title)
+                                    }
+                                  }}
+                                >
+                                  {doc.title}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
                         {/* Add Apply button for AI responses */}
                         {onApplyAiResponseToEditor && (
                           <button
