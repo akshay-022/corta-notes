@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Search, X, FileText } from 'lucide-react'
 import { superMemoryService, SuperMemoryDocument } from '@/lib/supermemory'
 import { Page } from '@/lib/supabase/types'
+import { createClient } from '@/lib/supabase/supabase-client'
 
 interface DocumentSearchProps {
   onSelectDocument: (document: SuperMemoryDocument) => void
@@ -16,29 +17,89 @@ export default function DocumentSearch({ onSelectDocument, onSearchResults, clas
   const [searchResults, setSearchResults] = useState<SuperMemoryDocument[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
+  const [hasSearched, setHasSearched] = useState(false)
+  const supabase = createClient()
 
-  // Debounced search function
+  // Search local pages for title matches
+  const searchLocalTitles = useCallback(async (query: string): Promise<SuperMemoryDocument[]> => {
+    try {
+      const { data: user } = await supabase.auth.getUser()
+      if (!user.user) return []
+
+      const { data: pages, error } = await supabase
+        .from('pages')
+        .select('uuid, title, content_text, metadata, created_at, updated_at')
+        .eq('user_id', user.user.id)
+        .eq('is_deleted', false)
+        .ilike('title', `%${query}%`)
+        .order('updated_at', { ascending: false })
+        .limit(5)
+
+      if (error) throw error
+
+      return pages.map(page => ({
+        id: page.uuid,
+        title: page.title,
+        content: page.content_text?.slice(0, 200) + '...' || '',
+        score: page.title.toLowerCase() === query.toLowerCase() ? 1.0 : 1.0, // Higher score for exact matches
+        metadata: {
+          pageUuid: page.uuid,
+          title: page.title,
+          isLocalTitleMatch: true
+        }
+      }))
+    } catch (error) {
+      console.error('Error searching local titles:', error)
+      return []
+    }
+  }, [supabase])
+
+  // Combined search function with prioritization
   const performSearch = useCallback(async (query: string) => {
     if (!query.trim()) {
       setSearchResults([])
       setIsSearching(false)
+      setHasSearched(false)
       return
     }
 
     setIsSearching(true)
-    console.log('Performing semantic search for:', query)
+    setHasSearched(true)
+    console.log('🔍 Performing prioritized search for:', query)
 
     try {
-      const result = await superMemoryService.searchDocuments(query, 8)
-      setSearchResults(result.results)
-      console.log('Search results:', result.results)
+      // 1. Search local titles first (PRIORITY)
+      console.log('📝 Searching local titles...')
+      const localTitleMatches = await searchLocalTitles(query)
+      
+      // 2. Search SuperMemory
+      console.log('🧠 Searching SuperMemory...')
+      const superMemoryResult = await superMemoryService.searchDocuments(query, 6)
+      
+      // 3. Combine results with prioritization
+      const prioritizedResults = [
+        ...localTitleMatches, // Local title matches first
+        ...superMemoryResult.results // SuperMemory results after
+      ]
+
+      // Remove duplicates (prefer local title matches)
+      const uniqueResults = prioritizedResults.filter((result, index, arr) => {
+        return arr.findIndex(r => r.metadata?.pageUuid === result.metadata?.pageUuid) === index
+      })
+
+      setSearchResults(uniqueResults)
+      console.log('✅ Final prioritized results:', {
+        localTitleMatches: localTitleMatches.length,
+        superMemoryResults: superMemoryResult.results.length,
+        totalUnique: uniqueResults.length
+      })
     } catch (error) {
       console.error('Search error:', error)
       setSearchResults([])
     } finally {
       setIsSearching(false)
     }
-  }, [])
+  }, [searchLocalTitles])
 
   // Debounce search
   useEffect(() => {
@@ -65,6 +126,7 @@ export default function DocumentSearch({ onSelectDocument, onSearchResults, clas
     setSearchQuery('')
     setSearchResults([])
     setIsExpanded(false)
+    setHasSearched(false)
   }
 
   const handleDocumentClick = (doc: SuperMemoryDocument) => {
@@ -119,7 +181,7 @@ export default function DocumentSearch({ onSelectDocument, onSearchResults, clas
       )}
 
       {/* Show no results message only */}
-      {!isSearching && searchQuery.trim() && searchResults.length === 0 && (
+      {!isSearching && hasSearched && searchQuery.trim() && searchResults.length === 0 && (
         <div className="mt-3">
           <div className="text-[#969696] text-sm px-2 py-2">
             No documents found for "{searchQuery}"

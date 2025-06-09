@@ -97,19 +97,22 @@ class SuperMemorySyncService {
 
     try {
       // Extract text content for embedding
-      const textContent = page.content_text || ''
+      const originalTextContent = page.content_text || ''
       
-      if (!textContent.trim()) {
+      if (!originalTextContent.trim()) {
         this.logger.log(`Skipping empty page: ${page.title}`)
         return false
       }
+
+      // CRITICAL: Append title to content for better search relevance
+      const enhancedTextContent = `The title of this file is ${page.title} and this is EXTREMELY IMPORTANT \n\n Here is the content of the file: ${originalTextContent}`
 
       if (syncStatus === 'never') {
         // First time sync - add to SuperMemory
         this.logger.log(`Adding new document to SuperMemory: ${page.title}`)
         await superMemoryService.addDocument(
           page.uuid,
-          textContent,
+          enhancedTextContent,
           page.title
         )
       } else if (syncStatus === 'no') {
@@ -117,7 +120,7 @@ class SuperMemorySyncService {
         this.logger.log(`Updating document in SuperMemory: ${page.title}`)
         await superMemoryService.updateDocument(
           page.uuid,
-          textContent,
+          enhancedTextContent,
           page.title
         )
       }

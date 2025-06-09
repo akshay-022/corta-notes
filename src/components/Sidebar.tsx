@@ -451,13 +451,9 @@ export default function Sidebar({
                               <div className="text-[#cccccc] truncate text-sm font-normal">
                                 {doc.title || doc.metadata?.title || 'Untitled'}
                               </div>
-                              {doc.content && (
-                                <div className="text-[#969696] text-xs truncate">
-                                  {doc.content.slice(0, 80)}...
-                                </div>
-                              )}
+                              {doc.content && doc.score && doc.score < 1.0}
                             </div>
-                            {doc.score && (
+                            {doc.score && doc.score < 1.0 && (
                               <div className="text-[#969696] text-xs">
                                 {Math.round(doc.score * 100)}%
                               </div>
@@ -500,13 +496,9 @@ export default function Sidebar({
                               <div className="text-[#cccccc] truncate text-sm font-normal">
                                 {doc.title || doc.metadata?.title || 'Untitled'}
                               </div>
-                              {doc.content && (
-                                <div className="text-[#969696] text-xs truncate">
-                                  {doc.content.slice(0, 80)}...
-                                </div>
-                              )}
+                              
                             </div>
-                            {doc.score && (
+                            {doc.score && doc.score < 1.0 && (
                               <div className="text-[#969696] text-xs">
                                 {Math.round(doc.score * 100)}%
                               </div>
