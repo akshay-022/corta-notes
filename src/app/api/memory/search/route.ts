@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import supermemory from 'supermemory'
+import { memoryService } from '@/lib/memory/memory-service-supermemory'
 import { createClient } from '@/lib/supabase/supabase-server'
 
 export const runtime = 'edge';
-
-const superMemoryClient = new supermemory({
-  apiKey: process.env.SUPERMEMORY_API_KEY, // Server-side only, not NEXT_PUBLIC_
-})
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,34 +12,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Query is required' }, { status: 400 })
     }
 
-    if (!process.env.SUPERMEMORY_API_KEY) {
-      return NextResponse.json({ error: 'SuperMemory not configured' }, { status: 503 })
+    if (!memoryService.isConfigured()) {
+      return NextResponse.json({ error: 'Memory service not configured' }, { status: 503 })
     }
 
-    console.log('Server-side SuperMemory search for:', query)
+    const supabase = await createClient()
 
-    // Perform the search
-    const response = await superMemoryClient.search.execute({ 
-      q: query,
-      limit: limit
-    })
+    // Get authenticated user server-side
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-    // Map the response to our interface
-    const mappedResults = (response.results || []).map((result: any) => ({
-      id: result.id || result._id || '',
-      content: result.content || result.text || '',
-      title: result.title || result.metadata?.title || '',
-      score: result.score || result._score,
-      metadata: result.metadata || {}
-    }))
+    console.log('Server-side memory service search for:', query)
+
+    // Perform the search using memory service abstraction
+    const results = await memoryService.search(query, user.id, limit)
 
     return NextResponse.json({
-      results: mappedResults,
+      results: results,
       query: query
     })
 
   } catch (error) {
-    console.error('SuperMemory search error:', error)
+    console.error('Memory service search error:', error)
     return NextResponse.json(
       { error: 'Search failed', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

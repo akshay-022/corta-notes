@@ -2,7 +2,8 @@ import { Configuration, OpenAIApi } from 'openai-edge';
 import { NextResponse } from 'next/server';
 // import supermemory from 'supermemory'; // SuperMemory - commented out for mem0 migration
 // import MemoryClient from 'mem0ai'; // New mem0 client - moved to service
-import { memoryService, MemoryDocument } from '@/lib/memory';
+import { memoryService } from '@/lib/memory/memory-service-supermemory';
+import { MemoryDocument } from '@/lib/memory/types';
 import { createClient } from '@/lib/supabase/supabase-server';
 
 export const runtime = 'edge';
