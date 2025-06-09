@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import supermemory from 'supermemory'
 import { createClient } from '@/lib/supabase/supabase-server'
 
+export const runtime = 'edge';
+
 const superMemoryClient = new supermemory({
   apiKey: process.env.SUPERMEMORY_API_KEY, // Server-side only, not NEXT_PUBLIC_
 })

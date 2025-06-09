@@ -2,6 +2,8 @@ import { Configuration, OpenAIApi } from 'openai-edge';
 import { NextResponse } from 'next/server';
 import supermemory from 'supermemory';
 
+export const runtime = 'edge';
+
 // Ensure you have OPENAI_API_KEY set in your environment variables
 const openai = new OpenAIApi(
   new Configuration({

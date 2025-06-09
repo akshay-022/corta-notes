@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
 import supermemory from 'supermemory'
 
+export const runtime = 'edge';
+
 // Helper function to get the actual folder path by looking up page hierarchy
 async function getFolderPathFromPageUuid(supabase: any, pageUuid: string, allPages: any[]): Promise<string> {
   if (!pageUuid) return 'Unknown Location'
