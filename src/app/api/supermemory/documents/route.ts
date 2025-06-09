@@ -85,18 +85,60 @@ async function updateDocument(pageUuid: string, content: string, title: string, 
 }
 
 async function deleteDocument(pageUuid: string, userId: string, supabase: any) {
+  console.log('Deleting document from SuperMemory:', { pageUuid })
+
+  // First, get the SuperMemory document ID from our mapping
+  const { data: mapping, error: mappingError } = await supabase
+    .from('document_supermemory_mapping')
+    .select('supermemory_id')
+    .eq('page_uuid', pageUuid)
+    .eq('user_id', userId)
+    .single()
+
+  if (mappingError) {
+    console.log('No SuperMemory mapping found for page:', pageUuid)
+    // If no mapping exists, that's fine - the document was never synced
+    return NextResponse.json({ success: true, message: 'No SuperMemory document to delete' })
+  }
+
+  try {
+    // Delete from SuperMemory using the correct API endpoint
+    console.log('🗑️ Deleting from SuperMemory with ID:', mapping.supermemory_id)
+    
+    // Use the raw HTTP client since the SDK might not expose the delete method correctly
+    const deleteResponse = await fetch(`https://api.supermemory.ai/v3/memories/${mapping.supermemory_id}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${process.env.SUPERMEMORY_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (deleteResponse.ok) {
+      console.log('✅ Successfully deleted from SuperMemory')
+    } else {
+      const errorText = await deleteResponse.text()
+      console.error('❌ SuperMemory delete failed:', deleteResponse.status, errorText)
+    }
+  } catch (error) {
+    console.error('❌ Error deleting from SuperMemory:', error)
+    // Continue to remove mapping even if SuperMemory deletion fails
+    // This prevents orphaned mappings if the document was already deleted externally
+  }
+
   // Remove the mapping from our database
-  const { error } = await supabase
+  const { error: deleteError } = await supabase
     .from('document_supermemory_mapping')
     .delete()
     .eq('page_uuid', pageUuid)
     .eq('user_id', userId)
 
-  if (error) {
-    console.error('Error deleting SuperMemory mapping:', error)
+  if (deleteError) {
+    console.error('Error deleting SuperMemory mapping:', deleteError)
     return NextResponse.json({ error: 'Failed to delete mapping' }, { status: 500 })
   }
 
+  console.log('🎯 SuperMemory document and mapping deleted successfully')
   return NextResponse.json({ success: true })
 }
 

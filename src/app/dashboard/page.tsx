@@ -200,6 +200,32 @@ export default function DashboardPage() {
     }
     
     console.log('Deleting item:', pageToDelete.title)
+    
+    // First, delete from SuperMemory if it exists
+    try {
+      console.log('🧠 Attempting to delete from SuperMemory...')
+      const superMemoryResponse = await fetch('/api/supermemory/documents', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          action: 'delete',
+          pageUuid: pageToDelete.uuid
+        })
+      })
+
+      if (superMemoryResponse.ok) {
+        const result = await superMemoryResponse.json()
+        console.log('✅ SuperMemory deletion result:', result)
+      } else {
+        console.warn('⚠️ SuperMemory deletion failed, but continuing with local deletion')
+      }
+    } catch (error) {
+      console.warn('⚠️ SuperMemory deletion error:', error, 'but continuing with local deletion')
+    }
+
+    // Then delete from local database
     const { error } = await supabase
       .from('pages')
       .update({ is_deleted: true })
@@ -211,6 +237,7 @@ export default function DashboardPage() {
       if (activePage?.uuid === pageToDelete.uuid) {
         setActivePage(null)
       }
+      console.log('🎯 Item deleted successfully from both SuperMemory and local database')
     } else {
       console.error('Error deleting item:', error)
     }

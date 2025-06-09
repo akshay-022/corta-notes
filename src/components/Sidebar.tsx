@@ -333,6 +333,8 @@ export default function Sidebar({
           setActivePage={setActivePage}
           setSidebarOpen={setSidebarOpen}
           onBackToNormal={() => setViewMode('normal')}
+          deleteItem={deleteItem}
+          setRenaming={setRenaming}
         />
         
         {/* Mobile overlay */}

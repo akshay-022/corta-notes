@@ -1,7 +1,15 @@
 'use client'
 
+import { useState } from 'react'
 import { Page } from '@/lib/supabase/types'
-import { FileText, ArrowLeft } from 'lucide-react'
+import { FileText, ArrowLeft, Edit, Trash } from 'lucide-react'
+
+interface ContextMenu {
+  x: number
+  y: number
+  type: 'file'
+  item: Page
+}
 
 interface ChronologicalSidebarProps {
   pages: Page[]
@@ -9,6 +17,8 @@ interface ChronologicalSidebarProps {
   setActivePage: (page: Page) => void
   setSidebarOpen: (open: boolean) => void
   onBackToNormal: () => void
+  deleteItem: (page: Page) => void
+  setRenaming: (page: Page) => void
 }
 
 interface GroupedPages {
@@ -23,8 +33,30 @@ export default function ChronologicalSidebar({
   activePage,
   setActivePage,
   setSidebarOpen,
-  onBackToNormal
+  onBackToNormal,
+  deleteItem,
+  setRenaming
 }: ChronologicalSidebarProps) {
+  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
+
+  const handleContextMenu = (e: React.MouseEvent, page: Page) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      type: 'file',
+      item: page
+    })
+  }
+
+  // Close context menu when clicking outside
+  const handleClick = () => {
+    if (contextMenu) {
+      setContextMenu(null)
+    }
+  }
   
   // Filter out folders and deleted items, then sort by updated_at descending
   const sortedPages = pages
@@ -100,7 +132,10 @@ export default function ChronologicalSidebar({
   // No longer need the badge function - keeping it simple
 
   return (
-    <div className="fixed lg:relative inset-y-0 left-0 z-40 w-64 bg-[#1e1e1e] border-r border-[#333333] transform transition-transform duration-200 ease-in-out translate-x-0">
+    <div 
+      className="fixed lg:relative inset-y-0 left-0 z-40 w-64 bg-[#1e1e1e] border-r border-[#333333] transform transition-transform duration-200 ease-in-out translate-x-0"
+      onClick={handleClick}
+    >
       <div className="flex flex-col h-full">
         {/* Fixed Header with back button */}
         <div className="flex-shrink-0 p-4 border-b border-[#333333]">
@@ -142,6 +177,7 @@ export default function ChronologicalSidebar({
                           setActivePage(page)
                           setSidebarOpen(false)
                         }}
+                        onContextMenu={(e) => handleContextMenu(e, page)}
                         className={`
                           flex items-center px-4 py-2 mx-3 rounded-md cursor-pointer transition-all duration-200 group
                           ${isActive 
@@ -187,6 +223,36 @@ export default function ChronologicalSidebar({
           </div>
         </div>
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          className="fixed bg-[#2a2a2a] border border-gray-700 rounded-md shadow-lg py-1 z-50 min-w-[150px]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-[#3a3a3a] flex items-center gap-2"
+            onClick={() => {
+              setRenaming(contextMenu.item)
+              setContextMenu(null)
+            }}
+          >
+            <Edit size={12} />
+            Rename
+          </button>
+          <button
+            className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-[#3a3a3a] flex items-center gap-2"
+            onClick={() => {
+              deleteItem(contextMenu.item)
+              setContextMenu(null)
+            }}
+          >
+            <Trash size={12} />
+            Delete
+          </button>
+        </div>
+      )}
     </div>
   )
 } 
