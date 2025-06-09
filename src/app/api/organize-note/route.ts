@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
-import supermemory from 'supermemory'
+// import supermemory from 'supermemory' // SuperMemory - commented out for mem0 migration
+// import MemoryClient from 'mem0ai' // New mem0 client - moved to service
+import { memoryService } from '@/lib/memory'
 
 export const runtime = 'edge';
 
@@ -69,7 +71,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Note not found' }, { status: 404 })
     }
 
-    // Use AI to analyze and organize the content (with SuperMemory context)
+    // Use AI to analyze and organize the content (with Mem0 context)
     const organizationPlan = await analyzeAndOrganize(
       noteContent,
       organizationInstructions,
@@ -114,7 +116,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function analyzeAndOrganize(noteContent: any, instructions: string, fileTree: any[], supabase?: any, currentTitle?: string) {
-  console.log('Analyzing content for organization with GPT-4o and SuperMemory...')
+  console.log('Analyzing content for organization with GPT-4o and Mem0...')
   
   // Extract text content from TipTap JSON
   const textContent = extractTextFromTipTap(noteContent)
@@ -122,51 +124,54 @@ async function analyzeAndOrganize(noteContent: any, instructions: string, fileTr
   // Create a clean file tree hierarchy for GPT
   const cleanFileTree = createCleanFileTree(fileTree)
   
-  // Search SuperMemory for relevant documents to help with organization
-  let superMemoryContext = ''
+  // Search memory service for relevant documents to help with organization
+  let memoryContext = ''
   
-  if (process.env.SUPERMEMORY_API_KEY) {
+  if (memoryService.isConfigured()) {
     try {
-      console.log('Searching SuperMemory for relevant organization context...')
-      const superMemoryClient = new supermemory({
-        apiKey: process.env.SUPERMEMORY_API_KEY,
-      })
+      console.log('Searching memory service for relevant organization context...')
       
-      // Search for relevant content to understand organization patterns
-      const searchQuery = instructions || textContent.substring(0, 200) // Use instructions or content preview
-      const searchResponse = await superMemoryClient.search.execute({ 
-        q: searchQuery,
-        limit: 5
-      })
+      // Get current user for user-scoped search
+      const { data: { user }, error: authError } = await supabase?.auth.getUser() || { data: { user: null }, error: null }
       
-                    if (searchResponse.results && searchResponse.results.length > 0) {
-        console.log(`Found ${searchResponse.results.length} relevant documents for organization context`)
-        console.log('Raw SuperMemory search result structure:', JSON.stringify(searchResponse.results[0], null, 2))
+      if (user) {
+        // Search for relevant content to understand organization patterns
+        const searchQuery = instructions || textContent.substring(0, 200) // Use instructions or content preview
+        const searchResults = await memoryService.search(searchQuery, user.id, 5);
+
+        console.log('Memory search response for organization:', searchResults)
+
+        if (searchResults && searchResults.length > 0) {
+          // Process the search results to find documents with known locations
+          const relevantDocuments = []
           
-          // Build relevant documents with actual folder paths
-          const relevantDocuments = await Promise.all(
-            searchResponse.results.map(async (result: any, index: number) => {
-              if (index === 0) {
-                console.log('Available fields in search result:', Object.keys(result))
-                console.log('Metadata fields:', result.metadata ? Object.keys(result.metadata) : 'No metadata')
-              }
+          for (const result of searchResults) {
+            const pageUuid = result.metadata?.pageUuid
+            if (pageUuid && supabase) {
+              // Get the folder location for this document
+              const { data: pageData } = await supabase
+                .from('pages')
+                .select('title, folder_path')
+                .eq('uuid', pageUuid)
+                .single()
               
-              const pageUuid = result.metadata?.pageUuid
-              const folderPath = pageUuid ? await getFolderPathFromPageUuid(supabase, pageUuid, fileTree) : 'Unknown Location'
-              
-              return {
-                title: result.title || result.metadata?.title || 'Untitled Document',
-                summary: result.chunks?.[0]?.content || 'No content available',
-                content: result.chunks?.[0]?.content || '',
-                pageUuid: pageUuid,
-                relevance: result.score || result._score,
-                folderPath: folderPath
+              if (pageData) {
+                                 relevantDocuments.push({
+                   title: pageData.title,
+                   folderPath: pageData.folder_path || 'Root',
+                   pageUuid: pageUuid,
+                   content: result.content || '',
+                   relevance: result.score || 0,
+                   summary: (result.content || '').substring(0, 150) + '...'
+                 })
               }
-            })
-          )
+            }
+          }
+
+          console.log(`Found ${relevantDocuments.length} relevant documents with known locations`)
           
           // Create context summary for GPT with actual folder paths and content-based reasoning
-          superMemoryContext = `
+          memoryContext = `
 RELEVANT DOCUMENTS FOUND IN YOUR KNOWLEDGE BASE:
 These documents are similar to the content being organized. Consider their locations when deciding where to organize the new content:
 
@@ -183,9 +188,10 @@ ${relevantDocuments
 
 Use these examples to understand your typical organization patterns and place similar content in appropriate folders.`
         }
+      }
     } catch (error) {
-      console.error('SuperMemory search failed during organization:', error)
-      // Continue without SuperMemory context if it fails
+      console.error('Memory search failed during organization:', error)
+      // Continue without memory context if it fails
     }
   }
   
@@ -245,15 +251,15 @@ Organization Instructions: ${instructions || 'No specific instructions - use you
 Current File Tree:
 ${JSON.stringify(cleanFileTree, null, 2)}
 
-${superMemoryContext ? superMemoryContext : ''}
+${memoryContext ? memoryContext : ''}
 
-Please organize this note according to ${instructions ? 'the instructions and' : ''} the current file structure, content analysis${superMemoryContext ? ', and the relevant documents context' : ''}. 
+Please organize this note according to ${instructions ? 'the instructions and' : ''} the current file structure, content analysis${memoryContext ? ', and the relevant documents context' : ''}. 
 
 IMPORTANT: 
 1. Look carefully at the existing files in the file tree. If the new content is related to or would fit well with an existing file, use that existing file's name and path.
-2. ${superMemoryContext ? 'Consider the similar documents found in your knowledge base - they show where similar content is typically organized.' : ''}
+2. ${memoryContext ? 'Consider the similar documents found in your knowledge base - they show where similar content is typically organized.' : ''}
 3. Only create new files when the content is truly different or unrelated to existing files.
-4. If SuperMemory found similar documents, strongly consider organizing this content in a similar folder structure unless user instructions explicitly say otherwise.
+4. If memory service found similar documents, strongly consider organizing this content in a similar folder structure unless user instructions explicitly say otherwise.
 
 ${!instructions ? 'Since no specific instructions were provided, analyze the content and suggest the most logical organization based on the content type, topic, existing file structure, and similar document patterns.' : ''}`
           }

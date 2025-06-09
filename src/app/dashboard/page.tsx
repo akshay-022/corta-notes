@@ -8,7 +8,7 @@ import { Page } from '@/lib/supabase/types'
 import TipTapEditor from '@/components/editor/TipTapEditor'
 import Sidebar from '@/components/left-sidebar/Sidebar'
 import { useDragAndDrop } from '@/hooks/useDragAndDrop'
-import { superMemorySyncService } from '@/lib/supermemory/superMemorySync'
+import { superMemorySyncService } from '@/lib/memory/memory-client-sync'
 
 interface ContextMenu {
   x: number
@@ -204,7 +204,7 @@ export default function DashboardPage() {
     // First, delete from SuperMemory if it exists
     try {
       console.log('🧠 Attempting to delete from SuperMemory...')
-      const superMemoryResponse = await fetch('/api/supermemory/documents', {
+      const superMemoryResponse = await fetch('/api/memory/documents', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

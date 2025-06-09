@@ -23,7 +23,7 @@ class SuperMemoryService {
     try {
       console.log('Searching SuperMemory for:', query)
       
-      const response = await fetch('/api/supermemory/search', {
+      const response = await fetch('/api/memory/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -58,7 +58,7 @@ class SuperMemoryService {
     try {
       console.log('Adding document to SuperMemory:', { pageUuid, title })
 
-      const response = await fetch('/api/supermemory/documents', {
+      const response = await fetch('/api/memory/documents', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -90,7 +90,7 @@ class SuperMemoryService {
    */
   async updateDocument(pageUuid: string, content: string, title: string): Promise<boolean> {
     try {
-      const response = await fetch('/api/supermemory/documents', {
+      const response = await fetch('/api/memory/documents', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -120,7 +120,7 @@ class SuperMemoryService {
    */
   async deleteDocument(pageUuid: string): Promise<boolean> {
     try {
-      const response = await fetch('/api/supermemory/documents', {
+      const response = await fetch('/api/memory/documents', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -150,7 +150,7 @@ class SuperMemoryService {
     try {
       console.log('Finding similar documents for:', title)
 
-      const response = await fetch('/api/supermemory/documents', {
+      const response = await fetch('/api/memory/documents', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -180,7 +180,7 @@ class SuperMemoryService {
    */
   async isConfigured(): Promise<boolean> {
     try {
-      const response = await fetch('/api/supermemory/search', {
+      const response = await fetch('/api/memory/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

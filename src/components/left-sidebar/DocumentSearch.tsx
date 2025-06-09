@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Search, X, FileText } from 'lucide-react'
-import { superMemoryService, SuperMemoryDocument } from '@/lib/supermemory/supermemory'
+import { superMemoryService, SuperMemoryDocument } from '@/lib/memory/memory-client'
 import { Page } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/supabase-client'
 
