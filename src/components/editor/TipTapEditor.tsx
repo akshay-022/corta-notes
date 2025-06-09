@@ -247,7 +247,12 @@ export default function TipTapEditor({ page, onUpdate }: TipTapEditorProps) {
   }
 
   return (
-    <div className="flex-1 bg-[#1a1a1a] flex flex-col overflow-hidden">
+    <div 
+      className="flex-1 bg-[#1a1a1a] flex flex-col overflow-hidden"
+      style={{
+        width: isChatOpen ? 'calc(100vw - 256px - 400px)' : 'calc(100vw - 256px)'
+      }}
+    >
       {/* Minimal toolbar - appears on hover */}
       <div className="absolute top-4 right-6 z-10 opacity-0 hover:opacity-100 transition-opacity">
         <div className="flex items-center gap-1 bg-[#2a2a2a] rounded-lg p-1 border border-gray-700">
