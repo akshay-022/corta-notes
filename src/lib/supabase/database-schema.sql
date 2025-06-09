@@ -33,10 +33,21 @@ CREATE TABLE pages (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. Chat Messages Table (User-AI conversations like Cursor sidebar)
+-- 3. Conversations Table (User-AI conversation sessions)
+CREATE TABLE conversations (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  title VARCHAR(255) NOT NULL DEFAULT 'New Conversation',
+  related_pages JSONB DEFAULT '[]', -- Array of page UUIDs that this conversation relates to
+  metadata JSONB DEFAULT '{}', -- Additional conversation metadata
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4. Chat Messages Table (Individual messages within conversations)
 CREATE TABLE chat_messages (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  page_uuid UUID REFERENCES pages(uuid) ON DELETE CASCADE, -- Associated with specific page
+  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, -- Links to conversation
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
   is_user_message BOOLEAN DEFAULT TRUE, -- TRUE = user, FALSE = AI response
@@ -54,13 +65,18 @@ CREATE INDEX idx_pages_parent_uuid ON pages(parent_uuid) WHERE parent_uuid IS NO
 CREATE INDEX idx_pages_content_search ON pages USING gin(to_tsvector('english', content_text));
 CREATE INDEX idx_pages_updated_at ON pages(updated_at DESC);
 
-CREATE INDEX idx_chat_messages_page_uuid ON chat_messages(page_uuid);
+CREATE INDEX idx_conversations_user_id ON conversations(user_id);
+CREATE INDEX idx_conversations_created_at ON conversations(created_at DESC);
+CREATE INDEX idx_conversations_updated_at ON conversations(updated_at DESC);
+
+CREATE INDEX idx_chat_messages_conversation_id ON chat_messages(conversation_id);
 CREATE INDEX idx_chat_messages_user_id ON chat_messages(user_id);
 CREATE INDEX idx_chat_messages_created_at ON chat_messages(created_at DESC);
 
 -- Row Level Security (RLS)
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for Profiles
@@ -86,23 +102,36 @@ CREATE POLICY "Users can update own pages" ON pages
 CREATE POLICY "Users can delete own pages" ON pages 
   FOR DELETE USING (auth.uid() = user_id);
 
+-- RLS Policies for Conversations
+CREATE POLICY "Users can view own conversations" ON conversations 
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own conversations" ON conversations 
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own conversations" ON conversations 
+  FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own conversations" ON conversations 
+  FOR DELETE USING (auth.uid() = user_id);
+
 -- RLS Policies for Chat Messages
-CREATE POLICY "Users can view chat messages for accessible pages" ON chat_messages 
+CREATE POLICY "Users can view chat messages for own conversations" ON chat_messages 
   FOR SELECT USING (
     EXISTS (
-      SELECT 1 FROM pages p 
-      WHERE p.uuid = chat_messages.page_uuid 
-      AND (p.user_id = auth.uid() OR p.is_published = TRUE)
+      SELECT 1 FROM conversations c 
+      WHERE c.id = chat_messages.conversation_id 
+      AND c.user_id = auth.uid()
     )
   );
 
-CREATE POLICY "Users can insert chat messages for accessible pages" ON chat_messages 
+CREATE POLICY "Users can insert chat messages for own conversations" ON chat_messages 
   FOR INSERT WITH CHECK (
     auth.uid() = user_id AND
     EXISTS (
-      SELECT 1 FROM pages p 
-      WHERE p.uuid = chat_messages.page_uuid 
-      AND (p.user_id = auth.uid() OR p.is_published = TRUE)
+      SELECT 1 FROM conversations c 
+      WHERE c.id = chat_messages.conversation_id 
+      AND c.user_id = auth.uid()
     )
   );
 
@@ -122,6 +151,30 @@ CREATE TRIGGER update_pages_updated_at
   BEFORE UPDATE ON pages 
   FOR EACH ROW 
   EXECUTE FUNCTION update_updated_at_column();
+
+-- Trigger to update conversations.updated_at when conversations are modified
+CREATE TRIGGER update_conversations_updated_at 
+  BEFORE UPDATE ON conversations 
+  FOR EACH ROW 
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- Trigger to update conversations.updated_at when chat messages are added
+CREATE OR REPLACE FUNCTION update_conversation_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Update the parent conversation's updated_at timestamp
+  UPDATE conversations 
+  SET updated_at = NOW() 
+  WHERE id = NEW.conversation_id;
+  
+  RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_conversation_updated_at_trigger
+  AFTER INSERT ON chat_messages 
+  FOR EACH ROW 
+  EXECUTE FUNCTION update_conversation_updated_at();
 
 -- Function to automatically create user profile on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()

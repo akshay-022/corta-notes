@@ -12,40 +12,70 @@ export type Database = {
       chat_messages: {
         Row: {
           content: string
+          conversation_id: string
           created_at: string | null
           id: string
           is_user_message: boolean | null
           metadata: Json | null
-          page_uuid: string | null
           user_id: string | null
         }
         Insert: {
           content: string
+          conversation_id: string
           created_at?: string | null
           id?: string
           is_user_message?: boolean | null
           metadata?: Json | null
-          page_uuid?: string | null
           user_id?: string | null
         }
         Update: {
           content?: string
+          conversation_id?: string
           created_at?: string | null
           id?: string
           is_user_message?: boolean | null
           metadata?: Json | null
-          page_uuid?: string | null
           user_id?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "chat_messages_page_uuid_fkey"
-            columns: ["page_uuid"]
+            foreignKeyName: "chat_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
             isOneToOne: false
-            referencedRelation: "pages"
-            referencedColumns: ["uuid"]
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
           },
         ]
+      }
+      conversations: {
+        Row: {
+          created_at: string | null
+          id: string
+          metadata: Json | null
+          related_pages: Json | null
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          related_pages?: Json | null
+          title?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          related_pages?: Json | null
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       pages: {
         Row: {
@@ -267,10 +297,13 @@ export const Constants = {
 export type Profile = Tables<'profiles'>
 export type Page = Tables<'pages'>
 export type ChatMessage = Tables<'chat_messages'>
+export type Conversation = Tables<'conversations'>
 
 export type PageInsert = TablesInsert<'pages'>
 export type PageUpdate = TablesUpdate<'pages'>
 export type ChatMessageInsert = TablesInsert<'chat_messages'>
+export type ConversationInsert = TablesInsert<'conversations'>
+export type ConversationUpdate = TablesUpdate<'conversations'>
 
 // TipTap content type (more specific than generic Json)
 export type TipTapContent = {
