@@ -145,25 +145,33 @@ async function analyzeAndOrganize(noteContent: any, instructions: string, fileTr
           // Process the search results to find documents with known locations
           const relevantDocuments = []
           
-          for (const result of searchResults) {
-            const pageUuid = result.metadata?.pageUuid
-            if (pageUuid && supabase) {
-              // Get the folder location for this document
-              const { data: pageData } = await supabase
-                .from('pages')
-                .select('title, folder_path')
-                .eq('uuid', pageUuid)
-                .single()
-              
-              if (pageData) {
-                                 relevantDocuments.push({
-                   title: pageData.title,
-                   folderPath: pageData.folder_path || 'Root',
-                   pageUuid: pageUuid,
-                   content: result.content || '',
-                   relevance: result.score || 0,
-                   summary: (result.content || '').substring(0, 150) + '...'
-                 })
+          // ⚡ BATCH DATABASE QUERY - Get all pageUuids in one query instead of sequential queries
+          const pageUuids = searchResults
+            .map(result => result.metadata?.pageUuid)
+            .filter(Boolean)
+          
+          if (pageUuids.length > 0 && supabase) {
+            // Single database query for all pageUuids
+            const { data: pagesData } = await supabase
+              .from('pages')
+              .select('uuid, title, folder_path')
+              .in('uuid', pageUuids)
+            
+            // Map results to the search results
+            for (const result of searchResults) {
+              const pageUuid = result.metadata?.pageUuid
+              if (pageUuid) {
+                const pageData = pagesData?.find((p: any) => p.uuid === pageUuid)
+                if (pageData) {
+                  relevantDocuments.push({
+                    title: pageData.title,
+                    folderPath: pageData.folder_path || 'Root',
+                    pageUuid: pageUuid,
+                    content: result.content || '',
+                    relevance: result.score || 0,
+                    summary: (result.content || '').substring(0, 150) + '...'
+                  })
+                }
               }
             }
           }

@@ -68,13 +68,12 @@ export default function DocumentSearch({ onSelectDocument, onSearchResults, clas
     console.log('🔍 Performing prioritized search for:', query)
 
     try {
-      // 1. Search local titles first (PRIORITY)
-      console.log('📝 Searching local titles...')
-      const localTitleMatches = await searchLocalTitles(query)
-      
-      // 2. Search SuperMemory
-      console.log('🧠 Searching SuperMemory...')
-      const superMemoryResult = await superMemoryService.searchDocuments(query, 6)
+      // ⚡ PARALLEL SEARCH - Run both searches simultaneously for better performance
+      console.log('📝🧠 Running parallel search: local titles + SuperMemory...')
+      const [localTitleMatches, superMemoryResult] = await Promise.all([
+        searchLocalTitles(query),
+        superMemoryService.searchDocuments(query, 6)
+      ])
       
       // 3. Combine results with prioritization
       const prioritizedResults = [
