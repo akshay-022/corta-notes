@@ -3,9 +3,9 @@
 import { useState } from 'react'
 import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, MoreHorizontal, Plus, Edit3, Edit, Check, X, RefreshCw, Clock, Trash } from 'lucide-react'
 import { Page } from '@/lib/supabase/types'
-import { DragDropStyles, isValidDrop, DropZoneIndicator } from '@/components/DragDropStyles'
+import { DragDropStyles, isValidDrop, DropZoneIndicator } from '@/components/left-sidebar/DragDropStyles'
 import type { DragItem, DropTarget } from '@/hooks/useDragAndDrop'
-import DocumentSearch from '@/components/DocumentSearch'
+import DocumentSearch from '@/components/left-sidebar/DocumentSearch'
 import { SuperMemoryDocument } from '@/lib/supermemory/supermemory'
 import ChronologicalSidebar from './ChronologicalSidebar'
 

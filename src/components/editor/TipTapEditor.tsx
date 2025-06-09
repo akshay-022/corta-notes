@@ -9,7 +9,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Page, PageUpdate } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/supabase-client'
 import { Calendar, Minus } from 'lucide-react'
-import ChatPanel, { ChatPanelHandle } from './ChatPanel'
+import ChatPanel, { ChatPanelHandle } from '../right-sidebar/ChatPanel'
 
 interface TipTapEditorProps {
   page: Page
