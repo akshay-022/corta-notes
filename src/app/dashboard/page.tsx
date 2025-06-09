@@ -8,7 +8,7 @@ import { Page } from '@/lib/supabase/types'
 import TipTapEditor from '@/components/TipTapEditor'
 import Sidebar from '@/components/Sidebar'
 import { useDragAndDrop } from '@/hooks/useDragAndDrop'
-import { superMemorySyncService } from '@/lib/superMemorySync'
+import { superMemorySyncService } from '@/lib/supermemory/superMemorySync'
 
 interface ContextMenu {
   x: number

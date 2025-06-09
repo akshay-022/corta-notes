@@ -1,7 +1,7 @@
 'use client'
 
 import { Page } from '@/lib/supabase/types'
-import { superMemoryService } from '@/lib/supermemory'
+import { superMemoryService } from '@/lib/supermemory/supermemory'
 import { createClient } from '@/lib/supabase/supabase-client'
 
 export type SyncStatus = 'never' | 'no' | 'yes'

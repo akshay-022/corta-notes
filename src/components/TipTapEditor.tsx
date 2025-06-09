@@ -9,6 +9,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Page, PageUpdate } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/supabase-client'
 import { Calendar, Minus } from 'lucide-react'
+import ChatPanel, { ChatPanelHandle } from './ChatPanel'
 
 interface TipTapEditorProps {
   page: Page
@@ -20,8 +21,12 @@ export default function TipTapEditor({ page, onUpdate }: TipTapEditorProps) {
   const [isSaving, setIsSaving] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [isUserTyping, setIsUserTyping] = useState(false)
+  const [isChatOpen, setIsChatOpen] = useState(false)
+  const [selections, setSelections] = useState<Array<{id: string, text: string, startLine: number, endLine: number}>>([])
+  
   const titleInputRef = useRef<HTMLInputElement>(null)
   const currentPageRef = useRef(page.uuid)
+  const chatPanelRef = useRef<ChatPanelHandle>(null)
   const supabase = createClient()
 
   const editor = useEditor({
@@ -46,6 +51,9 @@ export default function TipTapEditor({ page, onUpdate }: TipTapEditorProps) {
     onUpdate: ({ editor }) => {
       setIsUserTyping(true)
       debounceUpdate(editor.getJSON(), editor.getText())
+    },
+    onSelectionUpdate: () => {
+      handleSelectionChange()
     },
   })
 
@@ -143,6 +151,75 @@ export default function TipTapEditor({ page, onUpdate }: TipTapEditorProps) {
       .run()
   }
 
+  // Command+K keyboard shortcut to open chat
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey && e.key === 'k') {
+        e.preventDefault()
+        setIsChatOpen(true)
+        // Focus chat input after a short delay to allow panel to render
+        setTimeout(() => {
+          chatPanelRef.current?.focusInput()
+        }, 100)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  // Handle text selection for chat context
+  const handleSelectionChange = () => {
+    if (!editor) return
+    
+    const { from, to } = editor.state.selection
+    if (from === to) {
+      // No selection, clear selections
+      setSelections([])
+      return
+    }
+
+    const selectedText = editor.state.doc.textBetween(from, to)
+    if (selectedText.trim()) {
+      const selectionId = `selection-${Date.now()}`
+      setSelections([{
+        id: selectionId,
+        text: selectedText.trim(),
+        startLine: 1, // TipTap doesn't have line numbers, so we use 1
+        endLine: 1
+      }])
+    }
+  }
+
+  // Apply AI response to editor
+  const handleApplyAiResponse = async (responseText: string, targetSelections?: Array<{id: string, text: string, startLine: number, endLine: number}>) => {
+    if (!editor) return
+
+    try {
+      console.log('Applying AI response to editor', { responseText: responseText.substring(0, 100) + '...' })
+      
+      if (targetSelections && targetSelections.length > 0) {
+        // Replace the selected text with AI response
+        const { from, to } = editor.state.selection
+        if (from !== to) {
+          editor.chain().focus().deleteSelection().insertContent(responseText).run()
+        } else {
+          // If no current selection, just insert at cursor
+          editor.chain().focus().insertContent(responseText).run()
+        }
+      } else {
+        // No specific selection, insert at cursor position
+        editor.chain().focus().insertContent(responseText).run()
+      }
+      
+      // Clear selections after applying
+      setSelections([])
+    } catch (error) {
+      console.error('Error applying AI response to editor:', error)
+      throw error
+    }
+  }
+
   // Update editor content when page changes (but not when user is typing)
   useEffect(() => {
     // Only update content if we switched to a different page
@@ -234,6 +311,17 @@ export default function TipTapEditor({ page, onUpdate }: TipTapEditorProps) {
           />
         </div>
       </div>
+
+      {/* Chat Panel */}
+      <ChatPanel
+        ref={chatPanelRef}
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        currentPage={page}
+        selections={selections}
+        setSelections={setSelections}
+        onApplyAiResponseToEditor={handleApplyAiResponse}
+      />
     </div>
   )
 } 

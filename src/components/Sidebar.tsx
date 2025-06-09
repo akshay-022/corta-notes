@@ -6,7 +6,7 @@ import { Page } from '@/lib/supabase/types'
 import { DragDropStyles, isValidDrop, DropZoneIndicator } from '@/components/DragDropStyles'
 import type { DragItem, DropTarget } from '@/hooks/useDragAndDrop'
 import DocumentSearch from '@/components/DocumentSearch'
-import { SuperMemoryDocument } from '@/lib/supermemory'
+import { SuperMemoryDocument } from '@/lib/supermemory/supermemory'
 import ChronologicalSidebar from './ChronologicalSidebar'
 
 interface ContextMenu {
