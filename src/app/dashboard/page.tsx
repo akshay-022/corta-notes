@@ -413,6 +413,7 @@ export default function DashboardPage() {
         updatePageMetadata={updatePageMetadata}
         sendForOrganization={sendForOrganization}
         highlightedFolders={highlightedFolders}
+        setHighlightedFolders={setHighlightedFolders}
         logout={logout}
         onManualSync={handleManualSync}
         dragAndDrop={dragAndDrop}

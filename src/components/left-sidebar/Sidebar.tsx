@@ -33,6 +33,7 @@ interface SidebarProps {
   updatePageMetadata: (page: Page, metadata: any) => void
   sendForOrganization: (page: Page) => void
   highlightedFolders: Set<string>
+  setHighlightedFolders: (folders: Set<string> | ((prev: Set<string>) => Set<string>)) => void
   logout: () => void
   onManualSync: () => void
   dragAndDrop: {
@@ -58,6 +59,7 @@ export default function Sidebar({
   updatePageMetadata,
   sendForOrganization,
   highlightedFolders,
+  setHighlightedFolders,
   logout,
   onManualSync,
   dragAndDrop
@@ -178,6 +180,14 @@ export default function Sidebar({
     })
   }
 
+  const removeHighlight = (itemTitle: string) => {
+    setHighlightedFolders(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(itemTitle)
+      return newSet
+    })
+  }
+
   const buildTree = (items: Page[], parentId?: string | null) => {
     const filtered = items.filter(item => {
       // If no parentId provided, get root level items (no parent or null parent)
@@ -264,7 +274,12 @@ export default function Sidebar({
               backgroundColor: isHighlighted ? 'rgba(101, 163, 13, 0.25)' : undefined,
               width: '100%'
             }}
-            onClick={() => {
+            onClick={(e) => {
+              // If item is highlighted, remove highlighting but still allow normal click behavior
+              if (isHighlighted) {
+                removeHighlight(item.title)
+              }
+              
               if (isFolder) {
                 toggleFolder(item.uuid)
               } else {

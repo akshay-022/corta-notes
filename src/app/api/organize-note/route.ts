@@ -72,7 +72,8 @@ export async function POST(request: NextRequest) {
       noteContent,
       organizationInstructions,
       fileTree,
-      supabase
+      supabase,
+      currentNote.title
     )
 
     // Execute the organization plan
@@ -110,7 +111,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function analyzeAndOrganize(noteContent: any, instructions: string, fileTree: any[], supabase?: any) {
+async function analyzeAndOrganize(noteContent: any, instructions: string, fileTree: any[], supabase?: any, currentTitle?: string) {
   console.log('Analyzing content for organization with GPT-4o and SuperMemory...')
   
   // Extract text content from TipTap JSON
@@ -233,7 +234,9 @@ In some notes subsequent lines or different paragraphs may be unrelated, there y
           },
           {
             role: 'user',
-            content: `Note Content: ${textContent}
+            content: `Note Title: ${currentTitle || 'Untitled'}
+
+Note Content: ${textContent}
 
 Organization Instructions: ${instructions || 'No specific instructions - use your best judgment to organize this content appropriately.'}
 
