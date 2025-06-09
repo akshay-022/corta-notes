@@ -88,10 +88,10 @@ export async function POST(req: Request) {
     
     // Return the response with context info
     const response = {
-      content: result.choices?.[0]?.message?.content || 'No response generated',
+      response: result.choices?.[0]?.message?.content || 'No response generated', // ← Changed from 'content' to 'response'
       contextUsed: relevantDocuments.length > 0,
       documentsFound: relevantDocuments.length,
-      relevantDocs: relevantDocuments.map(doc => ({
+      relevantDocuments: relevantDocuments.map(doc => ({ // ← Changed from 'relevantDocs' to 'relevantDocuments'
         title: doc.title,
         pageUuid: doc.metadata?.pageUuid
       }))
