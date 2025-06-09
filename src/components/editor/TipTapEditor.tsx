@@ -317,7 +317,30 @@ export default function TipTapEditor({ page, onUpdate }: TipTapEditorProps) {
             ) : (
               <h1
                 onClick={startEditingTitle}
-                className="text-white text-4xl font-bold cursor-text hover:bg-[#2a2a2a]/30 rounded px-1 py-1 -mx-1 transition-colors min-h-[3rem] flex items-center"
+                onKeyDown={(e) => {
+                  // Start editing on any printable character or backspace/delete
+                  if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') {
+                    e.preventDefault()
+                    startEditingTitle()
+                    // If it's a printable character, we'll set it as the new title
+                    if (e.key.length === 1) {
+                      setTimeout(() => {
+                        setTitle(e.key)
+                        // Position cursor at the end
+                        if (titleInputRef.current) {
+                          titleInputRef.current.setSelectionRange(1, 1)
+                        }
+                      }, 0)
+                    } else {
+                      // For backspace/delete, clear the title
+                      setTimeout(() => {
+                        setTitle('')
+                      }, 0)
+                    }
+                  }
+                }}
+                tabIndex={0} // Make it focusable
+                className="text-white text-4xl font-bold cursor-text hover:bg-[#2a2a2a]/30 rounded px-1 py-1 -mx-1 transition-colors min-h-[3rem] flex items-center focus:outline-none focus:bg-[#2a2a2a]/30"
               >
                 {title || (
                   <span className="text-gray-600">Untitled</span>
