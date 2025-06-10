@@ -424,6 +424,7 @@ export default function DashboardPage() {
         {activePage ? (
           <TipTapEditor 
             page={activePage} 
+            allPages={pages}
             onUpdate={(updatedPage: Page) => {
               setActivePage(updatedPage)
               setPages(pages.map(p => p.uuid === updatedPage.uuid ? updatedPage : p))

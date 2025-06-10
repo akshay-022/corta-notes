@@ -14,9 +14,10 @@ import ChatPanel, { ChatPanelHandle } from '../right-sidebar/ChatPanel'
 interface TipTapEditorProps {
   page: Page
   onUpdate: (page: Page) => void
+  allPages?: Page[] // Add pages data for context
 }
 
-export default function TipTapEditor({ page, onUpdate }: TipTapEditorProps) {
+export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEditorProps) {
   const [title, setTitle] = useState(page.title)
   const [isSaving, setIsSaving] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -207,7 +208,6 @@ export default function TipTapEditor({ page, onUpdate }: TipTapEditorProps) {
   }, [captureCurrentSelection])
 
 
-
   // Apply AI response to editor
   const handleApplyAiResponse = async (responseText: string, targetSelections?: Array<{id: string, text: string, startLine: number, endLine: number}>) => {
     if (!editor) return
@@ -363,9 +363,11 @@ export default function TipTapEditor({ page, onUpdate }: TipTapEditorProps) {
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
         currentPage={page}
+        allPages={allPages}
         selections={selections}
         setSelections={setSelections}
         onApplyAiResponseToEditor={handleApplyAiResponse}
+        editor={editor}
       />
     </div>
   )

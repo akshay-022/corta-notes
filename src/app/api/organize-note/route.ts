@@ -142,11 +142,18 @@ async function analyzeAndOrganize(noteContent: any, instructions: string, fileTr
         console.log('Memory search response for organization:', searchResults)
 
         if (searchResults && searchResults.length > 0) {
+          // Filter out low-confidence results (below 30%)
+          const highConfidenceResults = searchResults.filter(doc => {
+            const confidence = doc.score || 0;
+            return confidence >= 0.3; // Only include results with 30%+ confidence
+          });
+          
+          console.log(`Organization: Found ${searchResults.length} documents, ${highConfidenceResults.length} with confidence >= 30%`);
           // Process the search results to find documents with known locations
           const relevantDocuments = []
           
           // ⚡ BATCH DATABASE QUERY - Get all pageUuids in one query instead of sequential queries
-          const pageUuids = searchResults
+          const pageUuids = highConfidenceResults
             .map(result => result.metadata?.pageUuid)
             .filter(Boolean)
           
@@ -157,8 +164,8 @@ async function analyzeAndOrganize(noteContent: any, instructions: string, fileTr
               .select('uuid, title, folder_path')
               .in('uuid', pageUuids)
             
-            // Map results to the search results
-            for (const result of searchResults) {
+            // Map results to the high confidence search results
+            for (const result of highConfidenceResults) {
               const pageUuid = result.metadata?.pageUuid
               if (pageUuid) {
                 const pageData = pagesData?.find((p: any) => p.uuid === pageUuid)

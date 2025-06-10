@@ -6,8 +6,13 @@ import { createClient } from '@/lib/supabase/supabase-client'
 import { Conversation, ChatMessage, Page } from '@/lib/supabase/types'
 import conversationsService from '@/lib/conversations/conversations'
 import ReactMarkdown from 'react-markdown'
+import { Editor } from '@tiptap/react'
+import { 
+  detectLastThought, 
+  createThoughtContext 
+} from '@/lib/brainstorming'
 
-// Define the SelectionObject type
+// Simple selection object type
 type SelectionObject = {
   id: string
   text: string
@@ -19,9 +24,11 @@ type Props = {
   isOpen: boolean
   onClose: () => void
   currentPage?: Page
+  allPages?: Page[]
   selections: SelectionObject[]
   setSelections: (selections: SelectionObject[]) => void
   onApplyAiResponseToEditor?: (responseText: string, selections?: SelectionObject[]) => void
+  editor?: Editor | null
 }
 
 // Export ChatPanelHandle interface for typing the ref
@@ -50,9 +57,11 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   isOpen,
   onClose,
   currentPage,
+  allPages = [],
   selections,
   setSelections,
-  onApplyAiResponseToEditor
+  onApplyAiResponseToEditor,
+  editor
 }: Props, ref) {
   const supabase = createClient()
   
@@ -125,14 +134,15 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
         content: msg.content,
         selections: msg.metadata && 
                    typeof msg.metadata === 'object' && 
-                   'selections' in msg.metadata ? 
-                   (msg.metadata.selections as SelectionObject[]) : 
+                   'selections' in msg.metadata && 
+                   Array.isArray(msg.metadata.selections) ? 
+                   (msg.metadata.selections as unknown as SelectionObject[]) : 
                    undefined,
         relevantDocuments: msg.metadata && 
                           typeof msg.metadata === 'object' && 
                           'relevantDocuments' in msg.metadata ? 
                           (msg.metadata.relevantDocuments as RelevantDocument[]) : 
-                          undefined,
+                   undefined,
         timestamp: msg.created_at
       }))
       
@@ -279,55 +289,36 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
         await conversationsService.addRelatedPage(activeConversation.id, currentPage.uuid)
       }
 
-      // Format context from selections and current page
-      let contextText = ''
-      
-      if (currentPage) {
-        // Extract text content from TipTap JSON
-        const extractTextFromTipTap = (content: any): string => {
-          if (!content || !content.content) return ''
-          
-          return content.content.map((node: any) => {
-            if (node.type === 'paragraph' && node.content) {
-              return node.content.map((textNode: any) => textNode.text || '').join('')
-            } else if (node.type === 'heading' && node.content) {
-              const text = node.content.map((textNode: any) => textNode.text || '').join('')
-              return `# ${text}`
-            }
-            return ''
-          }).filter(Boolean).join('\n\n')
-        }
+      // Get recent conversation messages (last 6 messages to keep context manageable)
+      const conversationHistory = messages.slice(-6).map(msg => ({
+        role: msg.role === 'user' ? 'user' as const : 'assistant' as const,
+        content: msg.content
+      }))
 
-        const pageContent = extractTextFromTipTap(currentPage.content)
-        if (pageContent) {
-          contextText += `CURRENT PAGE CONTENT:\n${pageContent}\n\n`
-        }
-      }
+      // Use simplified brainstorming to get thought context
+      const thoughtContext = createThoughtContext(allPages, currentPage, editor)
+      const lastThought = detectLastThought(editor)
 
-      // Add selections context
-      if (selections.length > 0) {
-        const selectionsContext = selections.map(sel => 
-          `Context (Lines ${sel.startLine}-${sel.endLine}):\n${sel.text}`
-        ).join('\n\n---\n\n')
-        contextText += `SELECTED CONTEXT:\n${selectionsContext}\n\n`
-      }
-
-      // Construct the prompt
-      const prompt = `${contextText}Instruction:\n${userMessageContent}`.trim()
-
-      console.log('Sending prompt to LLM API', { 
+      console.log('Sending messages to LLM API', { 
         hasSelections: selections.length > 0,
         hasPageContent: !!currentPage,
-        promptLength: prompt.length
+        conversationHistoryCount: conversationHistory.length,
+        thoughtContextLength: thoughtContext.length,
+        lastThought
       })
 
-      // Call the LLM API
+      // Call the LLM API with thought context and supermemory context separate
       const apiResponse = await fetch('/api/llm', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ 
+          conversationHistory,
+          currentMessage: userMessageContent,
+          thoughtContext, // Separate thought context
+          selections: selections.length > 0 ? selections : undefined
+        }),
       })
 
       if (!apiResponse.ok) {
@@ -393,7 +384,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     } finally {
       setIsLoading(false)
     }
-  }, [input, selections, isLoading, activeConversation, currentPage])
+  }, [input, selections, isLoading, activeConversation, currentPage, allPages, editor])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {

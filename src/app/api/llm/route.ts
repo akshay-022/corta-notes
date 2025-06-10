@@ -1,10 +1,6 @@
 import { Configuration, OpenAIApi } from 'openai-edge';
 import { NextResponse } from 'next/server';
-// import supermemory from 'supermemory'; // SuperMemory - commented out for mem0 migration
-// import MemoryClient from 'mem0ai'; // New mem0 client - moved to service
-import { memoryService } from '@/lib/memory/memory-service-supermemory';
-import { MemoryDocument } from '@/lib/memory/types';
-import { createClient } from '@/lib/supabase/supabase-server';
+import { getRelevantMemories, formatMemoryContext, type RelevantMemory } from '@/lib/brainstorming';
 
 export const runtime = 'edge';
 
@@ -28,58 +24,77 @@ const openai = new OpenAIApi(
 export async function POST(req: Request) {
   console.log('OPENAI key present?', { hasKey: !!process.env.OPENAI_API_KEY, keyStart: process.env.OPENAI_API_KEY?.slice(0,5) });
   try {
-    const { prompt } = await req.json();
+    const { prompt, systemMessage, conversationHistory, currentMessage, thoughtContext, selections } = await req.json();
 
-    if (!prompt) {
-      return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
+    // Support both old prompt format and new optimized format
+    if (!prompt && !currentMessage) {
+      return NextResponse.json({ error: 'Prompt or currentMessage is required' }, { status: 400 });
     }
 
     if (!process.env.OPENAI_API_KEY) {
        return NextResponse.json({ error: 'OpenAI API key not configured' }, { status: 500 });
     }
 
-    let enhancedPrompt = prompt;
-    let relevantDocuments: MemoryDocument[] = [];
+    let relevantDocuments: RelevantMemory[] = [];
+    let finalMessages: Array<{role: 'system' | 'user' | 'assistant', content: string}> = [];
 
-    // Search memory service for relevant context if available
-    if (memoryService.isConfigured()) {
-      try {
-        console.log('Searching memory service for relevant context...');
-        
-        // Get authenticated user for user-scoped search
-        const supabase = await createClient()
-        const { data: { user }, error: authError } = await supabase.auth.getUser()
-        
-        if (!authError && user) {
-          // Extract the user's actual question/instruction from the prompt
-          const userInstruction = prompt.split('Instruction:\n').pop() || prompt;
-          
-          const searchResults = await memoryService.search(userInstruction, user.id, 5);
-
-          if (searchResults && searchResults.length > 0) {
-            console.log(`Found ${searchResults.length} relevant documents from memory service`);
-            
-            // Use the already-standardized results from memory service
-            relevantDocuments = searchResults;
-
-            // Add memory context to the prompt
-            const memoryContext = relevantDocuments
-              .map((doc, index) => `DOCUMENT ${index + 1} (${doc.title}):\n${doc.content}`)
-              .join('\n\n---\n\n');
-
-            enhancedPrompt = `${prompt}\n\nADDITIONAL RELEVANT CONTEXT FROM YOUR KNOWLEDGE BASE:\n${memoryContext}\n\nPlease use this additional context to provide a more comprehensive and accurate answer.`;
-          }
-        }
-      } catch (memError) {
-        console.error('Memory service search failed:', memError);
-        // Continue without memory context if it fails
-      }
+    // Extract the user's actual question from either format  
+    let userInstruction = '';
+    if (currentMessage) {
+      userInstruction = currentMessage;
+    } else if (prompt) {
+      userInstruction = prompt.split('Instruction:\n').pop() || prompt;
     }
 
-    // Make the call to OpenAI with enhanced prompt
+    // Search memory for relevant context using new brainstorming function
+    if (userInstruction) {
+      relevantDocuments = await getRelevantMemories(userInstruction, 5);
+    }
+
+    // Build the final messages array
+    if (conversationHistory && currentMessage) {
+      // New simplified format with separate contexts
+      let enhancedCurrentMessage = currentMessage;
+      
+      // Add thought context if available (highest priority)
+      if (thoughtContext) {
+        enhancedCurrentMessage += `\n\nCURRENT THOUGHT CONTEXT:\n${thoughtContext}`;
+      }
+      
+      // Add memory context from SuperMemory if available  
+      if (relevantDocuments.length > 0) {
+        const memoryContext = formatMemoryContext(relevantDocuments);
+        enhancedCurrentMessage += `\n\nADDITIONAL KNOWLEDGE BASE CONTEXT:\n${memoryContext}`;
+      }
+
+      // Simple system message focused on note coherence
+      const systemMsg = `You are a helpful AI assistant helping someone manage their thoughts and notes. The user's notes are often incoherent and bounce between many thoughts - this is normal. Focus on what seems most relevant to their current question. If they have current page content, prioritize that above all else as it represents their active thought process.`;
+
+      finalMessages = [
+        { role: "system", content: systemMsg },
+        ...conversationHistory,  // Clean conversation history 
+        { role: "user", content: enhancedCurrentMessage }  // Current message with all contexts
+      ];
+    } else {
+      // Old prompt format (fallback)
+      let enhancedPrompt = prompt || currentMessage || '';
+      
+      if (thoughtContext) {
+        enhancedPrompt += `\n\nCURRENT THOUGHT CONTEXT:\n${thoughtContext}`;
+      }
+      
+      if (relevantDocuments.length > 0) {
+        const memoryContext = formatMemoryContext(relevantDocuments);
+        enhancedPrompt += `\n\nADDITIONAL KNOWLEDGE BASE CONTEXT:\n${memoryContext}`;
+      }
+
+      finalMessages = [{ role: "user", content: enhancedPrompt }];
+    }
+
+    // Make the call to OpenAI with final messages
     const resp = await openai.createChatCompletion({
-      model: "gpt-4o", // Or your preferred model
-      messages: [{ role: "user", content: enhancedPrompt }],
+      model: "gpt-4o",
+      messages: finalMessages,
       // max_tokens: 150,
       // temperature: 0.7,
     });
@@ -88,12 +103,12 @@ export async function POST(req: Request) {
     
     // Return the response with context info
     const response = {
-      response: result.choices?.[0]?.message?.content || 'No response generated', // ← Changed from 'content' to 'response'
+      response: result.choices?.[0]?.message?.content || 'No response generated', 
       contextUsed: relevantDocuments.length > 0,
       documentsFound: relevantDocuments.length,
-      relevantDocuments: relevantDocuments.map(doc => ({ // ← Changed from 'relevantDocs' to 'relevantDocuments'
+      relevantDocuments: relevantDocuments.map(doc => ({ 
         title: doc.title,
-        pageUuid: doc.metadata?.pageUuid
+        pageUuid: doc.pageUuid
       }))
     };
 
