@@ -4,6 +4,7 @@
 
 import { Editor } from '@tiptap/core'
 import { ParagraphMetadata } from './types'
+import { setUpdatingMetadata } from './editor-integration'
 
 /**
  * Update metadata for a specific paragraph
@@ -41,7 +42,15 @@ export function updateParagraphMetadata(
     updateData.thoughtId = `thought_${metadata.thoughtTimestamp.getTime()}`
   }
   
+  // Set flag to prevent recursive transaction handling
+  setUpdatingMetadata(true)
+  
   editor.commands.updateAttributes('paragraph', updateData)
+  
+  // Reset flag after transaction completes
+  setTimeout(() => {
+    setUpdatingMetadata(false)
+  }, 0)
   
   console.log('📝 Paragraph metadata updated at position', position, ':', updateData)
 }

@@ -4,12 +4,19 @@
 
 import { Editor } from '@tiptap/core'
 import { updateBuffer, processThought, saveBrainState, getBrainState } from './brain-state'
-import { markParagraphAsProcessing, markParagraphAsProcessed, updateParagraphMetadata } from './paragraph-metadata'
+import { markParagraphAsProcessing, markParagraphAsProcessed, updateParagraphMetadata, getUnprocessedParagraphs } from './paragraph-metadata'
 
 let isThoughtTrackingEnabled = false
 let isProcessingThoughts = false // Prevent infinite loops
+export let isUpdatingMetadata = false // Prevent metadata update loops - exported for use in metadata functions
 let debounceTimer: NodeJS.Timeout | null = null
+let metadataDebounceTimer: NodeJS.Timeout | null = null // For paragraph metadata updates
 let currentPageUuid: string | undefined
+
+// Export function to set metadata flag
+export function setUpdatingMetadata(value: boolean) {
+  isUpdatingMetadata = value
+}
 
 /**
  * Setup thought tracking on a TipTap editor
@@ -18,15 +25,76 @@ export function setupThoughtTracking(editor: Editor, pageUuid?: string): void {
   isThoughtTrackingEnabled = true
   currentPageUuid = pageUuid
   
+  // Track latest paragraph for optimization and context
+  let latestParagraphChunk: { content: string, position: number } | null = null
+  
   editor.on('update', ({ editor, transaction }) => {
-    if (!isThoughtTrackingEnabled || isProcessingThoughts) return
+    if (!isThoughtTrackingEnabled || isProcessingThoughts || isUpdatingMetadata) return
     
-    let shouldProcess = false
-    let useCurrentParagraph = true
+    // Only process if there are actual content changes (user is typing)
+    if (!transaction.docChanged) return
     
-    // Check if current paragraph is empty (that means the change is because user pressed enter)
+    // Debounced double-enter detection (500ms)
+    if (debounceTimer) clearTimeout(debounceTimer)
+    debounceTimer = setTimeout(() => {
+      checkForDoubleEnter(editor)
+    }, 500)
+    
+    // === NEW: PARAGRAPH METADATA SYSTEM ===
+    
+    // Debounced metadata updates (500ms) - only when user is actually typing
+    if (metadataDebounceTimer) clearTimeout(metadataDebounceTimer)
+    metadataDebounceTimer = setTimeout(() => {
+      updateCurrentParagraphMetadata(editor)
+      
+      // Update latest paragraph tracking
+      const { from } = editor.state.selection
+      const fullTextContent = editor.getText()
+      
+      // Get current cursor position in the text
+      const currentPosition = from
+      
+      // Find the paragraph by searching around cursor position
+      let paragraphStart = fullTextContent.lastIndexOf('\n', currentPosition - 1)
+      if (paragraphStart === -1) paragraphStart = 0
+      else paragraphStart += 1 // Move past the \n
+      
+      let paragraphEnd = fullTextContent.indexOf('\n', currentPosition)
+      if (paragraphEnd === -1) paragraphEnd = fullTextContent.length
+      
+      const paragraphText = fullTextContent.substring(paragraphStart, paragraphEnd).trim()
+      
+      if (paragraphText.length > 0) {
+        latestParagraphChunk = { content: paragraphText, position: paragraphStart }
+        console.log('📍 Latest paragraph updated:', paragraphText.substring(0, 30) + '...')
+      }
+    }, 500)
+  })
+  
+
+  
+  console.log('🧠 Thought tracking enabled (simplified metadata system)')
+}
+
+/**
+ * Disable thought tracking
+ 
+export function disableThoughtTracking(): void {
+  isThoughtTrackingEnabled = false
+  console.log('Thought tracking disabled')
+}*/
+
+
+/**
+ * Check for double-enter pattern (debounced)
+ */
+function checkForDoubleEnter(editor: Editor): void {
+  try {
     const { from } = editor.state.selection
-    let currentParagraphText =  ''
+    let currentParagraphText = ''
+    let previousParagraphText = ''
+    
+    // Get current paragraph
     editor.state.doc.nodesBetween(from, from, (node) => {
       if (node.type.name === 'paragraph') {
         currentParagraphText = node.textContent.trim()
@@ -34,171 +102,28 @@ export function setupThoughtTracking(editor: Editor, pageUuid?: string): void {
       }
     })
     
-    if (currentParagraphText === '') {
-      console.log('🧠 Empty paragraph detected - processing immediately')
-      useCurrentParagraph = false // use previous paragraph if current is empty
-      processText(editor, useCurrentParagraph)
-    } else {
-      // Use 1-second pause for typing
-      if (debounceTimer) clearTimeout(debounceTimer)
-      debounceTimer = setTimeout(() => {
-        console.log('🧠 Pause detected')
-        processText(editor, true) // current paragraph
-      }, 1000)
-    }
-  })
-  
-  async function processText(editor: Editor, useCurrentParagraph: boolean) {
-    const { from } = editor.state.selection
-    let paragraphText = ''
-    
-    // Get paragraph text
-    if (useCurrentParagraph) {
-      editor.state.doc.nodesBetween(from, from, (node) => {
-        if (node.type.name === 'paragraph') {
-          paragraphText = node.textContent.trim()
-          return false
-        }
-      })
-    } else {
-      // Get previous paragraph (not current empty one)
-      let foundParagraphs: string[] = []
-      editor.state.doc.nodesBetween(0, from, (node) => {
-        if (node.type.name === 'paragraph') {
-          foundParagraphs.push(node.textContent.trim())
-        }
-      })
-      
-      // If last paragraph is empty (current), get the one before it
-      if (foundParagraphs.length >= 2 && foundParagraphs[foundParagraphs.length - 1] === '') {
-        paragraphText = foundParagraphs[foundParagraphs.length - 2]
-      } else if (foundParagraphs.length >= 1) {
-        // If current paragraph has content, it shouldn't reach here, but safety fallback
-        paragraphText = foundParagraphs[foundParagraphs.length - 1]
-      } else {
-        paragraphText = ''
+    // Get previous paragraph
+    let foundParagraphs: string[] = []
+    editor.state.doc.nodesBetween(0, from, (node) => {
+      if (node.type.name === 'paragraph') {
+        foundParagraphs.push(node.textContent.trim())
       }
+    })
+    if (foundParagraphs.length >= 2) {
+      previousParagraphText = foundParagraphs[foundParagraphs.length - 2]
     }
     
-    
-    // Get current buffer
-    const brainState = getBrainState()
-    let currentBuffer = brainState.recentBuffer.text || ''
-    
-    // Skip duplicates
-    // Check if this paragraph is a continuation of the last line in buffer
-    const lastLineOfBuffer = currentBuffer.trim().split('\n').pop() || ''
-    if (paragraphText.trim().startsWith(lastLineOfBuffer.trim()) && lastLineOfBuffer.trim() !== '') {
-      console.log('🧠 Duplicate - skipping')
-      return
+    // Double-enter detected: both current and previous paragraphs are empty
+    if (currentParagraphText === '' && previousParagraphText === '') {
+      console.log('🧠 Double-enter detected - organizing unorganized paragraphs')
+      processUnorganizedChunks(editor)
     }
-
-    // Also here ideally we should have a detector for which paragraph it is so that backspaces are also detected but ignoring for now.
-    
-    // Add text to buffer
-    console.log('🧠 Adding:', paragraphText.substring(0, 30) + '...')
-    currentBuffer += (currentBuffer ? '\n\n' : '') + paragraphText
-    
-    // Check if this was a line break with empty previous paragraph
-    if (!useCurrentParagraph && !paragraphText) {
-      console.log('🧠 Line break detected with empty previous paragraph')
-      
-      // Only add separator if buffer doesn't already end with -------
-      if (!currentBuffer.trim().endsWith('------')) {
-        console.log('🧠 Adding separator and organizing')
-        
-        // Get the section before adding separator
-        const sections = currentBuffer.split('-------')
-        const latestSection = sections[sections.length - 1].trim()
-        
-        // Add separator
-        currentBuffer += '\n-------\n'
-        
-        // Send latest section to brain for organization
-        if (latestSection) {
-          console.log('🧠 Organizing section:', latestSection.substring(0, 30) + '...')
-          await processThought(latestSection, editor, currentPageUuid)
-        }
-      } else {
-        console.log('🧠 Buffer already ends with separator - skipping')
-      }
-    }
-    
-    await updateBuffer(currentBuffer)
-    await saveBrainState()
-  console.log('🧠 ✅ Buffer updated')
-  }
-  
-  console.log('🧠 Simple thought tracking enabled')
-}
-
-/**
- * Disable thought tracking
- */
-export function disableThoughtTracking(): void {
-  isThoughtTrackingEnabled = false
-  console.log('Thought tracking disabled')
-}
-
-/**
- * Handle edit detection - mark edited paragraphs as unorganized
- */
-function handleEditDetection(editor: Editor, transaction: any): void {
-  if (!transaction.docChanged) return
-  
-  // Check if any previously organized paragraphs were edited
-  transaction.steps.forEach((step: any) => {
-    if (step.from !== undefined && step.to !== undefined) {
-      // Find paragraphs in the edited range
-      editor.state.doc.nodesBetween(step.from, step.to, (node: any, pos: number) => {
-                 if (node.type.name === 'paragraph' && node.attrs.processingStatus === 'organized') {
-          console.log('✏️ Previously organized paragraph edited - marking as unorganized')
-          
-          // Mark as unorganized so it gets re-processed
-          updateParagraphMetadata(editor, pos, {
-            status: 'unprocessed',
-            actionTaken: 'edited - needs re-organization',
-            lastUpdated: new Date()
-          })
-        }
-      })
-    }
-  })
-}
-
-/**
- * Update current paragraph's last updated timestamp
- */
-function updateCurrentParagraphTimestamp(editor: Editor): void {
-  const { from } = editor.state.selection
-  
-  updateParagraphMetadata(editor, from, {
-    lastUpdated: new Date()
-  })
-}
-
-/**
- * Process thought if empty line is detected
- */
-async function processThoughtIfNeeded(editor: Editor, currentText: string): Promise<void> {
-  try {
-    // Get current page UUID from editor (we'll need to pass this somehow)
-    const currentPageUuid = getCurrentPageUuid(editor)
-    
-    // This will check for empty lines and process all unorganized paragraphs
-    await processThought(currentText, editor, currentPageUuid)
-    
   } catch (error) {
-    console.error('Error processing thought:', error)
+    console.error('❌ Error checking for double-enter:', error)
   }
 }
 
-/**
- * Get current page UUID
- */
-function getCurrentPageUuid(editor: Editor): string | undefined {
-  return currentPageUuid
-}
+
 
 /**
  * Manual trigger to process current paragraph
@@ -230,5 +155,119 @@ export function getEditorDebugInfo(editor: Editor) {
     thoughtTrackingEnabled: isThoughtTrackingEnabled
   }
 }
+
+
+/**
+ * Update current paragraph's metadata with timestamp
+ */
+function updateCurrentParagraphMetadata(editor: Editor): void {
+  try {
+    const { from } = editor.state.selection
+    
+    // Get current paragraph content to check if it's worth tracking
+    let paragraphText = ''
+    editor.state.doc.nodesBetween(from, from, (node) => {
+      if (node.type.name === 'paragraph') {
+        paragraphText = node.textContent.trim()
+        return false
+      }
+    })
+    
+    // Only update metadata for non-empty paragraphs
+    if (paragraphText.length > 0) {
+      updateParagraphMetadata(editor, from, {
+        lastUpdated: new Date(),
+        status: 'unprocessed' // Mark as unprocessed when edited
+      })
+      console.log('📝 Paragraph metadata updated:', paragraphText.substring(0, 30) + '...')
+    }
+  } catch (error) {
+    console.error('❌ Error updating paragraph metadata:', error)
+  }
+}
+
+
+/**
+ * Process unorganized paragraph chunks when double-enter is detected
+ */
+async function processUnorganizedChunks(editor: Editor): Promise<void> {
+  try {
+    console.log('📄 Double-enter detected - finding unorganized paragraph chunks...')
+    
+    // Get all unorganized paragraphs
+    const unorganizedParagraphs = getUnprocessedParagraphs(editor)
+    
+    if (unorganizedParagraphs.length === 0) {
+      console.log('📄 No unorganized paragraphs found')
+      return
+    }
+    
+    // Group consecutive paragraphs into chunks
+    const chunks = groupParagraphsIntoChunks(editor, unorganizedParagraphs)
+    
+    console.log(`📄 Found ${chunks.length} unorganized chunks to process`)
+    
+    // Process each chunk
+    for (const chunk of chunks) {
+      // Combine chunk content into single text
+      const chunkText = chunk.map(p => p.content).join('\n\n')
+      
+      console.log('📄 Processing chunk:', chunkText.substring(0, 50) + '...')
+      console.log('📄 Chunk contains', chunk.length, 'paragraphs')
+      
+      // Mark all paragraphs in chunk as processing
+      for (const paragraph of chunk) {
+        markParagraphAsProcessing(editor, paragraph.position)
+      }
+      
+      // Send chunk to AI for categorization
+      await processThought(chunkText, currentPageUuid)
+      
+      console.log('📄 ✅ Chunk processed successfully')
+    }
+    
+    console.log('📄 ✅ All unorganized chunks processed')
+    
+  } catch (error) {
+    console.error('❌ Error processing unorganized chunks:', error)
+  }
+}
+
+/**
+ * Group consecutive unorganized paragraphs into chunks
+ */
+function groupParagraphsIntoChunks(editor: Editor, unorganizedParagraphs: Array<{content: string, position: number}>): Array<Array<{content: string, position: number}>> {
+  const chunks: Array<Array<{content: string, position: number}>> = []
+  let currentChunk: Array<{content: string, position: number}> = []
+  
+  // Go through editor in order and find consecutive unorganized non-empty paragraphs
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name === 'paragraph') {
+      const content = node.textContent.trim()
+      const isUnorganized = node.attrs.processingStatus === 'unprocessed'
+      const isEmpty = content.length === 0
+      
+      if (isUnorganized && !isEmpty) {
+        // Found unorganized non-empty paragraph - add to current chunk
+        currentChunk.push({ content, position: pos })
+      } else {
+        // Found organized paragraph or empty paragraph - end current chunk
+        if (currentChunk.length > 0) {
+          chunks.push([...currentChunk])
+          currentChunk = []
+        }
+      }
+    }
+  })
+  
+  // Don't forget the last chunk
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk)
+  }
+  
+  return chunks
+}
+
+
 
  

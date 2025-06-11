@@ -161,28 +161,15 @@ export async function updateBuffer(newText: string): Promise<void> {
  * Now handles both categorization AND document organization
  */
 export async function processThought(fullText: string, editor?: any, currentPageUuid?: string): Promise<void> {
-  if (!detectEmptyLine(fullText)) {
-    return // No empty line, nothing to process
-  }
+  console.log('🧠 Processing text:', fullText.substring(0, 50) + '...')
   
-  console.log('🧠 Empty line detected - starting batch organization of unorganized paragraphs')
+  // Categorize the text using LLM
+  const category = await categorizeThought(fullText)
   
-  // Get all unorganized paragraphs from the editor
-  const unorganizedParagraphs = editor ? getUnprocessedParagraphs(editor) : []
+  // Add to brain state
+  addThoughtToCategory(fullText, category)
   
-  if (unorganizedParagraphs.length === 0) {
-    console.log('🧠 No unorganized paragraphs found')
-    return
-  }
-  
-  console.log(`🧠 Found ${unorganizedParagraphs.length} unorganized paragraphs to process`)
-  
-  // Process each unorganized paragraph
-  for (const paragraph of unorganizedParagraphs) {
-    await organizeUnprocessedParagraph(paragraph, editor, currentPageUuid)
-  }
-  
-  console.log('🧠 Batch organization completed')
+  console.log('🧠 ✅ Text organized into category:', category)
 }
 
 /**

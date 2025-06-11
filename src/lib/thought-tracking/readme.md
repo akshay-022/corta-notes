@@ -62,3 +62,12 @@ This creates a **living, breathing second brain** that:
 5. **Provides** context-aware AI interactions based on your thought patterns
 
 The user never has to manually organize - the system does it seamlessly in the background, creating a cognitive amplifier that scales with their thinking process.
+
+
+
+
+
+
+
+
+Important notes : The user whenever they click 2 enters (1 gap line) means they finished a given thought. 
