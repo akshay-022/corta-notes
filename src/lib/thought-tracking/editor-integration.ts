@@ -3,7 +3,7 @@
  */
 
 import { Editor } from '@tiptap/core'
-import { updateBuffer, processThought, saveBrainState, getBrainState } from './brain-state'
+import { processThought, getBrainState } from './brain-state'
 import { markParagraphAsProcessing, markParagraphAsProcessed, updateParagraphMetadata, getUnprocessedParagraphs } from './paragraph-metadata'
 
 let isThoughtTrackingEnabled = false

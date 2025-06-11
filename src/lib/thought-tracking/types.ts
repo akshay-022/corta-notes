@@ -11,24 +11,14 @@ export interface ThoughtEntry {
   metadata?: Record<string, any>
 }
 
+// SIMPLIFIED: Categories with text + current context
 export interface GlobalBrainState {
-  // Real-time typing buffer
-  recentBuffer: {
-    text: string              // Last 600 characters typed
-    paragraphs: string[]      // Recent paragraphs in order
-    timestamp: Date
+  categories: {
+    [categoryName: string]: string[]
   }
-  
-  // Organized thought categories (auto-discovered + predefined)
-  thoughtCategories: {
-    [category: string]: ThoughtEntry[]
-  }
-  
-  // Current mental context
   currentContext: {
     activeThought: string
     relatedCategory: string
-    momentum: 'building' | 'switching' | 'concluding'
   }
 }
 
