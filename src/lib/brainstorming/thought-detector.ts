@@ -18,38 +18,34 @@ function extractTextFromTipTap(content: any): string {
 }
 
 /**
- * Detects the last thought by analyzing TipTap history state
- * Returns what was written after the last undo (most recent thinking)
+ * Detects the last thought using our brain state buffer
+ * Returns the recent buffer content (last 600 characters)
  */
 export function detectLastThought(editor: any): string {
-  if (!editor) return ''
-  
   try {
-    // Get the history state from TipTap
-    const historyState = editor.state.plugins.find((plugin: any) => plugin.key === 'history$')?.getState?.(editor.state)
+    // Import here to avoid circular dependencies
+    const { getBrainState } = require('@/lib/thought-tracking/brain-state')
     
-    if (!historyState) return ''
+    const brainState = getBrainState()
+    const recentBuffer = brainState.recentBuffer.text
     
-    // If there are undone steps, the user has undone something and then continued typing
-    // This represents their most recent thought direction
-    if (historyState.undone && historyState.undone.length > 0) {
-      // Get the current document content
-      const currentContent = editor.getText()
-      
-      // Get the content from before the last series of undos
-      // This is a simplified approach - we could get more sophisticated
-      const lastUndoneStep = historyState.undone[historyState.undone.length - 1]
-      
-      // For now, just return a indication that there was recent editing after undo
-      return `[Recent editing detected after undo - current content length: ${currentContent.length} chars]`
+    if (recentBuffer.trim()) {
+      // Return the last part of the buffer (most recent typing)
+      const recentText = recentBuffer.slice(-200) // Last 200 chars for context
+      return `Recent thoughts: "${recentText.trim()}"`
     }
     
-    // If no undos, check if there are recent changes in the done stack
-    if (historyState.done && historyState.done.length > 0) {
-      return `[Recent editing detected - ${historyState.done.length} changes in history]`
+    // Fallback to current editor content if buffer is empty
+    if (editor && editor.getText) {
+      const currentContent = editor.getText()
+      if (currentContent.trim()) {
+        const recentText = currentContent.slice(-200)
+        return `Current content: "${recentText.trim()}"`
+      }
     }
     
     return ''
+    
   } catch (error) {
     console.error('Error detecting last thought:', error)
     return ''
@@ -73,24 +69,26 @@ export function createThoughtContext(
     context += `MOST RECENT THOUGHT:\n${lastThought}\n\n`
   }
   
-  // Get recent "soon" pages (3 most recent)
-  const recentPages = allPages
-    .filter(page => 
-      !((page.metadata as any)?.isFolder) && 
-      (page.metadata as any)?.organizeStatus === 'soon' &&
-      page.uuid !== currentPage?.uuid
-    )
-    .sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime())
-    .slice(0, 3)
-  
-  if (recentPages.length > 0) {
-    const pagesContext = recentPages.map(page => {
-      const content = extractTextFromTipTap(page.content)
-      const preview = content.slice(0, 200) + (content.length > 200 ? '...' : '')
-      return `"${page.title}": ${preview}`
-    }).join('\n\n')
+  // Get organized brain state categories
+  try {
+    const { getBrainState } = require('@/lib/thought-tracking/brain-state')
+    const brainState = getBrainState()
     
-    context += `RECENT PAGES YOU'RE WORKING ON:\n${pagesContext}\n\n`
+    const categories = Object.keys(brainState.thoughtCategories)
+    if (categories.length > 0) {
+             const organizedThoughts = categories.map(category => {
+         const thoughts = brainState.thoughtCategories[category]
+         const thoughtsList = thoughts.map((thought: any) => 
+           `- ${thought.content.slice(0, 100)}${thought.content.length > 100 ? '...' : ''}`
+         ).join('\n')
+        
+        return `${category.toUpperCase()}:\n${thoughtsList}`
+      }).join('\n\n')
+      
+      context += `ORGANIZED THOUGHTS:\n${organizedThoughts}\n\n`
+    }
+  } catch (error) {
+    console.error('Error getting brain state for context:', error)
   }
   
   // Current page content (highest priority)

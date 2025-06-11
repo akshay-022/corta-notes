@@ -10,6 +10,8 @@ import { Page, PageUpdate } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/supabase-client'
 import { Calendar, Minus } from 'lucide-react'
 import ChatPanel, { ChatPanelHandle } from '../right-sidebar/ChatPanel'
+import { setupThoughtTracking } from '@/lib/thought-tracking/editor-integration'
+import { ThoughtParagraph } from '@/lib/thought-tracking/paragraph-extension'
 
 interface TipTapEditorProps {
   page: Page
@@ -32,7 +34,10 @@ export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEd
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        paragraph: false, // Disable default paragraph to use our custom one
+      }),
+      ThoughtParagraph, // Our custom paragraph with metadata
       HorizontalRule.configure({
         HTMLAttributes: {
           class: 'my-6 border-gray-700',
@@ -236,6 +241,14 @@ export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEd
       throw error
     }
   }
+
+  // Setup thought tracking when editor is ready
+  useEffect(() => {
+    if (editor) {
+      setupThoughtTracking(editor, page.uuid)
+      console.log('🧠 Thought tracking initialized for editor with page:', page.uuid)
+    }
+  }, [editor, page.uuid])
 
   // Update editor content when page changes (but not when user is typing)
   useEffect(() => {

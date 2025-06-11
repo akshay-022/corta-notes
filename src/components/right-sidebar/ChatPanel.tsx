@@ -308,7 +308,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
       })
 
       // Call the LLM API with thought context and supermemory context separate
-      const apiResponse = await fetch('/api/llm', {
+      const apiResponse = await fetch('/api/chat-panel', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
