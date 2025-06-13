@@ -14,7 +14,7 @@ export function updateParagraphMetadata(
   position: number, 
   metadata: Partial<ParagraphMetadata>
 ): void {
-  editor.commands.setTextSelection(position)
+  // editor.commands.setTextSelection(position)
   
   const updateData: any = {}
   
@@ -105,7 +105,7 @@ export function markParagraphAsProcessed(
   })
   
   // Also set the thought ID
-  editor.commands.setTextSelection(position)
+  // editor.commands.setTextSelection(position)
   editor.commands.updateAttributes('paragraph', {
     thoughtId: thoughtId
   })
