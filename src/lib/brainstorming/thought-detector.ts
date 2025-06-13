@@ -25,27 +25,9 @@ export function detectLastThought(editor: any): string {
   try {
     // Import here to avoid circular dependencies
     const { getBrainState } = require('@/lib/thought-tracking/brain-state')
-    
     const brainState = getBrainState()
-    const recentBuffer = brainState.recentBuffer.text
-    
-    if (recentBuffer.trim()) {
-      // Return the last part of the buffer (most recent typing)
-      const recentText = recentBuffer.slice(-200) // Last 200 chars for context
-      return `Recent thoughts: "${recentText.trim()}"`
-    }
-    
-    // Fallback to current editor content if buffer is empty
-    if (editor && editor.getText) {
-      const currentContent = editor.getText()
-      if (currentContent.trim()) {
-        const recentText = currentContent.slice(-200)
-        return `Current content: "${recentText.trim()}"`
-      }
-    }
-    
-    return ''
-    
+    // Return stringified JSON of currentContext
+    return JSON.stringify(brainState.currentContext)
   } catch (error) {
     console.error('Error detecting last thought:', error)
     return ''
