@@ -8,6 +8,7 @@ import type { DragItem, DropTarget } from '@/hooks/useDragAndDrop'
 import DocumentSearch from '@/components/left-sidebar/DocumentSearch'
 import { SuperMemoryDocument } from '@/lib/memory/memory-client'
 import ChronologicalSidebar from './ChronologicalSidebar'
+import { useRouter } from 'next/navigation'
 
 interface ContextMenu {
   x: number
@@ -71,6 +72,8 @@ export default function Sidebar({
   const [searchResults, setSearchResults] = useState<SuperMemoryDocument[]>([])
   const [isSearchActive, setIsSearchActive] = useState(false)
   const [viewMode, setViewMode] = useState<'normal' | 'chronological'>('normal')
+
+  const router = useRouter();
 
   const startRename = (item: Page) => {
     setRenamingItem(item)
@@ -283,7 +286,7 @@ export default function Sidebar({
               if (isFolder) {
                 toggleFolder(item.uuid)
               } else {
-                setActivePage(item)
+                router.push(`/dashboard/page/${item.uuid}`)
                 setSidebarOpen(false)
               }
             }}
@@ -552,7 +555,7 @@ export default function Sidebar({
                             {...dragHandlers}
                             style={{ paddingLeft: '16px', paddingRight: '16px' }}
                             onClick={() => {
-                              setActivePage(item)
+                              router.push(`/dashboard/page/${item.uuid}`)
                               setSidebarOpen(false)
                             }}
                             onContextMenu={(e) => handleContextMenu(e, 'file', item)}

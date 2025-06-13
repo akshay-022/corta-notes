@@ -11,6 +11,7 @@ import {
   detectLastThought, 
   createThoughtContext 
 } from '@/lib/brainstorming'
+import logger from '@/lib/logger'
 
 // Simple selection object type
 type SelectionObject = {
@@ -80,16 +81,26 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
 
-  // Load conversations when panel opens
+  // Load conversations when component mounts
+  useEffect(() => {
+    logger.info('ChatPanel mounted, loading conversations in background...')
+    loadConversations()
+  }, [])
+
+  // Log when panel becomes visible
   useEffect(() => {
     if (isOpen) {
-      loadConversations()
+      logger.info('ChatPanel became visible', { 
+        hasActiveConversation: !!activeConversation,
+        conversationCount: conversations.length 
+      })
     }
-  }, [isOpen])
+  }, [isOpen, activeConversation, conversations.length])
 
   // Load messages when active conversation changes
   useEffect(() => {
     if (activeConversation) {
+      logger.info('Active conversation changed, loading messages...', { conversationId: activeConversation.id })
       loadMessages(activeConversation.id)
     } else {
       setMessages([])
@@ -98,34 +109,37 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
 
   const loadConversations = async () => {
     try {
-      console.log('Loading conversations...')
+      logger.info('Loading conversations...')
       const userConversations = await conversationsService.getConversations()
+      logger.info('Conversations loaded', { count: userConversations.length })
       setConversations(userConversations)
       
       // If there's a current page, try to find or create a conversation for it
       if (currentPage && userConversations.length === 0) {
-        console.log('Creating new conversation for current page:', currentPage.title)
+        logger.info('Creating new conversation for current page', { pageTitle: currentPage.title })
         const newConversation = await conversationsService.createConversation(
           `Chat about ${currentPage.title}`,
           [currentPage.uuid]
         )
         if (newConversation) {
+          logger.info('New conversation created', { conversationId: newConversation.id })
           setConversations([newConversation])
           setActiveConversation(newConversation)
         }
       } else if (userConversations.length > 0 && !activeConversation) {
         // Set the most recent conversation as active
+        logger.info('Setting most recent conversation as active', { conversationId: userConversations[0].id })
         setActiveConversation(userConversations[0])
       }
     } catch (error) {
-      console.error('Error loading conversations:', error)
+      logger.error('Error loading conversations:', error)
     }
   }
 
   const loadMessages = async (conversationId: string) => {
     setIsLoadingHistory(true)
     try {
-      console.log('Loading messages for conversation:', conversationId)
+      logger.info('Loading messages for conversation', { conversationId })
       const conversationMessages = await conversationsService.getMessages(conversationId)
       
       // Transform to our Message format
@@ -147,9 +161,12 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
       }))
       
       setMessages(formattedMessages)
-      console.log('Loaded messages:', formattedMessages.length)
+      logger.info('Messages loaded successfully', { 
+        conversationId,
+        messageCount: formattedMessages.length 
+      })
     } catch (error) {
-      console.error('Error loading messages:', error)
+      logger.error('Error loading messages:', error)
     } finally {
       setIsLoadingHistory(false)
     }

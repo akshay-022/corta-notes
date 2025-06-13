@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/supabase-client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Menu, X, FileText } from 'lucide-react'
 import { Page } from '@/lib/supabase/types'
 import TipTapEditor from '@/components/editor/TipTapEditor'
-import Sidebar from '@/components/left-sidebar/Sidebar'
 import { useDragAndDrop } from '@/hooks/useDragAndDrop'
 import { superMemorySyncService } from '@/lib/memory/memory-client-sync'
 
@@ -27,6 +26,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [highlightedFolders, setHighlightedFolders] = useState<Set<string>>(new Set())
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const pageUuid = searchParams.get('pageUuid')
   const supabase = createClient()
 
   useEffect(() => {
@@ -38,6 +39,25 @@ export default function DashboardPage() {
     document.addEventListener('click', handleClickOutside)
     return () => document.removeEventListener('click', handleClickOutside)
   }, [])
+
+  useEffect(() => {
+    // If no pageUuid in URL, redirect to last opened page (from localStorage)
+    if (!pageUuid) {
+      // Try to get last opened page from localStorage
+      const lastOpened = typeof window !== 'undefined' ? localStorage.getItem('lastOpenedPageUuid') : null;
+      if (lastOpened) {
+        router.replace(`/dashboard?pageUuid=${lastOpened}`);
+      } else {
+        // If no last opened, redirect to a default page (you can customize this)
+        // For now, just stay on /dashboard
+      }
+    } else {
+      // Save this as the last opened page
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('lastOpenedPageUuid', pageUuid);
+      }
+    }
+  }, [pageUuid, router]);
 
   const checkUser = async () => {
     try {
@@ -395,29 +415,6 @@ export default function DashboardPage() {
       >
         {sidebarOpen ? <X size={16} /> : <Menu size={16} />}
       </button>
-
-      {/* Sidebar Component */}
-      <Sidebar
-        pages={pages}
-        activePage={activePage}
-        setActivePage={setActivePage}
-        expandedFolders={expandedFolders}
-        setExpandedFolders={setExpandedFolders}
-        contextMenu={contextMenu}
-        setContextMenu={setContextMenu}
-        sidebarOpen={sidebarOpen}
-        setSidebarOpen={setSidebarOpen}
-        createNewItem={createNewItem}
-        setRenaming={renameItem}
-        deleteItem={deleteItem}
-        updatePageMetadata={updatePageMetadata}
-        sendForOrganization={sendForOrganization}
-        highlightedFolders={highlightedFolders}
-        setHighlightedFolders={setHighlightedFolders}
-        logout={logout}
-        onManualSync={handleManualSync}
-        dragAndDrop={dragAndDrop}
-      />
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
