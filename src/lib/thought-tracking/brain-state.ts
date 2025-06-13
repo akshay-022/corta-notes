@@ -15,7 +15,7 @@ function loadBrainStateFromStorage(): GlobalBrainState {
     if (typeof window === 'undefined') {
       return {
         categories: {},
-        currentContext: { activeThought: '', relatedCategory: '' }
+        currentContext: { activeThought: '', relatedCategory: '', timestamp: new Date() }
       }
     }
 
@@ -23,6 +23,10 @@ function loadBrainStateFromStorage(): GlobalBrainState {
     
     if (savedState) {
       const parsed = JSON.parse(savedState)
+      // Convert timestamp string back to Date
+      if (parsed.currentContext?.timestamp) {
+        parsed.currentContext.timestamp = new Date(parsed.currentContext.timestamp)
+      }
       console.log('🧠 Brain state loaded from localStorage:', Object.keys(parsed.categories || {}))
       return parsed
     }
@@ -33,7 +37,7 @@ function loadBrainStateFromStorage(): GlobalBrainState {
   console.log('🧠 Creating fresh brain state')
   return {
     categories: {},
-    currentContext: { activeThought: '', relatedCategory: '' }
+    currentContext: { activeThought: '', relatedCategory: '', timestamp: new Date() }
   }
 }
 
@@ -67,18 +71,24 @@ export function getBrainState(): GlobalBrainState {
 export function addThoughtToCategory(content: string, category: string): void {
   // Initialize category if it doesn't exist
   if (!globalBrainState.categories[category]) {
-    globalBrainState.categories[category] = []
+    globalBrainState.categories[category] = {
+      thoughts: []
+    }
     console.log('🧠 New category created:', category)
   }
   
   // Add text to category (avoid duplicates)
-  if (!globalBrainState.categories[category].includes(content)) {
-    globalBrainState.categories[category].push(content)
+  if (!globalBrainState.categories[category].thoughts.some(t => t.content === content)) {
+    globalBrainState.categories[category].thoughts.push({
+      content,
+      isOrganized: false
+    })
     
-    // Update current context (without that momentum bullshit)
+    // Update current context with timestamp
     globalBrainState.currentContext = {
       activeThought: content,
-      relatedCategory: category
+      relatedCategory: category,
+      timestamp: new Date()
     }
     
     saveBrainStateToStorage()
@@ -152,8 +162,8 @@ Return ONLY the category name (no explanation).`
 /**
  * Get thoughts by category
  */
-export function getThoughtsByCategory(category: string): string[] {
-  return globalBrainState.categories[category] || []
+export function getThoughtsByCategory(category: string): { content: string, isOrganized: boolean }[] {
+  return globalBrainState.categories[category]?.thoughts || []
 }
 
 /**
@@ -172,7 +182,7 @@ export function clearStoredBrainState(): void {
   }
   globalBrainState = {
     categories: {},
-    currentContext: { activeThought: '', relatedCategory: '' }
+    currentContext: { activeThought: '', relatedCategory: '', timestamp: new Date() }
   }
   console.log('🧠 Brain state cleared')
 }
@@ -183,7 +193,7 @@ export function clearStoredBrainState(): void {
 export function resetBrainState(): void {
   globalBrainState = {
     categories: {},
-    currentContext: { activeThought: '', relatedCategory: '' }
+    currentContext: { activeThought: '', relatedCategory: '', timestamp: new Date() }
   }
   saveBrainStateToStorage()
   console.log('🧠 Brain state reset')

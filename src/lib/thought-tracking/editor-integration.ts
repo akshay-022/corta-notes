@@ -44,7 +44,7 @@ export function setupThoughtTracking(editor: Editor, pageUuid?: string): void {
     
     // Debounced metadata updates (500ms) - only when user is actually typing
     if (metadataDebounceTimer) clearTimeout(metadataDebounceTimer)
-    metadataDebounceTimer = setTimeout(() => {
+      metadataDebounceTimer = setTimeout(() => {
       updateCurrentParagraphMetadata(editor)
       
       // Update latest paragraph tracking

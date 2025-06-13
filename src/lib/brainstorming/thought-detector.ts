@@ -69,24 +69,18 @@ export function createThoughtContext(
     context += `MOST RECENT THOUGHT:\n${lastThought}\n\n`
   }
   
-  // Get organized brain state categories
+  // Get organized brain state categories as a clean JSON
   try {
     const { getBrainState } = require('@/lib/thought-tracking/brain-state')
     const brainState = getBrainState()
-    
-    const categories = Object.keys(brainState.thoughtCategories)
-    if (categories.length > 0) {
-             const organizedThoughts = categories.map(category => {
-         const thoughts = brainState.thoughtCategories[category]
-         const thoughtsList = thoughts.map((thought: any) => 
-           `- ${thought.content.slice(0, 100)}${thought.content.length > 100 ? '...' : ''}`
-         ).join('\n')
-        
-        return `${category.toUpperCase()}:\n${thoughtsList}`
-      }).join('\n\n')
-      
-      context += `ORGANIZED THOUGHTS:\n${organizedThoughts}\n\n`
+    // Build a clean object: { category: [thoughtContent, ...] }
+    const cleanCategories: Record<string, string[]> = {}
+    for (const category of Object.keys(brainState.categories)) {
+      cleanCategories[category] = (brainState.categories[category].thoughts || [])
+        .map((thought: any) => thought.content)
     }
+    // Stringify for LLM
+    context += `CLEANED THOUGHTS (JSON):\n${JSON.stringify(cleanCategories, null, 2)}\n\n`
   } catch (error) {
     console.error('Error getting brain state for context:', error)
   }

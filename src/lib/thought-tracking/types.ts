@@ -12,13 +12,21 @@ export interface ThoughtEntry {
 }
 
 // SIMPLIFIED: Categories with text + current context
+export interface ThoughtObject {
+  content: string
+  isOrganized: boolean
+}
+
 export interface GlobalBrainState {
   categories: {
-    [categoryName: string]: string[]
+    [categoryName: string]: {
+      thoughts: ThoughtObject[]
+    }
   }
   currentContext: {
     activeThought: string
     relatedCategory: string
+    timestamp: Date
   }
 }
 
