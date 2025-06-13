@@ -9,7 +9,6 @@ import TipTapEditor from '@/components/editor/TipTapEditor'
 import Sidebar from '@/components/left-sidebar/Sidebar'
 import { useDragAndDrop } from '@/hooks/useDragAndDrop'
 import { superMemorySyncService } from '@/lib/memory/memory-client-sync'
-import { addThoughtToCategory, getAllCategories } from '@/lib/thought-tracking/brain-state'
 
 interface ContextMenu {
   x: number
@@ -165,13 +164,6 @@ export default function DashboardPage() {
       }
       if (parentId) {
         setExpandedFolders(prev => new Set([...prev, parentId]))
-      }
-
-      // Brain state: auto-create category if it doesn't exist
-      const categories = getAllCategories();
-      if (!categories.includes(data.title)) {
-        addThoughtToCategory('', data.title);
-        console.log('🧠 Brain state category created for:', data.title);
       }
     } else if (error) {
       console.error('Error creating item:', error)
