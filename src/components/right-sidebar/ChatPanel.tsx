@@ -297,14 +297,12 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
 
       // Use simplified brainstorming to get thought context
       const thoughtContext = createThoughtContext(allPages, currentPage, editor)
-      const lastThought = detectLastThought(editor)
 
       console.log('Sending messages to LLM API', { 
         hasSelections: selections.length > 0,
         hasPageContent: !!currentPage,
         conversationHistoryCount: conversationHistory.length,
         thoughtContextLength: thoughtContext.length,
-        lastThought
       })
 
       // Call the LLM API with thought context and supermemory context separate

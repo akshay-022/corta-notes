@@ -48,7 +48,7 @@ export function createThoughtContext(
   // Get last thought from editor history
   const lastThought = detectLastThought(editor)
   if (lastThought) {
-    context += `MOST RECENT THOUGHT:\n${lastThought}\n\n`
+    context += `MOST RECENT THOUGHT (This is EXTREMELY IMPORTANT, if the user has not given enough context, this line of thinking is the ONLY one you must complete) :\n${lastThought}\n\n\n\n`
   }
   
   // Get organized brain state categories as a clean JSON
@@ -62,7 +62,7 @@ export function createThoughtContext(
         .map((thought: any) => thought.content)
     }
     // Stringify for LLM
-    context += `CLEANED THOUGHTS (JSON):\n${JSON.stringify(cleanCategories, null, 2)}\n\n`
+    context += `CLEANED THOUGHTS (JSON):\n${JSON.stringify(cleanCategories, null, 2)}\n\n\n\n`
   } catch (error) {
     console.error('Error getting brain state for context:', error)
   }
@@ -71,7 +71,7 @@ export function createThoughtContext(
   if (currentPage) {
     const pageContent = extractTextFromTipTap(currentPage.content)
     if (pageContent) {
-      context += `CURRENT PAGE CONTENT:\n${pageContent}\n\n`
+      context += `CURRENT PAGE CONTENT:\n${pageContent}\n\n\n\n`
     }
   }
   

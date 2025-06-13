@@ -24,11 +24,10 @@ const openai = new OpenAIApi(
 export async function POST(req: Request) {
   console.log('OPENAI key present?', { hasKey: !!process.env.OPENAI_API_KEY, keyStart: process.env.OPENAI_API_KEY?.slice(0,5) });
   try {
-    const { prompt, systemMessage, conversationHistory, currentMessage, thoughtContext, selections } = await req.json();
+    const { conversationHistory, currentMessage, thoughtContext, selections } = await req.json();
 
-    // Support both old prompt format and new optimized format
-    if (!prompt && !currentMessage) {
-      return NextResponse.json({ error: 'Prompt or currentMessage is required' }, { status: 400 });
+    if (!currentMessage) {
+      return NextResponse.json({ error: 'currentMessage is required' }, { status: 400 });
     }
 
     if (!process.env.OPENAI_API_KEY) {
@@ -38,13 +37,8 @@ export async function POST(req: Request) {
     let relevantDocuments: RelevantMemory[] = [];
     let finalMessages: Array<{role: 'system' | 'user' | 'assistant', content: string}> = [];
 
-    // Extract the user's actual question from either format  
-    let userInstruction = '';
-    if (currentMessage) {
-      userInstruction = currentMessage;
-    } else if (prompt) {
-      userInstruction = prompt.split('Instruction:\n').pop() || prompt;
-    }
+    // Use currentMessage as the user's instruction
+    let userInstruction = currentMessage;
 
     // Search memory for relevant context using new brainstorming function
     if (userInstruction) {
@@ -54,41 +48,30 @@ export async function POST(req: Request) {
     // Build the final messages array
     if (conversationHistory && currentMessage) {
       // New simplified format with separate contexts
-      let enhancedCurrentMessage = currentMessage;
-      
+      let enhancedCurrentMessage = 'User Instruction (This is literally what you must answer, SUPER IMPORTANT):\n\n' + currentMessage + '\n\n\n\n\n\n\n\n';
       // Add thought context if available (highest priority)
       if (thoughtContext) {
-        enhancedCurrentMessage += `\n\nCURRENT THOUGHT CONTEXT:\n${thoughtContext}`;
+        enhancedCurrentMessage += `\n\n\n\n\n\n\n\n\n\n${thoughtContext}\n\n\n\n\n\n\n\n\n\n\n`;
       }
-      
+      // Add user selections if available
+      if (selections && selections.length > 0) {
+        enhancedCurrentMessage += `\n\nUSER SELECTIONS (This is VERY IMPORTANT. The user's query is probably about this idea/text. Use this as primary context if relevant):\n${JSON.stringify(selections, null, 2)}\n\n`;
+      }
       // Add memory context from SuperMemory if available  
       if (relevantDocuments.length > 0) {
         const memoryContext = formatMemoryContext(relevantDocuments);
         enhancedCurrentMessage += `\n\nADDITIONAL KNOWLEDGE BASE CONTEXT:\n${memoryContext}`;
       }
-
       // Simple system message focused on note coherence
       const systemMsg = `You are a helpful AI assistant helping someone manage their thoughts and notes. The user's notes are often incoherent and bounce between many thoughts - this is normal. Focus on what seems most relevant to their current question. If they have current page content, prioritize that above all else as it represents their active thought process.`;
-
       finalMessages = [
         { role: "system", content: systemMsg },
         ...conversationHistory,  // Clean conversation history 
         { role: "user", content: enhancedCurrentMessage }  // Current message with all contexts
       ];
     } else {
-      // Old prompt format (fallback)
-      let enhancedPrompt = prompt || currentMessage || '';
-      
-      if (thoughtContext) {
-        enhancedPrompt += `\n\nCURRENT THOUGHT CONTEXT:\n${thoughtContext}`;
-      }
-      
-      if (relevantDocuments.length > 0) {
-        const memoryContext = formatMemoryContext(relevantDocuments);
-        enhancedPrompt += `\n\nADDITIONAL KNOWLEDGE BASE CONTEXT:\n${memoryContext}`;
-      }
-
-      finalMessages = [{ role: "user", content: enhancedPrompt }];
+      // Fallback: just send the current message
+      finalMessages = [{ role: "user", content: currentMessage }];
     }
 
     // Make the call to OpenAI with final messages
