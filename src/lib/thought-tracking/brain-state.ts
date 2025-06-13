@@ -2,7 +2,7 @@
  * SIMPLIFIED Brain state manager - just categories with arrays of text
  */
 
-import { GlobalBrainState } from './types'
+import { GlobalBrainState, ThoughtObject } from './types'
 
 // LocalStorage key
 const BRAIN_STATE_KEY = 'corta-brain-state-simple'
@@ -69,17 +69,16 @@ export function getBrainState(): GlobalBrainState {
  * Add text to a category
  */
 export function addThoughtToCategory(content: string, category: string): void {
+  console.log('🧠 Adding thought to category:', content, 'in category:', category)
   // Initialize category if it doesn't exist
   if (!globalBrainState.categories[category]) {
-    globalBrainState.categories[category] = {
-      thoughts: []
-    }
+    globalBrainState.categories[category] = []
     console.log('🧠 New category created:', category)
   }
   
   // Add text to category (avoid duplicates)
-  if (!globalBrainState.categories[category].thoughts.some(t => t.content === content)) {
-    globalBrainState.categories[category].thoughts.push({
+  if (!globalBrainState.categories[category].some(t => t.content === content)) {
+    globalBrainState.categories[category].push({
       content,
       isOrganized: false
     })
@@ -104,6 +103,8 @@ export async function processThought(fullText: string, currentPageUuid?: string)
   
   // Categorize the text using LLM
   const category = await categorizeThought(fullText)
+
+  console.log('🧠 Category:', category, fullText)
   
   // Add to brain state
   addThoughtToCategory(fullText, category)
@@ -135,7 +136,7 @@ Rules:
 Return ONLY the category name (no explanation).`
 
     const response = await fetch('/api/llm', {
-      method: 'POST',
+      method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
@@ -162,8 +163,8 @@ Return ONLY the category name (no explanation).`
 /**
  * Get thoughts by category
  */
-export function getThoughtsByCategory(category: string): { content: string, isOrganized: boolean }[] {
-  return globalBrainState.categories[category]?.thoughts || []
+export function getThoughtsByCategory(category: string): ThoughtObject[] {
+  return globalBrainState.categories[category] || []
 }
 
 /**
