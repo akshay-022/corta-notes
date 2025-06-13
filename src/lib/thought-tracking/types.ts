@@ -19,9 +19,7 @@ export interface ThoughtObject {
 
 export interface GlobalBrainState {
   categories: {
-    [categoryName: string]: {
-      thoughts: ThoughtObject[]
-    }
+    [categoryName: string]: ThoughtObject[]
   }
   currentContext: {
     activeThought: string
