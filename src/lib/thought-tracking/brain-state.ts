@@ -71,16 +71,6 @@ export function getBrainState(): GlobalBrainState {
 export function addThoughtToCategory(content: string, category: string): void {
   console.log('🧠 Adding thought to category:', content, 'in category:', category)
   
-  // Check if content already exists in any category
-  const existsInAnyCategory = Object.keys(globalBrainState.categories).some(existingCategory => 
-    globalBrainState.categories[existingCategory].some(t => t.content === content)
-  );
-  
-  if (existsInAnyCategory) {
-    console.log('🧠 Content already exists in a category, skipping addition')
-    return;
-  }
-  
   // Initialize category if it doesn't exist
   if (!globalBrainState.categories[category]) {
     globalBrainState.categories[category] = []
@@ -94,11 +84,11 @@ export function addThoughtToCategory(content: string, category: string): void {
   })
   
   // Update current context with timestamp
-  globalBrainState.currentContext = {
-    activeThought: content,
-    relatedCategory: category,
-    timestamp: new Date()
-  }
+  // globalBrainState.currentContext = {
+  //   activeThought: content,
+  //   relatedCategory: category,
+  //   timestamp: new Date()
+  // }
   
   saveBrainStateToStorage()
   console.log(`🧠 Added to "${category}":`, content.substring(0, 50) + '...')
@@ -108,6 +98,11 @@ export function addThoughtToCategory(content: string, category: string): void {
  * Process thoughts for organization
  */
 export async function processThought(fullText: string, currentPageUuid?: string): Promise<void> {
+  if (isThoughtInAnyCategory(fullText)) {
+    console.log('🧠 Thought already exists in a category, skipping processing');
+    return;
+  }
+
   console.log('🧠 Processing text:', fullText.substring(0, 50) + '...')
   
   // Categorize the text using LLM
@@ -207,6 +202,12 @@ export function resetBrainState(): void {
   }
   saveBrainStateToStorage()
   console.log('🧠 Brain state reset')
+}
+
+export function isThoughtInAnyCategory(content: string): boolean {
+  return Object.keys(globalBrainState.categories).some(category =>
+    globalBrainState.categories[category].some(t => t.content === content)
+  );
 }
 
  
