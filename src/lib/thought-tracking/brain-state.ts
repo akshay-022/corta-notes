@@ -135,7 +135,7 @@ Rules:
 Return ONLY the category name (no explanation).`
 
     const response = await fetch('/api/llm', {
-      method: 'POST',
+      method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
