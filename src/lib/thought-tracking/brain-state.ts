@@ -70,29 +70,38 @@ export function getBrainState(): GlobalBrainState {
  */
 export function addThoughtToCategory(content: string, category: string): void {
   console.log('🧠 Adding thought to category:', content, 'in category:', category)
+  
+  // Check if content already exists in any category
+  const existsInAnyCategory = Object.keys(globalBrainState.categories).some(existingCategory => 
+    globalBrainState.categories[existingCategory].some(t => t.content === content)
+  );
+  
+  if (existsInAnyCategory) {
+    console.log('🧠 Content already exists in a category, skipping addition')
+    return;
+  }
+  
   // Initialize category if it doesn't exist
   if (!globalBrainState.categories[category]) {
     globalBrainState.categories[category] = []
     console.log('🧠 New category created:', category)
   }
   
-  // Add text to category (avoid duplicates)
-  if (!globalBrainState.categories[category].some(t => t.content === content)) {
-    globalBrainState.categories[category].push({
-      content,
-      isOrganized: false
-    })
-    
-    // Update current context with timestamp
-    globalBrainState.currentContext = {
-      activeThought: content,
-      relatedCategory: category,
-      timestamp: new Date()
-    }
-    
-    saveBrainStateToStorage()
-    console.log(`🧠 Added to "${category}":`, content.substring(0, 50) + '...')
+  // Add text to category
+  globalBrainState.categories[category].push({
+    content,
+    isOrganized: false
+  })
+  
+  // Update current context with timestamp
+  globalBrainState.currentContext = {
+    activeThought: content,
+    relatedCategory: category,
+    timestamp: new Date()
   }
+  
+  saveBrainStateToStorage()
+  console.log(`🧠 Added to "${category}":`, content.substring(0, 50) + '...')
 }
 
 /**
