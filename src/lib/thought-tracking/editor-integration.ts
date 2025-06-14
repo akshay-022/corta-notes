@@ -27,10 +27,34 @@ let metadataDebounceTimer: NodeJS.Timeout | null = null // For paragraph metadat
 let syncTimer: NodeJS.Timeout | null = null // For content synchronization
 let currentPageUuid: string | undefined
 let lastEditorContent: string = '' // Track content changes
+let isPageChanging = false // Prevent sync during page changes
 
 // Export function to set metadata flag
 export function setUpdatingMetadata(value: boolean) {
   isUpdatingMetadata = value
+}
+
+/**
+ * Update the current page UUID for thought tracking
+ */
+export function updateCurrentPageUuid(pageUuid?: string): void {
+  // Set page changing flag to prevent sync during transition
+  isPageChanging = true
+  
+  // Clear any pending sync timers
+  if (syncTimer) {
+    clearTimeout(syncTimer)
+    syncTimer = null
+  }
+  
+  currentPageUuid = pageUuid
+  console.log('🧠 Updated current page UUID:', pageUuid)
+  
+  // Reset page changing flag after a short delay
+  setTimeout(() => {
+    isPageChanging = false
+    console.log('🧠 Page change complete, sync re-enabled')
+  }, 1000) // Give 1 second for page transition to complete
 }
 
 /**
@@ -40,24 +64,32 @@ export function setupThoughtTracking(editor: Editor, pageUuid?: string): void {
   isThoughtTrackingEnabled = true
   currentPageUuid = pageUuid
   lastEditorContent = editor.getText()
+  isPageChanging = false // Ensure page changing flag is reset
   
   // Track latest paragraph for optimization and context
   let latestParagraphChunk: { content: string, position: number } | null = null
   
   editor.on('update', ({ editor, transaction }) => {
-    if (!isThoughtTrackingEnabled || isProcessingThoughts || isUpdatingMetadata) return
+    if (!isThoughtTrackingEnabled || isProcessingThoughts || isUpdatingMetadata || isPageChanging) return
     
     // Only process if there are actual content changes (user is typing)
     if (!transaction.docChanged) return
     
     const currentContent = editor.getText()
     
-    // Debounced content synchronization (1000ms) - sync brain state with editor
+    // Only sync if content has actually changed from last known state
+    if (currentContent === lastEditorContent) return
+    
+    // Debounced content synchronization (2000ms) - sync brain state with editor
+    // Increased delay to prevent aggressive syncing
     if (syncTimer) clearTimeout(syncTimer)
     syncTimer = setTimeout(() => {
-      syncEditorWithBrainState(editor, currentContent)
-      lastEditorContent = currentContent
-    }, 1000)
+      // Double-check we're not in a page change before syncing
+      if (!isPageChanging && currentPageUuid) {
+        syncEditorWithBrainState(editor, currentContent)
+        lastEditorContent = currentContent
+      }
+    }, 2000)
     
     // Debounced double-enter detection (500ms)
     if (debounceTimer) clearTimeout(debounceTimer)
@@ -108,60 +140,99 @@ export function setupThoughtTracking(editor: Editor, pageUuid?: string): void {
 
 /**
  * Sync editor content with brain state - handles deletions and updates
+ * Only operates on thoughts that belong to the current page
+ * CONSERVATIVE: Only deletes thoughts when we're very confident they've been removed
  */
 function syncEditorWithBrainState(editor: Editor, currentContent: string): void {
-  if (!currentPageUuid) return
+  if (!currentPageUuid || isPageChanging) {
+    console.log('🔄 Skipping sync - no page UUID or page is changing')
+    return
+  }
   
-  console.log('🔄 Syncing editor with brain state...')
+  console.log('🔄 Syncing editor with brain state for page:', currentPageUuid)
   
-  // Get current thoughts for this page
+  // Get current thoughts for this specific page only
   const existingThoughts = getThoughtsForPage(currentPageUuid)
+  
+  // If no thoughts exist for this page, nothing to sync
+  if (existingThoughts.length === 0) {
+    console.log('🔄 No existing thoughts for this page, skipping sync')
+    return
+  }
   
   // Split content into non-empty lines
   const currentLines = currentContent.split('\n')
     .map(line => line.trim())
     .filter(line => line.length > 0)
   
+  // CONSERVATIVE DELETION: Only delete if we're very sure
+  // Check if the editor content is substantially different (not just a page load)
+  const contentSimilarity = calculateSimilarity(lastEditorContent, currentContent)
+  
+  if (contentSimilarity < 0.3) {
+    console.log('🔄 Content too different from last known state, skipping deletion to prevent data loss')
+    console.log('🔄 Similarity:', contentSimilarity, 'Last content length:', lastEditorContent.length, 'Current length:', currentContent.length)
+    return
+  }
+  
   // Find thoughts that no longer exist in editor content
+  // Only delete thoughts that belong to the current page AND we're confident about
   const thoughtsToDelete = existingThoughts.filter(thought => {
     const thoughtContent = thought.content.trim()
-    return !currentLines.some(line => line === thoughtContent)
+    // Only consider for deletion if:
+    // 1. The thought belongs to the current page
+    // 2. It's not found in current content
+    // 3. The content change seems intentional (not a page load)
+    return thought.pageUuid === currentPageUuid && 
+           !currentLines.some(line => line === thoughtContent) &&
+           contentSimilarity > 0.5 // Only delete if content is reasonably similar to last state
   })
   
-  // Delete thoughts that are no longer in editor
+  // Only proceed with deletion if we found very few thoughts to delete
+  // This prevents mass deletion during page loads
+  if (thoughtsToDelete.length > Math.max(1, existingThoughts.length * 0.5)) {
+    console.log('🔄 Too many thoughts would be deleted (' + thoughtsToDelete.length + '/' + existingThoughts.length + '), skipping to prevent data loss')
+    return
+  }
+  
+  // Delete thoughts that are no longer in editor (only for current page)
   thoughtsToDelete.forEach(thought => {
-    console.log('🗑️ Deleting thought no longer in editor:', thought.content.substring(0, 30) + '...')
+    console.log('🗑️ Deleting thought no longer in editor (page: ' + currentPageUuid + '):', thought.content.substring(0, 30) + '...')
     deleteThought(thought.id)
     
     // Also update paragraph metadata if it has a thoughtId
     updateParagraphsWithThoughtId(editor, thought.id, { status: 'unprocessed', thoughtId: undefined })
   })
   
-  // Find content that might have been updated
-  const existingContents = existingThoughts.map(t => t.content.trim())
+  // Find content that might have been updated (only for current page thoughts)
+  const existingContents = existingThoughts
+    .filter(t => t.pageUuid === currentPageUuid)
+    .map(t => t.content.trim())
   const newLines = currentLines.filter(line => !existingContents.includes(line))
   
   // Check for potential updates (lines that are similar but not exact matches)
-  existingThoughts.forEach(thought => {
-    const thoughtContent = thought.content.trim()
-    if (!currentLines.includes(thoughtContent)) {
-      // This thought might have been updated - find the most similar line
-      const similarLine = findMostSimilarLine(thoughtContent, newLines)
-      if (similarLine && calculateSimilarity(thoughtContent, similarLine) > 0.7) {
-        console.log('📝 Updating thought content:', {
-          old: thoughtContent.substring(0, 30) + '...',
-          new: similarLine.substring(0, 30) + '...'
-        })
-        updateThought(thought.id, similarLine)
-        
-        // Remove from newLines since it's been matched
-        const index = newLines.indexOf(similarLine)
-        if (index > -1) newLines.splice(index, 1)
+  existingThoughts
+    .filter(thought => thought.pageUuid === currentPageUuid)
+    .forEach(thought => {
+      const thoughtContent = thought.content.trim()
+      if (!currentLines.includes(thoughtContent)) {
+        // This thought might have been updated - find the most similar line
+        const similarLine = findMostSimilarLine(thoughtContent, newLines)
+        if (similarLine && calculateSimilarity(thoughtContent, similarLine) > 0.7) {
+          console.log('📝 Updating thought content (page: ' + currentPageUuid + '):', {
+            old: thoughtContent.substring(0, 30) + '...',
+            new: similarLine.substring(0, 30) + '...'
+          })
+          updateThought(thought.id, similarLine)
+          
+          // Remove from newLines since it's been matched
+          const index = newLines.indexOf(similarLine)
+          if (index > -1) newLines.splice(index, 1)
+        }
       }
-    }
-  })
+    })
   
-  console.log(`🔄 Sync complete: deleted ${thoughtsToDelete.length} thoughts, found ${newLines.length} new lines`)
+  console.log(`🔄 Sync complete for page ${currentPageUuid}: deleted ${thoughtsToDelete.length} thoughts, found ${newLines.length} new lines`)
 }
 
 /**

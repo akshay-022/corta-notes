@@ -78,7 +78,7 @@ interface GlobalBrainState {
 interface ThoughtObject {
   id: string                    // Unique identifier
   content: string              // The actual thought content
-  isOrganized: boolean         // Whether it's been categorized
+  isOrganized: boolean         // Whether it's been organized
   editorPosition?: number      // Position in the editor (if still present)
   paragraphId?: string         // Link to paragraph metadata
   lastUpdated: Date           // When this thought was last modified

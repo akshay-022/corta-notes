@@ -134,7 +134,7 @@ export function createThought(
   const thought: ThoughtObject = {
     id: thoughtId,
     content,
-    isOrganized: true, // It's being categorized, so it's organized
+    isOrganized: false,
     editorPosition,
     paragraphId,
     lastUpdated: new Date(),
