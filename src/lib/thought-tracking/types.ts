@@ -74,6 +74,14 @@ export interface ThoughtProcessingConfig {
   enableRealTimeProcessing: boolean
 }
 
+export interface AutoOrganizationConfig {
+  enabled: boolean
+  threshold: number
+  debounceMs: number
+  currentPageUuid: string
+  fileTree: any[]
+}
+
 export interface CategoryStats {
   name: string
   thoughtCount: number

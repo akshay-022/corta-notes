@@ -3,15 +3,14 @@
  */
 
 import { GlobalBrainState, ThoughtObject, ThoughtChange } from './types'
+import { DEFAULT_AUTO_ORGANIZATION_CONFIG } from './constants'
 
 // LocalStorage key
 const BRAIN_STATE_KEY = 'corta-brain-state-v2'
 
 // Organization configuration
 let organizationConfig = {
-  enabled: true,
-  threshold: 3, // Minimum unorganized thoughts to trigger organization
-  debounceMs: 5000, // Wait 5 seconds after last save before organizing
+  ...DEFAULT_AUTO_ORGANIZATION_CONFIG,
   currentPageUuid: undefined as string | undefined,
   fileTree: [] as any[],
   organizationCallback: undefined as ((fileTree: any[], instructions?: string) => Promise<{ success: boolean; organizedCount: number; error?: string; changedPaths?: string[] }>) | undefined,

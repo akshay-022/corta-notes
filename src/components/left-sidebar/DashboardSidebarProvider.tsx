@@ -162,6 +162,15 @@ export default function DashboardSidebarProvider({ children }: { children: React
     }
   }
 
+  const refreshOrganizedNotes = async () => {
+    if (!user) return
+    try {
+      await loadRelevantNotes(user, activePage)
+    } catch (error) {
+      console.error('❌ Failed to refresh organized notes:', error)
+    }
+  }
+
   const createNewItem = async (isFolder: boolean, parentId?: string, shouldBeOrganized?: boolean) => {
     if (!user) return
     let organizeStatus: string | undefined = undefined
@@ -291,7 +300,6 @@ export default function DashboardSidebarProvider({ children }: { children: React
 
   // Function to update a page in the context (for editor updates)
   const updatePage = (updatedPage: Page) => {
-    console.log('DashboardSidebarProvider updatePage called with:', updatedPage.title)
     setPages(pages.map(p => p.uuid === updatedPage.uuid ? updatedPage : p))
     if (activePage?.uuid === updatedPage.uuid) {
       setActivePage(updatedPage)
@@ -334,6 +342,7 @@ export default function DashboardSidebarProvider({ children }: { children: React
               updatePageMetadata={updatePageMetadata}
               sendForOrganization={sendForOrganization}
               highlightedFolders={highlightedFolders}
+              onRefreshOrganizedNotes={refreshOrganizedNotes}
               setHighlightedFolders={setHighlightedFolders}
               logout={logout}
               onManualSync={handleManualSync}
@@ -385,6 +394,7 @@ export default function DashboardSidebarProvider({ children }: { children: React
               highlightedFolders={highlightedFolders}
               setHighlightedFolders={setHighlightedFolders}
               logout={logout}
+              onRefreshOrganizedNotes={refreshOrganizedNotes}
               onManualSync={handleManualSync}
               dragAndDrop={dragAndDrop}
               isMobile={false}

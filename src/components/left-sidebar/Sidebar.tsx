@@ -38,6 +38,7 @@ interface SidebarProps {
   setHighlightedFolders: (folders: Set<string> | ((prev: Set<string>) => Set<string>)) => void
   logout: () => void
   onManualSync: () => void
+  onRefreshOrganizedNotes: () => void
   dragAndDrop: {
     dragState: { isDragging: boolean; dragItem: DragItem | null; dragOverElement: string | null }
     getDragHandlers: (item: DragItem) => any
@@ -65,8 +66,9 @@ export default function Sidebar({
   setHighlightedFolders,
   logout,
   onManualSync,
-  dragAndDrop,
-  isMobile
+  isMobile,
+  onRefreshOrganizedNotes,
+  dragAndDrop
 }: SidebarProps) {
   const [renamingItem, setRenamingItem] = useState<Page | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -466,7 +468,7 @@ export default function Sidebar({
                   isActive={false}
                   message="Drop here to move to recent notes"
                 />
-{isSearchActive ? (
+        {isSearchActive ? (
                   // Show search results - make them draggable
                   searchResults.map((doc, index) => {
                     // Find the corresponding page for this search result
@@ -623,11 +625,17 @@ export default function Sidebar({
               </div>
             )}
 
-            {/* Auto-organized notes section - takes all remaining space */}
-            <div className="flex-1 flex flex-col min-h-0">
-              <div className="px-4 pb-2 flex-shrink-0">
-                <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">Auto-organized notes</h3>
-              </div>
+            {/* Auto-organized notes section */}
+            <div className="px-4 pb-2 flex items-center justify-between">
+              <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">Auto-organized notes</h3>
+              <button
+                onClick={onRefreshOrganizedNotes}
+                className="text-[#969696] hover:text-[#cccccc] p-1 rounded transition-colors"
+                title="Refresh organized notes"
+              >
+                <RefreshCw size={12} />
+              </button>
+            </div>
 
               {/* File tree - only organized notes and folders - takes all remaining space */}
               <div 
@@ -709,7 +717,6 @@ export default function Sidebar({
             </div>
           </div>
         </div>
-      </div>
 
       {/* Context Menu */}
       {contextMenu && (

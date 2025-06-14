@@ -24,6 +24,7 @@ import {
   updateParagraphMetadata, 
   getUnprocessedParagraphs 
 } from './paragraph-metadata'
+import { DEFAULT_AUTO_ORGANIZATION_CONFIG } from './constants'
 
 let isThoughtTrackingEnabled = false
 let isProcessingThoughts = false // Prevent infinite loops
@@ -109,9 +110,7 @@ export function setupThoughtTracking(
   if (pageUuid && fileTree) {
     updateOrganizationContext(pageUuid, fileTree)
     configureAutoOrganization({
-      enabled: true,
-      threshold: 3, // Auto-organize when 3+ unorganized thoughts
-      debounceMs: 5000, // Wait 5 seconds after last brain state save
+      ...DEFAULT_AUTO_ORGANIZATION_CONFIG,
       currentPageUuid: pageUuid,
       fileTree: fileTree,
       organizationCallback: async (fileTree: any[], instructions?: string) => {
@@ -763,7 +762,7 @@ export function updateFileTreeContext(fileTree: any[]): void {
  */
 export function enableAutoOrganization(
   fileTree?: any[], 
-  threshold: number = 3, 
+  threshold: number = DEFAULT_AUTO_ORGANIZATION_CONFIG.threshold, 
   pageRefreshCallback?: () => Promise<void>
 ): void {
   if (!currentPageUuid) {
@@ -783,9 +782,8 @@ export function enableAutoOrganization(
   
   updateOrganizationContext(currentPageUuid, fileTree)
   configureAutoOrganization({
-    enabled: true,
+    ...DEFAULT_AUTO_ORGANIZATION_CONFIG,
     threshold: threshold,
-    debounceMs: 5000,
     currentPageUuid: currentPageUuid,
     fileTree: fileTree,
     organizationCallback: async (fileTree: any[], instructions?: string) => {
@@ -804,7 +802,7 @@ export function enableAutoOrganization(
 export async function autoOrganizeIfNeeded(
   editor: Editor, 
   fileTree: any[], 
-  threshold: number = 5,
+  threshold: number = DEFAULT_AUTO_ORGANIZATION_CONFIG.threshold,
   pageRefreshCallback?: () => Promise<void>
 ): Promise<void> {
   if (!currentPageUuid) return
