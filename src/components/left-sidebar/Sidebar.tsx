@@ -9,6 +9,7 @@ import DocumentSearch from '@/components/left-sidebar/DocumentSearch'
 import { SuperMemoryDocument } from '@/lib/memory/memory-client'
 import ChronologicalSidebar from './ChronologicalSidebar'
 import { useRouter } from 'next/navigation'
+import logger from '@/lib/logger'
 
 interface ContextMenu {
   x: number
@@ -146,6 +147,8 @@ export default function Sidebar({
     e.preventDefault()
     e.stopPropagation()
     
+    logger.info('Right-click context menu triggered', { type, item: item?.title, target: (e.target as HTMLElement).className })
+    
     // Determine if we're in the organized section
     let isInOrganizedSection = false
     
@@ -153,8 +156,14 @@ export default function Sidebar({
       // Check if the right-click happened in the auto-organized notes area
       // We can determine this by checking if the target is within the organized section
       const target = e.target as HTMLElement
-      const organizedSection = target.closest('.flex-1.overflow-y-auto')
+      const organizedSection = target.closest('[data-section="auto-organized"]')
       isInOrganizedSection = !!organizedSection
+      
+      logger.info('Root context menu detection', { 
+        hasOrganizedSection: !!organizedSection, 
+        targetClass: target.className,
+        isInOrganizedSection 
+      })
     } else if (item) {
       // If right-clicking on an item, check if that item is organized
       isInOrganizedSection = !!(
@@ -162,6 +171,13 @@ export default function Sidebar({
         (item.metadata as any)?.organizeStatus === 'yes' ||
         !(item.metadata as any)?.hasOwnProperty('organizeStatus')
       )
+      
+      logger.info('Item context menu detection', { 
+        itemTitle: item.title,
+        isFolder: (item.metadata as any)?.isFolder,
+        organizeStatus: (item.metadata as any)?.organizeStatus,
+        isInOrganizedSection 
+      })
     }
     
     setContextMenu({
@@ -426,17 +442,17 @@ export default function Sidebar({
           </div>
 
           {/* Scrollable Content Section */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 flex flex-col overflow-hidden">
             {/* Soon to be organized notes OR Search Results */}
             {(isSearchActive || pages.filter(page => !((page.metadata as any)?.isFolder) && (page.metadata as any)?.organizeStatus === 'soon').length > 0) && (
-              <>
+              <div className="flex-shrink-0">
                 <div className="px-4 pb-2">
                   <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">
                     {isSearchActive ? 'Search Results' : 'Recent notes'}
                   </h3>
                 </div>
                 <div 
-                  className="pb-6 relative"
+                  className="pb-6 relative max-h-64 overflow-y-auto"
                   {...dragAndDrop.getDropHandlers({
                     id: null,
                     type: 'section',
@@ -597,20 +613,22 @@ export default function Sidebar({
                       )
                     })
                 )}
+                </div>
               </div>
-            </>
-          )}
+            )}
 
-            {/* Auto-organized notes section */}
-            <div className="px-4 pb-2">
-              <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">Auto-organized notes</h3>
-            </div>
+            {/* Auto-organized notes section - takes all remaining space */}
+            <div className="flex-1 flex flex-col min-h-0">
+              <div className="px-4 pb-2 flex-shrink-0">
+                <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">Auto-organized notes</h3>
+              </div>
 
-            {/* File tree - only organized notes and folders */}
-            <div 
-              className="relative"
-              onContextMenu={(e) => handleContextMenu(e, 'root')}
-            >
+              {/* File tree - only organized notes and folders - takes all remaining space */}
+              <div 
+                className="relative flex-1 min-h-0 overflow-y-auto"
+                data-section="auto-organized"
+                onContextMenu={(e) => handleContextMenu(e, 'root')}
+              >
               {/* Only show section drop zone when there are no organized items or when specifically hovering empty space */}
               {buildTree(pages.filter(page => 
                 (page.metadata as any)?.organizeStatus === 'yes'
@@ -655,6 +673,14 @@ export default function Sidebar({
                   </div>
                 </div>
               )}
+              
+              {/* Invisible fill area to ensure all empty space is clickable */}
+              {buildTree(pages.filter(page => 
+                (page.metadata as any)?.organizeStatus === 'yes'
+              )).length > 0 && (
+                <div className="flex-1 min-h-[100px]" />
+              )}
+              </div>
             </div>
           </div>
 
