@@ -15,7 +15,8 @@ let organizationConfig = {
   currentPageUuid: undefined as string | undefined,
   fileTree: [] as any[],
   organizationCallback: undefined as ((fileTree: any[], instructions?: string) => Promise<{ success: boolean; organizedCount: number; error?: string; changedPaths?: string[] }>) | undefined,
-  highlightCallback: undefined as ((foldersToHighlight: Set<string>) => void) | undefined
+  highlightCallback: undefined as ((foldersToHighlight: Set<string>) => void) | undefined,
+  pageRefreshCallback: undefined as (() => Promise<void>) | undefined // New callback for page refresh
 }
 
 let organizationTimer: NodeJS.Timeout | null = null
@@ -31,6 +32,7 @@ export function configureAutoOrganization(config: {
   fileTree?: any[]
   organizationCallback?: (fileTree: any[], instructions?: string) => Promise<{ success: boolean; organizedCount: number; error?: string; changedPaths?: string[] }>
   highlightCallback?: (foldersToHighlight: Set<string>) => void
+  pageRefreshCallback?: () => Promise<void> // New callback for refreshing pages
 }): void {
   organizationConfig = { ...organizationConfig, ...config }
   console.log('🗂️ Auto-organization configured:', {
@@ -39,7 +41,8 @@ export function configureAutoOrganization(config: {
     debounceMs: organizationConfig.debounceMs,
     hasPageUuid: !!organizationConfig.currentPageUuid,
     fileTreeLength: organizationConfig.fileTree.length,
-    hasCallback: !!organizationConfig.organizationCallback
+    hasCallback: !!organizationConfig.organizationCallback,
+    hasPageRefreshCallback: !!organizationConfig.pageRefreshCallback
   })
 }
 
@@ -702,6 +705,14 @@ export async function organizeThoughts(
       // Save the updated brain state
       saveBrainStateToStorage()
       console.log(`🗂️ ✅ Successfully organized ${unorganizedThoughts.length} thoughts`)
+
+      // Use the page refresh callback if available
+      if (organizationConfig.pageRefreshCallback) {
+        console.log('🔄 Refreshing pages using callback...')
+        await organizationConfig.pageRefreshCallback()
+      } else {
+        console.warn('⚠️ No page refresh callback configured - pages may not reflect changes')
+      }
       
       return { 
         success: true, 

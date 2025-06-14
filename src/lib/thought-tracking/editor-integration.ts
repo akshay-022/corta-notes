@@ -34,10 +34,19 @@ let syncTimer: NodeJS.Timeout | null = null // For content synchronization
 let currentPageUuid: string | undefined
 let lastEditorContent: string = '' // Track content changes
 let isPageChanging = false // Prevent sync during page changes
+let pageRefreshCallback: (() => Promise<void>) | undefined // Page refresh callback
 
 // Export function to set metadata flag
 export function setUpdatingMetadata(value: boolean) {
   isUpdatingMetadata = value
+}
+
+/**
+ * Configure page refresh callback for editor integration
+ */
+export function configurePageRefresh(callback: () => Promise<void>): void {
+  pageRefreshCallback = callback
+  console.log('🔄 Page refresh callback configured for editor integration')
 }
 
 /**
@@ -72,18 +81,29 @@ export function updateCurrentPageUuid(pageUuid?: string, fileTree?: any[]): void
 /**
  * Setup thought tracking on a TipTap editor with enhanced synchronization
  */
-export function setupThoughtTracking(editor: Editor, pageUuid?: string, fileTree?: any[]): void {
+export function setupThoughtTracking(
+  editor: Editor, 
+  pageUuid?: string, 
+  fileTree?: any[], 
+  pageRefreshCallback?: () => Promise<void>
+): void {
   console.log('🧠 setupThoughtTracking called with:', {
     hasEditor: !!editor,
     pageUuid,
     hasFileTree: !!fileTree,
-    fileTreeLength: fileTree?.length
+    fileTreeLength: fileTree?.length,
+    hasPageRefreshCallback: !!pageRefreshCallback
   })
   
   isThoughtTrackingEnabled = true
   currentPageUuid = pageUuid
   lastEditorContent = editor.getText()
   isPageChanging = false // Ensure page changing flag is reset
+  
+  // Configure page refresh callback if provided
+  if (pageRefreshCallback) {
+    configurePageRefresh(pageRefreshCallback)
+  }
   
   // Configure auto-organization if we have the required context
   if (pageUuid && fileTree) {
@@ -97,7 +117,8 @@ export function setupThoughtTracking(editor: Editor, pageUuid?: string, fileTree
       organizationCallback: async (fileTree: any[], instructions?: string) => {
         // Use organizeCurrentPageThoughts which updates the actual pages
         return await organizeCurrentPageThoughts(fileTree, instructions)
-      }
+      },
+      pageRefreshCallback: pageRefreshCallback // Add page refresh callback to brain state config
     })
     console.log('🗂️ Auto-organization configured for page:', pageUuid)
   } else {
@@ -643,15 +664,13 @@ export function testAutoOrganization() {
   console.log('3. Create some thoughts by typing in the editor')
 }
 
-// Functions are exported and can be imported where needed for testing
-
 /**
  * Organize unorganized thoughts for the current page
  */
 export async function organizeCurrentPageThoughts(
   fileTree: any[], 
   organizationInstructions?: string
-): Promise<{ success: boolean; organizedCount: number; error?: string }> {
+): Promise<{ success: boolean; organizedCount: number; error?: string; changedPaths?: string[] }> {
   if (!currentPageUuid) {
     return { success: false, organizedCount: 0, error: 'No current page UUID' }
   }
@@ -663,6 +682,19 @@ export async function organizeCurrentPageThoughts(
     
     if (result.success && result.organizedCount > 0) {
       console.log(`🗂️ ✅ Successfully organized ${result.organizedCount} thoughts`)
+      
+      // Trigger page refresh if callback is available
+      if (pageRefreshCallback) {
+        console.log('🔄 Triggering page refresh after thought organization...')
+        try {
+          await pageRefreshCallback()
+          console.log('🔄 ✅ Page refresh completed')
+        } catch (error) {
+          console.error('🔄 ❌ Page refresh failed:', error)
+        }
+      } else {
+        console.warn('🔄 ⚠️ No page refresh callback configured - pages may not reflect changes')
+      }
     }
     
     return result
@@ -729,7 +761,11 @@ export function updateFileTreeContext(fileTree: any[]): void {
  * Manually configure auto-organization with current context
  * Call this when file tree becomes available
  */
-export function enableAutoOrganization(fileTree?: any[], threshold: number = 3): void {
+export function enableAutoOrganization(
+  fileTree?: any[], 
+  threshold: number = 3, 
+  pageRefreshCallback?: () => Promise<void>
+): void {
   if (!currentPageUuid) {
     console.log('🗂️ Cannot enable auto-organization: no current page UUID')
     return
@@ -738,6 +774,11 @@ export function enableAutoOrganization(fileTree?: any[], threshold: number = 3):
   if (!fileTree || fileTree.length === 0) {
     console.log('🗂️ Cannot enable auto-organization: no file tree provided')
     return
+  }
+  
+  // Configure page refresh callback if provided
+  if (pageRefreshCallback) {
+    configurePageRefresh(pageRefreshCallback)
   }
   
   updateOrganizationContext(currentPageUuid, fileTree)
@@ -750,7 +791,8 @@ export function enableAutoOrganization(fileTree?: any[], threshold: number = 3):
     organizationCallback: async (fileTree: any[], instructions?: string) => {
       // Use organizeCurrentPageThoughts which updates the actual pages
       return await organizeCurrentPageThoughts(fileTree, instructions)
-    }
+    },
+    pageRefreshCallback: pageRefreshCallback || pageRefreshCallback // Use provided or existing callback
   })
   
   console.log('🗂️ ✅ Auto-organization manually enabled for page:', currentPageUuid, 'with', fileTree.length, 'file tree items')
@@ -762,9 +804,15 @@ export function enableAutoOrganization(fileTree?: any[], threshold: number = 3):
 export async function autoOrganizeIfNeeded(
   editor: Editor, 
   fileTree: any[], 
-  threshold: number = 5
+  threshold: number = 5,
+  pageRefreshCallback?: () => Promise<void>
 ): Promise<void> {
   if (!currentPageUuid) return
+  
+  // Configure page refresh callback if provided
+  if (pageRefreshCallback) {
+    configurePageRefresh(pageRefreshCallback)
+  }
   
   // Update file tree context
   updateFileTreeContext(fileTree)
@@ -783,9 +831,47 @@ export async function autoOrganizeIfNeeded(
     
     if (result.success) {
       console.log(`🗂️ ✅ Auto-organized ${result.organizedCount} thoughts`)
+      
+      // Trigger page refresh if callback is available
+      if (pageRefreshCallback) {
+        console.log('🔄 Triggering page refresh after auto-organization...')
+        try {
+          await pageRefreshCallback()
+          console.log('🔄 ✅ Page refresh completed')
+        } catch (error) {
+          console.error('🔄 ❌ Page refresh failed:', error)
+        }
+      }
     } else {
       console.error('❌ Auto-organization failed:', result.error)
     }
+  }
+}
+
+/**
+ * Manually trigger page refresh
+ */
+export async function refreshPages(): Promise<void> {
+  if (pageRefreshCallback) {
+    console.log('🔄 Manually triggering page refresh...')
+    try {
+      await pageRefreshCallback()
+      console.log('🔄 ✅ Manual page refresh completed')
+    } catch (error) {
+      console.error('🔄 ❌ Manual page refresh failed:', error)
+    }
+  } else {
+    console.warn('🔄 ⚠️ No page refresh callback configured')
+  }
+}
+
+/**
+ * Get page refresh configuration status
+ */
+export function getPageRefreshStatus(): { configured: boolean; hasCallback: boolean } {
+  return {
+    configured: !!pageRefreshCallback,
+    hasCallback: !!pageRefreshCallback
   }
 }
 
