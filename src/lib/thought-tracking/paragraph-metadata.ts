@@ -128,11 +128,16 @@ export function markParagraphAsProcessed(
     lastUpdated: new Date()
   })
   
-  // Also set the thought ID
-  // editor.commands.setTextSelection(position)
-  editor.commands.updateAttributes('paragraph', {
-    thoughtId: thoughtId
-  })
+  // Also set the thought ID without moving cursor using direct transaction
+  setUpdatingMetadata(true)
+  const tr = editor.state.tr
+  const node = editor.state.doc.nodeAt(position)
+  if (node && node.type.name === 'paragraph') {
+    const newAttrs = { ...node.attrs, thoughtId: thoughtId }
+    tr.setNodeMarkup(position, undefined, newAttrs)
+    editor.view.dispatch(tr)
+  }
+  setTimeout(() => setUpdatingMetadata(false), 0)
   
   console.log(`✅ Paragraph marked as processed: "${category}" (ID: ${thoughtId})`)
 }
