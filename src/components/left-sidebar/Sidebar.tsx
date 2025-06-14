@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, MoreHorizontal, Plus, Edit3, Edit, Check, X, RefreshCw, Clock, Trash } from 'lucide-react'
+import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, LogOut, Plus, Edit3, Edit, Check, X, RefreshCw, Clock, Trash } from 'lucide-react'
 import { Page } from '@/lib/supabase/types'
 import { DragDropStyles, isValidDrop, DropZoneIndicator } from '@/components/left-sidebar/DragDropStyles'
 import type { DragItem, DropTarget } from '@/hooks/useDragAndDrop'
@@ -370,20 +370,15 @@ export default function Sidebar({
     <>
       {/* Sidebar - VS Code style */}
       <div className={`
-        fixed lg:relative inset-y-0 left-0 z-40 w-64 bg-[#1e1e1e] border-r border-[#333333] transform transition-transform duration-200 ease-in-out
+        fixed lg:relative inset-y-0 left-0 z-40 w-64 bg-[#1e1e1e] border-r border-[#333333] transform transition-transform duration-200 ease-in-out lg:h-full
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         <div className="flex flex-col h-full">
           {/* Fixed Header Section */}
           <div className="flex-shrink-0">
-            {/* Clean Header */}
-            <div className="p-4 flex justify-end">
-              <button
-                onClick={logout}
-                className="text-[#969696] hover:text-[#cccccc] p-1 rounded transition-colors"
-              >
-                <MoreHorizontal size={14} />
-              </button>
+            {/* Clean Header - removed logout button */}
+            <div className="p-4">
+              {/* Header content without logout button */}
             </div>
             
             {/* New Note Button - ChatGPT style */}
@@ -657,9 +652,16 @@ export default function Sidebar({
             </div>
           </div>
 
-          {/* Fixed Footer Section - See All Button */}
+          {/* Fixed Footer Section - See All Button and Logout */}
           <div className="flex-shrink-0 p-4">
-            <div className="flex justify-end">
+            <div className="flex justify-between items-center">
+              <button
+                onClick={logout}
+                className="text-[#969696] hover:text-[#cccccc] p-1 rounded transition-colors"
+                title="Logout"
+              >
+                <LogOut size={14} />
+              </button>
               <button
                 onClick={() => setViewMode('chronological')}
                 className="text-[#969696] hover:text-[#cccccc] text-xs transition-colors"

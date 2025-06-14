@@ -125,6 +125,15 @@ export function createThoughtContext(
       context += `CURRENT PAGE CONTENT:\n${pageContent}\n\n\n\n`
     }
   }
+
+  context = context + `
+
+Some general guidelines for you again:
+
+- Be helpful and concise
+- If the user is asking something in line with their most recent thought, ONLY FOCUS ON THE MOST RECENT THOUGHT, and the question they asked. Do NOT add irrelevant things, or another summary of everything to them. BE SUPER considerte about what information you give. You MUST not overwhelm. 
+
+`
   
   return context.trim()
 } 
