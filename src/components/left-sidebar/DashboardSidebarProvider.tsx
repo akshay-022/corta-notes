@@ -24,6 +24,7 @@ export const NotesContext = createContext<{
   pages: Page[]
   activePage: Page | null
   setActivePage: (page: Page | null) => void
+  updatePage: (updatedPage: Page) => void
 } | null>(null)
 
 export function useNotes() {
@@ -288,6 +289,15 @@ export default function DashboardSidebarProvider({ children }: { children: React
     }
   }
 
+  // Function to update a page in the context (for editor updates)
+  const updatePage = (updatedPage: Page) => {
+    console.log('DashboardSidebarProvider updatePage called with:', updatedPage.title)
+    setPages(pages.map(p => p.uuid === updatedPage.uuid ? updatedPage : p))
+    if (activePage?.uuid === updatedPage.uuid) {
+      setActivePage(updatedPage)
+    }
+  }
+
   const logout = async () => {
     await supabase.auth.signOut()
     router.push('/login')
@@ -304,7 +314,7 @@ export default function DashboardSidebarProvider({ children }: { children: React
   }
 
   return (
-    <NotesContext.Provider value={{ pages, activePage, setActivePage }}>
+    <NotesContext.Provider value={{ pages, activePage, setActivePage, updatePage }}>
       {isMobile ? (
         <MobileLayoutWrapper
           sidebar={
