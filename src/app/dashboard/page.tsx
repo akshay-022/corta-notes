@@ -2,14 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Menu, X, FileText } from 'lucide-react'
+import { FileText } from 'lucide-react'
 import { Page } from '@/lib/supabase/types'
 import TipTapEditor from '@/components/editor/TipTapEditor'
 import { useNotes } from '@/components/left-sidebar/DashboardSidebarProvider'
 import logger from '@/lib/logger'
 
 export default function DashboardPage() {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
   const pageUuid = searchParams.get('pageUuid')
@@ -43,14 +42,6 @@ export default function DashboardPage() {
 
   return (
     <div className="h-screen bg-[#1a1a1a] flex overflow-hidden">
-      {/* Mobile menu button */}
-      <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="lg:hidden fixed top-3 left-3 z-50 bg-[#2a2a2a] p-1.5 rounded text-gray-400 hover:text-white border border-gray-700"
-      >
-        {sidebarOpen ? <X size={16} /> : <Menu size={16} />}
-      </button>
-
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {activePage ? (
@@ -71,13 +62,7 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div 
-          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+
     </div>
   )
 } 

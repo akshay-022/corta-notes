@@ -42,6 +42,7 @@ interface SidebarProps {
     getDragHandlers: (item: DragItem) => any
     getDropHandlers: (target: DropTarget) => any
   }
+  isMobile?: boolean
 }
 
 export default function Sidebar({
@@ -63,7 +64,8 @@ export default function Sidebar({
   setHighlightedFolders,
   logout,
   onManualSync,
-  dragAndDrop
+  dragAndDrop,
+  isMobile
 }: SidebarProps) {
   const [renamingItem, setRenamingItem] = useState<Page | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -370,8 +372,11 @@ export default function Sidebar({
     <>
       {/* Sidebar - VS Code style */}
       <div className={`
-        fixed lg:relative inset-y-0 left-0 z-40 w-64 bg-[#1e1e1e] border-r border-[#333333] transform transition-transform duration-200 ease-in-out lg:h-full
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        ${isMobile 
+          ? 'relative h-full w-full bg-[#1e1e1e]' 
+          : 'fixed lg:relative inset-y-0 left-0 z-40 w-64 bg-[#1e1e1e] border-r border-[#333333] transform transition-transform duration-200 ease-in-out lg:h-full'
+        }
+        ${!isMobile && sidebarOpen ? 'translate-x-0' : !isMobile ? '-translate-x-full lg:translate-x-0' : ''}
       `}>
         <div className="flex flex-col h-full">
           {/* Fixed Header Section */}

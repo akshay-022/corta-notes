@@ -51,7 +51,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEd
     content: page.content as any,
     editorProps: {
       attributes: {
-        class: 'prose prose-invert max-w-none focus:outline-none min-h-[calc(100vh-120px)] px-16 py-8',
+        class: 'prose prose-invert max-w-none focus:outline-none min-h-[calc(100vh-180px)] md:min-h-[calc(100vh-120px)] px-4 py-4 md:px-16 md:py-8 prose-sm md:prose-base text-sm md:text-base leading-relaxed',
       },
     },
     onUpdate: ({ editor }) => {
@@ -278,13 +278,10 @@ export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEd
 
   return (
     <div 
-      className="flex-1 bg-[#1a1a1a] flex flex-col overflow-hidden"
-      style={{
-        width: isChatOpen ? 'calc(100vw - 256px - 400px)' : 'calc(100vw - 256px)'
-      }}
+      className="flex-1 bg-[#1a1a1a] flex flex-col overflow-hidden w-full"
     >
       {/* Minimal toolbar - appears on hover */}
-      <div className="absolute top-4 right-6 z-10 opacity-0 hover:opacity-100 transition-opacity">
+      <div className="absolute top-4 right-4 md:right-6 z-10 opacity-0 hover:opacity-100 transition-opacity">
         <div className="flex items-center gap-1 bg-[#2a2a2a] rounded-lg p-1 border border-gray-700">
           <button
             onClick={insertHorizontalRule}
@@ -306,7 +303,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEd
 
       {/* Saving indicator */}
       {isSaving && (
-        <div className="absolute top-4 left-6 z-10">
+        <div className="absolute top-4 left-4 md:left-6 z-10">
           <span className="text-gray-500 text-xs">Saving...</span>
         </div>
       )}
@@ -315,7 +312,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEd
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto min-h-full">
           {/* Title - Notion style */}
-          <div className="px-16 pt-16 pb-2">
+          <div className="px-4 pt-8 pb-2 md:px-16 md:pt-16">
             {isEditingTitle ? (
               <input
                 ref={titleInputRef}
@@ -324,7 +321,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEd
                 onChange={(e) => setTitle(e.target.value)}
                 onBlur={handleTitleSubmit}
                 onKeyDown={handleTitleKeyDown}
-                className="w-full bg-transparent text-white text-4xl font-bold placeholder-gray-600 border-none outline-none resize-none"
+                className="w-full bg-transparent text-white text-2xl md:text-4xl font-bold placeholder-gray-600 border-none outline-none resize-none"
                 placeholder="Untitled"
               />
             ) : (
@@ -353,7 +350,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEd
                   }
                 }}
                 tabIndex={0} // Make it focusable
-                className="text-white text-4xl font-bold cursor-text hover:bg-[#2a2a2a]/30 rounded px-1 py-1 -mx-1 transition-colors min-h-[3rem] flex items-center focus:outline-none focus:bg-[#2a2a2a]/30"
+                className="text-white text-2xl md:text-4xl font-bold cursor-text hover:bg-[#2a2a2a]/30 rounded px-1 py-1 -mx-1 transition-colors min-h-[2rem] md:min-h-[3rem] flex items-center focus:outline-none focus:bg-[#2a2a2a]/30"
               >
                 {title || (
                   <span className="text-gray-600">Untitled</span>

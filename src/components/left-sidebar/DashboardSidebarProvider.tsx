@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, ReactNode, createContext, useContext } from 'react'
+import { ReactNode, useContext, createContext, useState, useEffect, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
 import { Page } from '@/lib/supabase/types'
@@ -9,6 +9,8 @@ import { useDragAndDrop } from '@/hooks/useDragAndDrop'
 import { superMemorySyncService } from '@/lib/memory/memory-client-sync'
 import { createClient } from '@/lib/supabase/supabase-client'
 import logger from '@/lib/logger'
+import MobileLayoutWrapper from '@/components/mobile/MobileLayoutWrapper'
+import ChatPanel, { ChatPanelHandle } from '../right-sidebar/ChatPanel'
 
 interface ContextMenu {
   x: number
@@ -29,17 +31,33 @@ export function useNotes() {
 }
 
 export default function DashboardSidebarProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<any>(null)
-  const [pages, setPages] = useState<Page[]>([])
-  const [activePage, setActivePage] = useState<Page | null>(null)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
-  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [highlightedFolders, setHighlightedFolders] = useState<Set<string>>(new Set())
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
+  
+  const [user, setUser] = useState<any>(null)
+  const [pages, setPages] = useState<Page[]>([])
+  const [activePage, setActivePage] = useState<Page | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
+  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [highlightedFolders, setHighlightedFolders] = useState<Set<string>>(new Set())
+  const [isChatOpen, setIsChatOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+  const [selections, setSelections] = useState<any[]>([])
+  const chatPanelRef = useRef<ChatPanelHandle>(null)
+
+  // Mobile detection
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   // Helper to extract pageUuid from URL
   function getPageUuidFromPath() {
@@ -287,42 +305,86 @@ export default function DashboardSidebarProvider({ children }: { children: React
 
   return (
     <NotesContext.Provider value={{ pages, activePage, setActivePage }}>
-      <div className="flex h-screen w-screen overflow-hidden">
-        {/* Sidebar */}
-        <div className="h-screen overflow-y-auto bg-[#1a1a1a] border-r border-[#222] min-w-[220px] max-w-[320px] w-[260px]">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="lg:hidden fixed top-3 left-3 z-50 bg-[#2a2a2a] p-1.5 rounded text-gray-400 hover:text-white border border-gray-700"
-          >
-            {sidebarOpen ? <X size={16} /> : <Menu size={16} />}
-          </button>
-          <Sidebar
-            pages={pages}
-            activePage={activePage}
-            setActivePage={setActivePage}
-            expandedFolders={expandedFolders}
-            setExpandedFolders={setExpandedFolders}
-            contextMenu={contextMenu}
-            setContextMenu={setContextMenu}
-            sidebarOpen={sidebarOpen}
-            setSidebarOpen={setSidebarOpen}
-            createNewItem={createNewItem}
-            setRenaming={renameItem}
-            deleteItem={deleteItem}
-            updatePageMetadata={updatePageMetadata}
-            sendForOrganization={sendForOrganization}
-            highlightedFolders={highlightedFolders}
-            setHighlightedFolders={setHighlightedFolders}
-            logout={logout}
-            onManualSync={handleManualSync}
-            dragAndDrop={dragAndDrop}
-          />
+      {isMobile ? (
+        <MobileLayoutWrapper
+          sidebar={
+            <Sidebar
+              pages={pages}
+              activePage={activePage}
+              setActivePage={setActivePage}
+              expandedFolders={expandedFolders}
+              setExpandedFolders={setExpandedFolders}
+              contextMenu={contextMenu}
+              setContextMenu={setContextMenu}
+              sidebarOpen={true} // Always open in mobile wrapper
+              setSidebarOpen={setSidebarOpen}
+              createNewItem={createNewItem}
+              setRenaming={renameItem}
+              deleteItem={deleteItem}
+              updatePageMetadata={updatePageMetadata}
+              sendForOrganization={sendForOrganization}
+              highlightedFolders={highlightedFolders}
+              setHighlightedFolders={setHighlightedFolders}
+              logout={logout}
+              onManualSync={handleManualSync}
+              dragAndDrop={dragAndDrop}
+              isMobile={true}
+            />
+          }
+          editor={children}
+          chatPanel={
+            <ChatPanel
+              ref={chatPanelRef}
+              isOpen={true} // Always open in mobile view when chat tab is active
+              onClose={() => {
+                // In mobile, "closing" chat means switching to editor view
+                logger.info('Mobile chat close button clicked, setting isChatOpen to false')
+                setIsChatOpen(false)
+              }}
+              currentPage={activePage || undefined}
+              allPages={pages}
+              selections={selections}
+              setSelections={setSelections}
+              onApplyAiResponseToEditor={undefined} // Mobile doesn't need this callback
+              editor={null} // Mobile doesn't pass editor reference
+            />
+          }
+          isChatOpen={isChatOpen}
+          onChatToggle={() => setIsChatOpen(!isChatOpen)}
+        />
+      ) : (
+        <div className="flex h-screen w-screen overflow-hidden">
+          {/* Desktop Sidebar */}
+          <div className="h-screen overflow-y-auto bg-[#1a1a1a] border-r border-[#222] min-w-[220px] max-w-[320px] w-[260px]">
+            <Sidebar
+              pages={pages}
+              activePage={activePage}
+              setActivePage={setActivePage}
+              expandedFolders={expandedFolders}
+              setExpandedFolders={setExpandedFolders}
+              contextMenu={contextMenu}
+              setContextMenu={setContextMenu}
+              sidebarOpen={sidebarOpen}
+              setSidebarOpen={setSidebarOpen}
+              createNewItem={createNewItem}
+              setRenaming={renameItem}
+              deleteItem={deleteItem}
+              updatePageMetadata={updatePageMetadata}
+              sendForOrganization={sendForOrganization}
+              highlightedFolders={highlightedFolders}
+              setHighlightedFolders={setHighlightedFolders}
+              logout={logout}
+              onManualSync={handleManualSync}
+              dragAndDrop={dragAndDrop}
+              isMobile={false}
+            />
+          </div>
+          {/* Desktop Main content */}
+          <div className="flex-1 min-w-0 h-screen overflow-y-auto bg-[#181818]">
+            {children}
+          </div>
         </div>
-        {/* Main content */}
-        <div className="flex-1 min-w-0 h-screen overflow-y-auto bg-[#181818]">
-          {children}
-        </div>
-      </div>
+      )}
     </NotesContext.Provider>
   )
 } 
