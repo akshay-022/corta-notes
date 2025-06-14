@@ -283,7 +283,9 @@ export default function Sidebar({
           className={`relative flex items-center cursor-pointer text-sm group transition-all duration-300 ${
             isHighlighted 
               ? 'border-l-2 border-[#65a30d]' 
-              : 'hover:bg-[#2a2d2e]'
+              : activePage?.uuid === item.uuid
+                ? 'bg-[#2a2a2a]'
+                : 'hover:bg-[#2a2d2e]'
           }`}
         >
           <div
@@ -304,6 +306,7 @@ export default function Sidebar({
               if (isFolder) {
                 toggleFolder(item.uuid)
               } else {
+                setActivePage(item)
                 router.push(`/dashboard/page/${item.uuid}`)
                 setSidebarOpen(false)
               }
@@ -566,12 +569,15 @@ export default function Sidebar({
                           isDraggedItem={isDraggedItem}
                           isDropTarget={false}
                           isValidDropTarget={false}
-                          className="flex items-center hover:bg-[#2a2d2e] text-sm group transition-colors py-1 cursor-pointer"
+                          className={`flex items-center text-sm group transition-colors py-1 cursor-pointer ${
+                            activePage?.uuid === item.uuid ? 'bg-[#2a2a2a]' : 'hover:bg-[#2a2d2e]'
+                          }`}
                         >
                           <div
                             {...dragHandlers}
                             style={{ paddingLeft: '16px', paddingRight: '16px' }}
                             onClick={() => {
+                              setActivePage(item)
                               router.push(`/dashboard/page/${item.uuid}`)
                               setSidebarOpen(false)
                             }}
