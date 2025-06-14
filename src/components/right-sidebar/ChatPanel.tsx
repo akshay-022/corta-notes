@@ -690,11 +690,11 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                                   className="text-[10px] text-[#60a5fa] hover:text-[#4a9fff] underline transition-colors"
                                   onClick={() => {
                                     if (doc.pageUuid) {
-                                      console.log('Navigating to page:', doc.title, doc.pageUuid)
-                                      // Navigate to the page
-                                      window.location.href = `/page/${doc.pageUuid}`
+                                      logger.info('Opening page in new tab:', { title: doc.title, pageUuid: doc.pageUuid })
+                                      // Open the page in a new tab
+                                      window.open(`/dashboard/page/${doc.pageUuid}`, '_blank', 'noopener,noreferrer')
                                     } else {
-                                      console.log('No page UUID available for document:', doc.title)
+                                      logger.warn('No page UUID available for document:', doc.title)
                                     }
                                   }}
                                 >
