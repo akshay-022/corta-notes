@@ -83,15 +83,16 @@ export async function POST(request: NextRequest) {
     // Execute the organization plan
     const organizationResults = await executeOrganizationPlan(supabase, user.id, currentNote, organizationPlan, fileTree)
 
-    // Update the original note's organize status
+    // Update the original note's organize status - keep it as 'soon' so it remains in recent notes
     await supabase
       .from('pages')
       .update({ 
         metadata: { 
           ...currentNote.metadata,
-          organizeStatus: 'never',
+          organizeStatus: 'soon',
           organizationInstructions: organizationInstructions,
-          organizedAt: new Date().toISOString()
+          organizedAt: new Date().toISOString(),
+          hasBeenOrganized: true // Flag to indicate this note has been organized before
         }
       })
       .eq('uuid', noteId)
