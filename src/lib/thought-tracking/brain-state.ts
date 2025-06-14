@@ -655,8 +655,15 @@ export async function organizeThoughts(
       }))
     }
     
+    // Prepare brain state data for the API
+    const brainStateData = {
+      pageThoughts: unorganizedThoughts,
+      allCategories: getAllCategories(),
+      brainStats: getBrainStateStats()
+    }
+    
     // API CALL: Call the organize-note API (matching the pattern from both files)
-    console.log('🗂️ Calling organization API...')
+    console.log('🗂️ Calling organization API with brain state data...')
     const response = await fetch('/api/organize-note', {
       method: 'POST',
       headers: {
@@ -666,7 +673,8 @@ export async function organizeThoughts(
         noteId: pageUuid,
         noteContent: combinedContent,
         organizationInstructions: finalInstructions,
-        fileTree: fileTree
+        fileTree: fileTree,
+        brainStateData: brainStateData
       })
     })
     

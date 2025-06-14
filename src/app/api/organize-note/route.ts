@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Parse the request body
-    const { noteId, noteContent, organizationInstructions, fileTree } = await request.json()
+    const { noteId, noteContent, organizationInstructions, fileTree, brainStateData } = await request.json()
 
     if (!noteId || !noteContent || !fileTree) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -77,7 +77,9 @@ export async function POST(request: NextRequest) {
       organizationInstructions,
       fileTree,
       supabase,
-      currentNote.title
+      currentNote.title,
+      noteId,
+      brainStateData
     )
 
     // Execute the organization plan
@@ -116,7 +118,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function analyzeAndOrganize(noteContent: any, instructions: string, fileTree: any[], supabase?: any, currentTitle?: string) {
+async function analyzeAndOrganize(noteContent: any, instructions: string, fileTree: any[], supabase?: any, currentTitle?: string, pageUuid?: string, brainStateData?: any) {
   console.log('Analyzing content for organization with GPT-4o and Mem0...')
   
   // Extract text content from TipTap JSON
@@ -124,6 +126,47 @@ async function analyzeAndOrganize(noteContent: any, instructions: string, fileTr
   
   // Create a clean file tree hierarchy for GPT
   const cleanFileTree = createCleanFileTree(fileTree)
+  
+    // Get brain state data for this page if available
+  let brainStateContext = ''
+  if (brainStateData && brainStateData.pageThoughts) {
+    console.log(`Building brain state context with ${brainStateData.pageThoughts.length} thoughts`)
+    
+    const { pageThoughts, allCategories, brainStats } = brainStateData
+    
+    if (pageThoughts.length > 0 || (allCategories && allCategories.length > 0)) {
+      brainStateContext = `
+BRAIN STATE CONTEXT FOR THIS PAGE:
+This page has been actively tracked in your brain state system. Use this context to create richer, more insightful organized content.
+
+Page Thoughts (${pageThoughts.length} total):
+${pageThoughts.map((thought: any, index: number) => 
+  `${index + 1}. [${thought.isOrganized ? 'ORGANIZED' : 'UNORGANIZED'}] "${thought.content}"
+     Last Updated: ${new Date(thought.lastUpdated).toLocaleDateString()}
+     ${thought.organizedPath ? `Previously organized to: ${thought.organizedPath}` : ''}
+     ${thought.organizationReasoning ? `Reasoning: ${thought.organizationReasoning}` : ''}`
+).join('\n')}
+
+${allCategories && allCategories.length > 0 ? `Your Brain Categories (${allCategories.length} total):
+${allCategories.map((cat: string) => `- ${cat}`).join('\n')}` : ''}
+
+${brainStats ? `Brain State Statistics:
+- Total thoughts tracked: ${brainStats.totalThoughts}
+- Total categories: ${brainStats.totalCategories}
+- Pages with thoughts: ${brainStats.totalPages}
+- Organization rate: ${brainStats.organizationRate?.toFixed(1)}%` : ''}
+
+IMPORTANT: When organizing this content, create enriched summaries that incorporate insights from the brain state data. Don't just copy the raw thoughts - synthesize them into coherent, valuable organized content that reflects the thinking patterns and connections shown in the brain state.
+
+SYNTHESIS INSTRUCTIONS:
+- Look for patterns across thoughts to identify key themes
+- Connect related ideas that may have been captured at different times
+- Summarize the evolution of thinking on topics
+- Create coherent narratives from fragmented thoughts
+- Add context about why certain thoughts developed
+- Highlight insights and conclusions drawn from the thought process`
+    }
+  }
   
   // Search memory service for relevant documents to help with organization
   let memoryContext = ''
