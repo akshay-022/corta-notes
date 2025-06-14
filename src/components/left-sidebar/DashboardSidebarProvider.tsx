@@ -8,6 +8,7 @@ import Sidebar from '@/components/left-sidebar/Sidebar'
 import { useDragAndDrop } from '@/hooks/useDragAndDrop'
 import { superMemorySyncService } from '@/lib/memory/memory-client-sync'
 import { createClient } from '@/lib/supabase/supabase-client'
+import logger from '@/lib/logger'
 
 interface ContextMenu {
   x: number
@@ -46,66 +47,91 @@ export default function DashboardSidebarProvider({ children }: { children: React
     return match ? match[1] : null
   }
 
+  // Single useEffect for initial data loading
   useEffect(() => {
-    checkUser()
-  }, [])
+    let isMounted = true
+
+    const initializeData = async () => {
+      try {
+        logger.info('Initializing dashboard data...')
+        
+        // 1. Check user authentication
+        const { data: { user }, error } = await supabase.auth.getUser()
+        if (error || !user) {
+          logger.info('No user found, redirecting to login')
+          router.push('/login')
+          return
+        }
+
+        if (!isMounted) return
+        setUser(user)
+        logger.info('User authenticated:', { userId: user.id })
+
+        // 2. Get current page UUID
+        const pageUuid = getPageUuidFromPath() || 
+          (typeof window !== 'undefined' ? localStorage.getItem('lastOpenedPageUuid') : null)
+        
+        // 3. Load all pages in a single query
+        const { data: pagesData, error: pagesError } = await supabase
+          .from('pages')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('is_deleted', false)
+          .order('title', { ascending: true })
+
+        if (pagesError) {
+          logger.error('Error loading pages:', pagesError)
+          return
+        }
+
+        if (!isMounted) return
+
+        // 4. Update state with all data at once
+        if (pagesData) {
+          logger.info('Pages loaded successfully', { count: pagesData.length })
+          setPages(pagesData)
+
+          // Set active page if we have a pageUuid
+          if (pageUuid) {
+            const currentPage = pagesData.find(p => p.uuid === pageUuid)
+            if (currentPage) {
+              logger.info('Setting active page:', { pageId: currentPage.uuid })
+              setActivePage(currentPage)
+              // Save to localStorage
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('lastOpenedPageUuid', pageUuid)
+              }
+            }
+          } else if (pagesData.length > 0) {
+            // Find first file (not folder) if no pageUuid
+            const firstFile = pagesData.find(p => !(p.metadata as any)?.isFolder)
+            if (firstFile) {
+              logger.info('Setting first file as active:', { pageId: firstFile.uuid })
+              setActivePage(firstFile)
+            }
+          }
+        }
+
+        setLoading(false)
+      } catch (error) {
+        logger.error('Error initializing dashboard:', error)
+        router.push('/login')
+      }
+    }
+
+    initializeData()
+
+    // Cleanup function
+    return () => {
+      isMounted = false
+    }
+  }, []) // Empty dependency array since this should only run once
 
   useEffect(() => {
     const handleClickOutside = () => setContextMenu(null)
     document.addEventListener('click', handleClickOutside)
     return () => document.removeEventListener('click', handleClickOutside)
   }, [])
-
-  // On mount, fetch only the current page first, then fetch all notes in background
-  const checkUser = async () => {
-    try {
-      const { data: { user }, error } = await supabase.auth.getUser()
-      if (error || !user) {
-        router.push('/login')
-        return
-      }
-      setUser(user)
-      setLoading(true)
-      // 1. Fetch only the current page first
-      const pageUuid = getPageUuidFromPath() || (typeof window !== 'undefined' ? localStorage.getItem('lastOpenedPageUuid') : null)
-      let initialPage: Page | null = null
-      if (pageUuid) {
-        const { data, error } = await supabase
-          .from('pages')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('is_deleted', false)
-          .eq('uuid', pageUuid)
-          .maybeSingle()
-        if (data) {
-          initialPage = data
-          setActivePage(data)
-          setPages([data]) // Only the current page for now
-        }
-      }
-      setLoading(false)
-      // 2. In the background, fetch all relevant notes
-      loadRelevantNotes(user, initialPage)
-    } catch (error) {
-      router.push('/login')
-    }
-  }
-
-  // Only fetch recent notes and auto-organized notes
-  const loadRelevantNotes = async (userObj: any, initialPage: Page | null) => {
-    const { data, error } = await supabase
-      .from('pages')
-      .select('*')
-      .eq('user_id', userObj.id)
-      .eq('is_deleted', false)
-      .in('metadata->>organizeStatus', ['soon', 'yes'])
-      .order('title', { ascending: true })
-    if (data) {
-      // Avoid duplicate if initialPage is already in state
-      const filtered = initialPage ? data.filter((p: Page) => p.uuid !== initialPage.uuid) : data
-      setPages(initialPage ? [initialPage, ...filtered] : data)
-    }
-  }
 
   const handleManualSync = async () => {
     try {
@@ -236,7 +262,6 @@ export default function DashboardSidebarProvider({ children }: { children: React
           })
           setHighlightedFolders(foldersToHighlight)
         }
-        await loadRelevantNotes(user, activePage)
       } else {
         alert(`Organization failed: ${result.error}`)
       }

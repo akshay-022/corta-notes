@@ -11,11 +11,9 @@ import { setUpdatingMetadata } from './editor-integration'
  */
 export function updateParagraphMetadata(
   editor: Editor, 
-  position: number, 
+  paragraphNumber: number, 
   metadata: Partial<ParagraphMetadata>
 ): void {
-  // editor.commands.setTextSelection(position)
-  
   const updateData: any = {}
   
   if (metadata.lastUpdated) {
@@ -45,14 +43,32 @@ export function updateParagraphMetadata(
   // Set flag to prevent recursive transaction handling
   setUpdatingMetadata(true)
   
-  editor.commands.updateAttributes('paragraph', updateData)
+  // Get all paragraphs
+  const paragraphs: Array<{ node: any, pos: number }> = []
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name === 'paragraph') {
+      paragraphs.push({ node, pos })
+    }
+  })
+  
+  // Update the specific paragraph directly
+  if (paragraphs[paragraphNumber]) {
+    const { node, pos } = paragraphs[paragraphNumber]
+    const tr = editor.state.tr.setNodeMarkup(pos, undefined, {
+      ...node.attrs,  // Keep existing attributes
+      ...updateData   // Update with new metadata
+    })
+    editor.view.dispatch(tr)
+  } else {
+    console.warn(`⚠️ Paragraph ${paragraphNumber} not found. Total paragraphs: ${paragraphs.length}`)
+  }
   
   // Reset flag after transaction completes
   setTimeout(() => {
     setUpdatingMetadata(false)
   }, 0)
   
-  console.log('📝 Paragraph metadata updated at position', position, ':', updateData)
+  console.log('📝 Paragraph metadata updated for paragraph', paragraphNumber, ':', updateData)
 }
 
 /**
@@ -93,11 +109,11 @@ export function getCurrentParagraphMetadata(editor: Editor): ParagraphMetadata |
  */
 export function markParagraphAsProcessed(
   editor: Editor,
-  position: number,
+  paragraphNumber: number,
   category: string,
   thoughtId: string
 ): void {
-  updateParagraphMetadata(editor, position, {
+  updateParagraphMetadata(editor, paragraphNumber, {
     status: 'organized',
     actionTaken: `categorized as ${category}`,
     sentToCategory: category,
@@ -116,14 +132,14 @@ export function markParagraphAsProcessed(
 /**
  * Mark paragraph as currently being processed
  */
-export function markParagraphAsProcessing(editor: Editor, position: number): void {
-  updateParagraphMetadata(editor, position, {
+export function markParagraphAsProcessing(editor: Editor, paragraphNumber: number): void {
+  updateParagraphMetadata(editor, paragraphNumber, {
     status: 'organizing',
     actionTaken: 'processing...',
     lastUpdated: new Date()
   })
   
-  console.log('🔄 Paragraph marked as processing at position:', position)
+  console.log('🔄 Paragraph marked as processing at paragraph:', paragraphNumber)
 }
 
 /**
@@ -152,7 +168,18 @@ export function getUnprocessedParagraphs(editor: Editor): Array<{content: string
  */
 export function updateBrainActivity(editor: Editor, activities: string[]): void {
   const { from } = editor.state.selection
-  updateParagraphMetadata(editor, from, {
+  
+  // Find current paragraph number
+  let currentParagraphNumber = 0
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name === 'paragraph') {
+      if (pos <= from) {
+        currentParagraphNumber++
+      }
+    }
+  })
+  
+  updateParagraphMetadata(editor, currentParagraphNumber - 1, {
     brainActivity: activities,
     lastUpdated: new Date()
   })

@@ -12,6 +12,40 @@ function extractTextFromTipTap(content: any): string {
     } else if (node.type === 'heading' && node.content) {
       const text = node.content.map((textNode: any) => textNode.text || '').join('')
       return `# ${text}`
+    } else if (node.type === 'bulletList' && node.content) {
+      return node.content.map((listItem: any) => {
+        if (listItem.type === 'listItem' && listItem.content) {
+          return listItem.content.map((item: any) => {
+            if (item.type === 'paragraph' && item.content) {
+              return `• ${item.content.map((textNode: any) => textNode.text || '').join('')}`
+            }
+            return ''
+          }).filter(Boolean).join('\n')
+        }
+        return ''
+      }).filter(Boolean).join('\n')
+    } else if (node.type === 'orderedList' && node.content) {
+      return node.content.map((listItem: any, index: number) => {
+        if (listItem.type === 'listItem' && listItem.content) {
+          return listItem.content.map((item: any) => {
+            if (item.type === 'paragraph' && item.content) {
+              return `${index + 1}. ${item.content.map((textNode: any) => textNode.text || '').join('')}`
+            }
+            return ''
+          }).filter(Boolean).join('\n')
+        }
+        return ''
+      }).filter(Boolean).join('\n')
+    } else if (node.type === 'codeBlock' && node.content) {
+      const code = node.content.map((textNode: any) => textNode.text || '').join('')
+      return `\`\`\`\n${code}\n\`\`\``
+    } else if (node.type === 'blockquote' && node.content) {
+      return node.content.map((item: any) => {
+        if (item.type === 'paragraph' && item.content) {
+          return `> ${item.content.map((textNode: any) => textNode.text || '').join('')}`
+        }
+        return ''
+      }).filter(Boolean).join('\n')
     }
     return ''
   }).filter(Boolean).join('\n\n')
@@ -23,11 +57,28 @@ function extractTextFromTipTap(content: any): string {
  */
 export function detectLastThought(editor: any): string {
   try {
-    // Import here to avoid circular dependencies
-    const { getBrainState } = require('@/lib/thought-tracking/brain-state')
-    const brainState = getBrainState()
-    // Return stringified JSON of currentContext
-    return JSON.stringify(brainState.currentContext)
+    if (!editor) return ''
+
+    // Get all content blocks with their metadata
+    const contentBlocks: Array<{content: string, timestamp: Date}> = []
+    
+    editor.state.doc.content.content.forEach((node: { type: { name: string }, textContent: string, attrs: { lastUpdated?: string } }) => {
+      // Get content from any node that has text
+      const content = node.textContent.trim()
+      if (content) {
+        const timestamp = node.attrs.lastUpdated ? new Date(node.attrs.lastUpdated) : new Date()
+        contentBlocks.push({ content, timestamp })
+      }
+    })
+
+    // Sort by timestamp (most recent first) and take last 5
+    const recentContent = contentBlocks
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .slice(0, 5)
+      .map(p => p.content)
+      .join('\n\n')
+
+    return 'MOST RECENT TO SLIGHTLY LESS RECENT ORDER : \n' + recentContent || ''
   } catch (error) {
     console.error('Error detecting last thought:', error)
     return ''
@@ -43,7 +94,7 @@ export function createThoughtContext(
   currentPage?: Page,
   editor?: any
 ): string {
-  let context = ''
+  let context =''
   
   // Get last thought from editor history
   const lastThought = detectLastThought(editor)
@@ -58,7 +109,7 @@ export function createThoughtContext(
     // Build a clean object: { category: [thoughtContent, ...] }
     const cleanCategories: Record<string, string[]> = {}
     for (const category of Object.keys(brainState.categories)) {
-      cleanCategories[category] = (brainState.categories[category].thoughts || [])
+      cleanCategories[category] = brainState.categories[category]
         .map((thought: any) => thought.content)
     }
     // Stringify for LLM

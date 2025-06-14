@@ -126,23 +126,51 @@ function checkForDoubleEnter(editor: Editor): void {
 
 
 /**
- * Manual trigger to process current paragraph
+ * Process the current paragraph
  */
 export function processCurrentParagraph(editor: Editor): void {
-  const { from } = editor.state.selection
-  const currentText = editor.getText()
-  
-  // Mark as processing
-  markParagraphAsProcessing(editor, from)
-  
-  // Process the thought
-  processThought(currentText)
-    .then(() => {
-      console.log('Paragraph processed successfully')
+  try {
+    const { from } = editor.state.selection
+    
+    // Find current paragraph number and content
+    let currentParagraphNumber = 0
+    let paragraphText = ''
+    
+    editor.state.doc.descendants((node) => {
+      if (node.type.name === 'paragraph') {
+        if (paragraphText === '') { // Only get the first paragraph's content
+          paragraphText = node.textContent.trim()
+          return false
+        }
+        currentParagraphNumber++
+      }
     })
-    .catch(error => {
-      console.error('Error processing paragraph:', error)
-    })
+    
+    if (paragraphText.length > 0) {
+      // Mark as organizing
+      updateParagraphMetadata(editor, currentParagraphNumber, {
+        status: 'organizing'
+      })
+      
+      // Process the thought
+      processThought(paragraphText)
+        .then(() => {
+          // Mark as organized
+          updateParagraphMetadata(editor, currentParagraphNumber, {
+            status: 'organized'
+          })
+        })
+        .catch((error) => {
+          console.error('❌ Error processing thought:', error)
+          // Mark as unprocessed on error
+          updateParagraphMetadata(editor, currentParagraphNumber, {
+            status: 'unprocessed'
+          })
+        })
+    }
+  } catch (error) {
+    console.error('❌ Error processing current paragraph:', error)
+  }
 }
 
 /**
@@ -164,23 +192,27 @@ function updateCurrentParagraphMetadata(editor: Editor): void {
   try {
     const { from } = editor.state.selection
     
-    // Get current paragraph content to check if it's worth tracking
-    let paragraphText = ''
-    editor.state.doc.nodesBetween(from, from, (node) => {
+    // Find the paragraph number that contains the cursor
+    let currentParagraphNumber = 0
+    
+    editor.state.doc.descendants((node, pos) => {
       if (node.type.name === 'paragraph') {
-        paragraphText = node.textContent.trim()
-        return false
+        // Check if cursor is within this paragraph's range
+        if (from >= pos && from <= pos + node.nodeSize) {
+          // Found the paragraph containing the cursor!
+          const paragraphText = node.textContent.trim()
+          if (paragraphText.length > 0) {
+            updateParagraphMetadata(editor, currentParagraphNumber, {
+              lastUpdated: new Date(),
+              status: 'unprocessed' // Mark as unprocessed when edited
+            })
+            console.log('📝 Paragraph metadata updated for paragraph', currentParagraphNumber, ':', paragraphText.substring(0, 30) + '...')
+          }
+          return false // Stop searching once we found the right paragraph
+        }
+        currentParagraphNumber++
       }
     })
-    
-    // Only update metadata for non-empty paragraphs
-    if (paragraphText.length > 0) {
-      updateParagraphMetadata(editor, from, {
-        lastUpdated: new Date(),
-        status: 'unprocessed' // Mark as unprocessed when edited
-      })
-      console.log('📝 Paragraph metadata updated:', paragraphText.substring(0, 30) + '...')
-    }
   } catch (error) {
     console.error('❌ Error updating paragraph metadata:', error)
   }
