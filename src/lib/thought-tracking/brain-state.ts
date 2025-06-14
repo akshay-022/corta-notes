@@ -1,11 +1,32 @@
 /**
- * SIMPLIFIED Brain state manager - just categories with arrays of text
+ * Enhanced Brain state manager with 1:1 editor synchronization
  */
 
-import { GlobalBrainState, ThoughtObject } from './types'
+import { GlobalBrainState, ThoughtObject, ThoughtChange } from './types'
 
 // LocalStorage key
-const BRAIN_STATE_KEY = 'corta-brain-state-simple'
+const BRAIN_STATE_KEY = 'corta-brain-state-v2'
+
+/**
+ * Generate unique ID for thoughts
+ */
+function generateThoughtId(): string {
+  return `thought_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+}
+
+/**
+ * Generate content hash for change detection
+ */
+function generateContentHash(content: string): string {
+  // Use a simple hash that works in both browser and Node
+  let hash = 0
+  for (let i = 0; i < content.length; i++) {
+    const char = content.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash // Convert to 32-bit integer
+  }
+  return hash.toString(36)
+}
 
 /**
  * Load brain state from localStorage or create default
@@ -13,30 +34,62 @@ const BRAIN_STATE_KEY = 'corta-brain-state-simple'
 function loadBrainStateFromStorage(): GlobalBrainState {
   try {
     if (typeof window === 'undefined') {
-      return {
-        categories: {},
-        currentContext: { activeThought: '', relatedCategory: '', timestamp: new Date() }
-      }
+      return createEmptyBrainState()
     }
 
     const savedState = localStorage.getItem(BRAIN_STATE_KEY)
     
     if (savedState) {
       const parsed = JSON.parse(savedState)
-      // Convert timestamp string back to Date
+      
+      // Convert timestamp strings back to Date objects
       if (parsed.currentContext?.timestamp) {
         parsed.currentContext.timestamp = new Date(parsed.currentContext.timestamp)
       }
-      console.log('🧠 Brain state loaded from localStorage:', Object.keys(parsed.categories || {}))
-      return parsed
+      
+      // Convert thought timestamps
+      Object.values(parsed.thoughtsById || {}).forEach((thought: any) => {
+        if (thought.lastUpdated) {
+          thought.lastUpdated = new Date(thought.lastUpdated)
+        }
+      })
+      
+      // Ensure all required properties exist
+      const brainState: GlobalBrainState = {
+        categories: parsed.categories || {},
+        thoughtsById: parsed.thoughtsById || {},
+        thoughtsByPage: parsed.thoughtsByPage || {},
+        currentContext: parsed.currentContext || { 
+          activeThought: '', 
+          relatedCategory: '', 
+          timestamp: new Date() 
+        }
+      }
+      
+      console.log('🧠 Brain state loaded from localStorage:', {
+        categories: Object.keys(brainState.categories).length,
+        thoughts: Object.keys(brainState.thoughtsById).length,
+        pages: Object.keys(brainState.thoughtsByPage).length
+      })
+      
+      return brainState
     }
   } catch (error) {
     console.error('🧠 Error loading brain state from localStorage:', error)
   }
   
   console.log('🧠 Creating fresh brain state')
+  return createEmptyBrainState()
+}
+
+/**
+ * Create empty brain state
+ */
+function createEmptyBrainState(): GlobalBrainState {
   return {
     categories: {},
+    thoughtsById: {},
+    thoughtsByPage: {},
     currentContext: { activeThought: '', relatedCategory: '', timestamp: new Date() }
   }
 }
@@ -66,58 +119,228 @@ export function getBrainState(): GlobalBrainState {
 }
 
 /**
- * Add text to a category
+ * Create a new thought with unique ID
  */
-export function addThoughtToCategory(content: string, category: string): void {
-  console.log('🧠 Adding thought to category:', content, 'in category:', category)
+export function createThought(
+  content: string, 
+  category: string, 
+  pageUuid?: string,
+  editorPosition?: number,
+  paragraphId?: string
+): ThoughtObject {
+  const thoughtId = generateThoughtId()
+  const contentHash = generateContentHash(content)
   
-  // Initialize category if it doesn't exist
-  if (!globalBrainState.categories[category]) {
-    globalBrainState.categories[category] = []
-    console.log('🧠 New category created:', category)
+  const thought: ThoughtObject = {
+    id: thoughtId,
+    content,
+    isOrganized: true, // It's being categorized, so it's organized
+    editorPosition,
+    paragraphId,
+    lastUpdated: new Date(),
+    isDeleted: false,
+    pageUuid
   }
   
-  // Add text to category
-  globalBrainState.categories[category].push({
-    content,
-    isOrganized: false
-  })
+  // Add to global state
+  globalBrainState.thoughtsById[thoughtId] = thought
   
-  // Update current context with timestamp
-  // globalBrainState.currentContext = {
-  //   activeThought: content,
-  //   relatedCategory: category,
-  //   timestamp: new Date()
-  // }
+  // Add to category
+  if (!globalBrainState.categories[category]) {
+    globalBrainState.categories[category] = []
+  }
+  globalBrainState.categories[category].push(thought)
+  
+  // Add to page mapping
+  if (pageUuid) {
+    if (!globalBrainState.thoughtsByPage[pageUuid]) {
+      globalBrainState.thoughtsByPage[pageUuid] = []
+    }
+    globalBrainState.thoughtsByPage[pageUuid].push(thoughtId)
+  }
   
   saveBrainStateToStorage()
-  console.log(`🧠 Added to "${category}":`, content.substring(0, 50) + '...')
+  console.log(`🧠 Created thought "${thoughtId}" in category "${category}":`, content.substring(0, 50) + '...')
+  
+  return thought
 }
 
 /**
- * Process thoughts for organization
+ * Update an existing thought
+ */
+export function updateThought(
+  thoughtId: string, 
+  newContent: string, 
+  newCategory?: string
+): ThoughtObject | null {
+  const thought = globalBrainState.thoughtsById[thoughtId]
+  if (!thought) {
+    console.error('🧠 Thought not found for update:', thoughtId)
+    return null
+  }
+  
+  const oldContent = thought.content
+  const oldCategory = findThoughtCategory(thoughtId)
+  
+  // Update content
+  thought.content = newContent
+  thought.lastUpdated = new Date()
+  
+  // Handle category change
+  if (newCategory && newCategory !== oldCategory) {
+    // Remove from old category
+    if (oldCategory) {
+      globalBrainState.categories[oldCategory] = globalBrainState.categories[oldCategory]
+        .filter(t => t.id !== thoughtId)
+      
+      // Clean up empty categories
+      if (globalBrainState.categories[oldCategory].length === 0) {
+        delete globalBrainState.categories[oldCategory]
+      }
+    }
+    
+    // Add to new category
+    if (!globalBrainState.categories[newCategory]) {
+      globalBrainState.categories[newCategory] = []
+    }
+    globalBrainState.categories[newCategory].push(thought)
+  }
+  
+  saveBrainStateToStorage()
+  console.log(`🧠 Updated thought "${thoughtId}":`, {
+    oldContent: oldContent.substring(0, 30) + '...',
+    newContent: newContent.substring(0, 30) + '...',
+    oldCategory,
+    newCategory
+  })
+  
+  return thought
+}
+
+/**
+ * Delete a thought (soft delete)
+ */
+export function deleteThought(thoughtId: string): boolean {
+  const thought = globalBrainState.thoughtsById[thoughtId]
+  if (!thought) {
+    console.error('🧠 Thought not found for deletion:', thoughtId)
+    return false
+  }
+  
+  // Soft delete
+  thought.isDeleted = true
+  thought.lastUpdated = new Date()
+  
+  // Remove from category
+  const category = findThoughtCategory(thoughtId)
+  if (category) {
+    globalBrainState.categories[category] = globalBrainState.categories[category]
+      .filter(t => t.id !== thoughtId)
+    
+    // Clean up empty categories
+    if (globalBrainState.categories[category].length === 0) {
+      delete globalBrainState.categories[category]
+    }
+  }
+  
+  // Remove from page mapping
+  if (thought.pageUuid) {
+    const pageThoughts = globalBrainState.thoughtsByPage[thought.pageUuid]
+    if (pageThoughts) {
+      globalBrainState.thoughtsByPage[thought.pageUuid] = pageThoughts
+        .filter(id => id !== thoughtId)
+      
+      // Clean up empty page mappings
+      if (globalBrainState.thoughtsByPage[thought.pageUuid].length === 0) {
+        delete globalBrainState.thoughtsByPage[thought.pageUuid]
+      }
+    }
+  }
+  
+  saveBrainStateToStorage()
+  console.log(`🧠 Deleted thought "${thoughtId}":`, thought.content.substring(0, 50) + '...')
+  
+  return true
+}
+
+/**
+ * Find which category a thought belongs to
+ */
+function findThoughtCategory(thoughtId: string): string | null {
+  for (const [category, thoughts] of Object.entries(globalBrainState.categories)) {
+    if (thoughts.some(t => t.id === thoughtId)) {
+      return category
+    }
+  }
+  return null
+}
+
+/**
+ * Get thought by ID
+ */
+export function getThoughtById(thoughtId: string): ThoughtObject | null {
+  return globalBrainState.thoughtsById[thoughtId] || null
+}
+
+/**
+ * Get all thoughts for a page
+ */
+export function getThoughtsForPage(pageUuid: string): ThoughtObject[] {
+  const thoughtIds = globalBrainState.thoughtsByPage[pageUuid] || []
+  return thoughtIds
+    .map(id => globalBrainState.thoughtsById[id])
+    .filter(thought => thought && !thought.isDeleted)
+}
+
+/**
+ * Sync editor content with brain state for a specific page
+ */
+export function syncPageWithBrainState(pageUuid: string, editorContent: string): void {
+  console.log('🧠 Syncing page with brain state:', pageUuid)
+  
+  const existingThoughts = getThoughtsForPage(pageUuid)
+  const contentLines = editorContent.split('\n').filter(line => line.trim().length > 0)
+  
+  // Find thoughts that no longer exist in editor
+  const thoughtsToDelete = existingThoughts.filter(thought => 
+    !contentLines.some(line => line.trim() === thought.content.trim())
+  )
+  
+  // Delete thoughts that are no longer in editor
+  thoughtsToDelete.forEach(thought => {
+    console.log('🧠 Deleting thought no longer in editor:', thought.content.substring(0, 30) + '...')
+    deleteThought(thought.id)
+  })
+  
+  console.log(`🧠 Synced page ${pageUuid}: deleted ${thoughtsToDelete.length} thoughts`)
+}
+
+/**
+ * Process thought with enhanced tracking (replaces old addThoughtToCategory)
  */
 export async function processThought(fullText: string, currentPageUuid?: string): Promise<void> {
-  if (isThoughtInAnyCategory(fullText)) {
-    console.log('🧠 Thought already exists in a category, skipping processing');
-    return;
+  // Check if this exact content already exists
+  const existingThought = Object.values(globalBrainState.thoughtsById)
+    .find(t => t.content === fullText && !t.isDeleted && t.pageUuid === currentPageUuid)
+  
+  if (existingThought) {
+    console.log('🧠 Thought already exists, skipping processing:', existingThought.id)
+    return
   }
 
-  console.log('🧠 Processing text:', fullText.substring(0, 50) + '...')
+  console.log('🧠 Processing new thought:', fullText.substring(0, 50) + '...')
   
   // Categorize the text using LLM
   const category = await categorizeThought(fullText)
-
-  console.log('🧠 Category:', category, fullText)
   
-  // Add to brain state
-  addThoughtToCategory(fullText, category)
+  // Create new thought
+  createThought(fullText, category, currentPageUuid)
   
-  console.log('🧠 ✅ Text organized into category:', category)
+  console.log('🧠 ✅ Thought processed and organized into category:', category)
 }
 
 /**
- * Categorize thought using LLM
+ * Categorize thought using LLM (unchanged)
  */
 async function categorizeThought(content: string): Promise<string> {
   try {
@@ -165,17 +388,19 @@ Return ONLY the category name (no explanation).`
 }
 
 /**
- * Get thoughts by category
+ * Get thoughts by category (updated to filter deleted)
  */
 export function getThoughtsByCategory(category: string): ThoughtObject[] {
-  return globalBrainState.categories[category] || []
+  return (globalBrainState.categories[category] || [])
+    .filter(thought => !thought.isDeleted)
 }
 
 /**
- * Get all categories
+ * Get all categories (updated to filter empty categories)
  */
 export function getAllCategories(): string[] {
   return Object.keys(globalBrainState.categories)
+    .filter(category => globalBrainState.categories[category].some(t => !t.isDeleted))
 }
 
 /**
@@ -185,10 +410,7 @@ export function clearStoredBrainState(): void {
   if (typeof window !== 'undefined') {
     localStorage.removeItem(BRAIN_STATE_KEY)
   }
-  globalBrainState = {
-    categories: {},
-    currentContext: { activeThought: '', relatedCategory: '', timestamp: new Date() }
-  }
+  globalBrainState = createEmptyBrainState()
   console.log('🧠 Brain state cleared')
 }
 
@@ -196,18 +418,45 @@ export function clearStoredBrainState(): void {
  * Reset brain state to empty
  */
 export function resetBrainState(): void {
-  globalBrainState = {
-    categories: {},
-    currentContext: { activeThought: '', relatedCategory: '', timestamp: new Date() }
-  }
+  globalBrainState = createEmptyBrainState()
   saveBrainStateToStorage()
   console.log('🧠 Brain state reset')
 }
 
+/**
+ * Check if thought content exists (updated for new structure)
+ */
 export function isThoughtInAnyCategory(content: string): boolean {
-  return Object.keys(globalBrainState.categories).some(category =>
-    globalBrainState.categories[category].some(t => t.content === content)
-  );
+  return Object.values(globalBrainState.thoughtsById)
+    .some(thought => thought.content === content && !thought.isDeleted)
 }
+
+/**
+ * Get brain state statistics
+ */
+export function getBrainStateStats() {
+  const totalThoughts = Object.values(globalBrainState.thoughtsById)
+    .filter(t => !t.isDeleted).length
+  const totalCategories = getAllCategories().length
+  const totalPages = Object.keys(globalBrainState.thoughtsByPage).length
+  
+  return {
+    totalThoughts,
+    totalCategories,
+    totalPages,
+    categories: getAllCategories().map(cat => ({
+      name: cat,
+      count: getThoughtsByCategory(cat).length
+    }))
+  }
+}
+
+// Legacy compatibility - keep old function names working
+export const addThoughtToCategory = (content: string, category: string) => {
+  console.warn('🧠 addThoughtToCategory is deprecated, use createThought instead')
+  return createThought(content, category)
+}
+
+
 
  

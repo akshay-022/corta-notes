@@ -8,6 +8,7 @@ import { Page } from '@/lib/supabase/types'
 import TipTapEditor from '@/components/editor/TipTapEditor'
 import { useDragAndDrop } from '@/hooks/useDragAndDrop'
 import { superMemorySyncService } from '@/lib/memory/memory-client-sync'
+import BrainStateDebug from '@/components/debug/BrainStateDebug'
 
 interface ContextMenu {
   x: number
@@ -444,6 +445,9 @@ export default function DashboardPage() {
           onClick={() => setSidebarOpen(false)}
         />
       )}
+
+      {/* Brain State Debug Component */}
+      <BrainStateDebug />
     </div>
   )
 } 
