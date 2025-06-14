@@ -8,6 +8,9 @@ import { useParams } from 'next/navigation'
 import { FileText } from 'lucide-react'
 import { useNotes } from '@/components/left-sidebar/DashboardSidebarProvider'
 
+// Configure Edge Runtime for Cloudflare Pages
+export const runtime = 'edge'
+
 export default function DashboardPageByUuid() {
   const router = useRouter()
   const params = useParams()

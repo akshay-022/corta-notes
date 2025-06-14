@@ -279,6 +279,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEd
   return (
     <div 
       className="flex-1 bg-[#1a1a1a] flex flex-col overflow-hidden w-full"
+      data-editor
     >
       {/* Minimal toolbar - appears on hover */}
       <div className="absolute top-4 right-4 md:right-6 z-10 opacity-0 hover:opacity-100 transition-opacity">
@@ -321,7 +322,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEd
                 onChange={(e) => setTitle(e.target.value)}
                 onBlur={handleTitleSubmit}
                 onKeyDown={handleTitleKeyDown}
-                className="w-full bg-transparent text-white text-2xl md:text-4xl font-bold placeholder-gray-600 border-none outline-none resize-none"
+                className="w-full bg-transparent text-white font-bold placeholder-gray-600 border-none outline-none resize-none text-[16px] md:text-4xl"
                 placeholder="Untitled"
               />
             ) : (

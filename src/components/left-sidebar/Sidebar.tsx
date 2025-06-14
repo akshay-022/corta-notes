@@ -355,10 +355,11 @@ export default function Sidebar({
           onBackToNormal={() => setViewMode('normal')}
           deleteItem={deleteItem}
           setRenaming={setRenaming}
+          isMobile={isMobile}
         />
         
-        {/* Mobile overlay */}
-        {sidebarOpen && (
+        {/* Mobile overlay - only show on desktop */}
+        {!isMobile && sidebarOpen && (
           <div 
             className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
             onClick={() => setSidebarOpen(false)}

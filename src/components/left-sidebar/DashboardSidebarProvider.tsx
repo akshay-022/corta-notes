@@ -347,6 +347,7 @@ export default function DashboardSidebarProvider({ children }: { children: React
               setSelections={setSelections}
               onApplyAiResponseToEditor={undefined} // Mobile doesn't need this callback
               editor={null} // Mobile doesn't pass editor reference
+              isMobile={true}
             />
           }
           isChatOpen={isChatOpen}

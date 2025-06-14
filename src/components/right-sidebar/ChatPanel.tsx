@@ -12,6 +12,7 @@ import {
   createThoughtContext 
 } from '@/lib/brainstorming'
 import logger from '@/lib/logger'
+import ChatPagination from './pagination/ChatPagination'
 
 // Simple selection object type
 type SelectionObject = {
@@ -30,6 +31,7 @@ type Props = {
   setSelections: (selections: SelectionObject[]) => void
   onApplyAiResponseToEditor?: (responseText: string, selections?: SelectionObject[]) => void
   editor?: Editor | null
+  isMobile?: boolean
 }
 
 // Export ChatPanelHandle interface for typing the ref
@@ -62,7 +64,8 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   selections,
   setSelections,
   onApplyAiResponseToEditor,
-  editor
+  editor,
+  isMobile = false
 }: Props, ref) {
   const supabase = createClient()
   
@@ -72,6 +75,9 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false)
+  const [hasOlderMessages, setHasOlderMessages] = useState(false)
+  const [currentOffset, setCurrentOffset] = useState(0)
   const [applyingMessageId, setApplyingMessageId] = useState<string | null>(null)
   const [showConversations, setShowConversations] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -81,6 +87,8 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
+
+  const MESSAGES_PER_PAGE = 20
 
   // Load conversations when component mounts
   useEffect(() => {
@@ -93,20 +101,153 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     if (isOpen) {
       logger.info('ChatPanel became visible', { 
         hasActiveConversation: !!activeConversation,
-        conversationCount: conversations.length 
+        conversationCount: conversations.length,
+        isMobile: isMobile
       })
     }
-  }, [isOpen, activeConversation, conversations.length])
+  }, [isOpen, activeConversation, conversations.length, isMobile])
+
+  const loadMessages = useCallback(async (conversationId: string, offset = 0, append = false): Promise<void> => {
+    if (offset === 0) {
+      setIsLoadingHistory(true)
+    } else {
+      setIsLoadingOlder(true)
+    }
+    
+    try {
+      logger.info('Loading messages for conversation', { conversationId, offset, append })
+      
+      // Get all messages first to determine total count and pagination
+      const allMessages = await conversationsService.getMessages(conversationId)
+      const totalMessages = allMessages.length
+      
+      // Calculate which messages to show based on offset and page size
+      // We want to show the most recent messages first, so we reverse the logic
+      const startIndex = Math.max(0, totalMessages - offset - MESSAGES_PER_PAGE)
+      const endIndex = totalMessages - offset
+      const messagesToShow = allMessages.slice(startIndex, endIndex)
+      
+      // Transform to our Message format
+      const formattedMessages: Message[] = messagesToShow.map(msg => ({
+        role: msg.is_user_message ? 'user' : 'assistant',
+        content: msg.content,
+        selections: msg.metadata && 
+                   typeof msg.metadata === 'object' && 
+                   'selections' in msg.metadata && 
+                   Array.isArray(msg.metadata.selections) ? 
+                   (msg.metadata.selections as unknown as SelectionObject[]) : 
+                   undefined,
+        relevantDocuments: msg.metadata && 
+                          typeof msg.metadata === 'object' && 
+                          'relevantDocuments' in msg.metadata ? 
+                          (msg.metadata.relevantDocuments as RelevantDocument[]) : 
+                   undefined,
+        timestamp: msg.created_at
+      }))
+      
+      if (append) {
+        setMessages(prev => [...formattedMessages, ...prev])
+      } else {
+        setMessages(formattedMessages)
+        // Only trigger scroll to bottom for initial load (offset = 0)
+        if (offset === 0) {
+          setShouldScrollToBottom(true)
+        }
+      }
+
+      // Check if there are more messages to load
+      setHasOlderMessages(startIndex > 0)
+      
+      logger.info('Messages loaded successfully', { 
+        conversationId,
+        messageCount: formattedMessages.length,
+        totalMessages,
+        hasOlderMessages: startIndex > 0
+      })
+    } catch (error) {
+      logger.error('Error loading messages:', error)
+    } finally {
+      if (offset === 0) {
+        setIsLoadingHistory(false)
+      } else {
+        setIsLoadingOlder(false)
+      }
+    }
+  }, [MESSAGES_PER_PAGE])
 
   // Load messages when active conversation changes
   useEffect(() => {
     if (activeConversation) {
       logger.info('Active conversation changed, loading messages...', { conversationId: activeConversation.id })
-      loadMessages(activeConversation.id)
+      setCurrentOffset(0)
+      loadMessages(activeConversation.id, 0, false)
     } else {
       setMessages([])
     }
-  }, [activeConversation])
+  }, [activeConversation, loadMessages])
+
+  // Load older messages function
+  const handleLoadOlder = useCallback(() => {
+    if (!activeConversation || isLoadingOlder) return
+    
+    // Set flag to prevent auto-scroll
+    setIsLoadingOlderMessages(true)
+    
+    // Store current scroll position before loading older messages
+    const currentScrollTop = messagesContainerRef.current?.scrollTop || 0
+    const currentScrollHeight = messagesContainerRef.current?.scrollHeight || 0
+    
+    const newOffset = currentOffset + MESSAGES_PER_PAGE
+    setCurrentOffset(newOffset)
+    
+    // Load older messages and maintain scroll position
+    loadMessages(activeConversation.id, newOffset, true).then(() => {
+      // After loading, adjust scroll position to maintain user's view
+      setTimeout(() => {
+        if (messagesContainerRef.current) {
+          const newScrollHeight = messagesContainerRef.current.scrollHeight
+          const heightDifference = newScrollHeight - currentScrollHeight
+          messagesContainerRef.current.scrollTop = currentScrollTop + heightDifference
+          logger.info('Maintained scroll position after loading older messages', {
+            oldScrollTop: currentScrollTop,
+            newScrollTop: messagesContainerRef.current.scrollTop,
+            heightDifference
+          })
+        }
+        // Reset the flag after scroll position is adjusted
+        setIsLoadingOlderMessages(false)
+      }, 100)
+    })
+  }, [activeConversation, currentOffset, isLoadingOlder, loadMessages, MESSAGES_PER_PAGE])
+
+  // Auto-scroll to bottom when chat panel opens or new messages arrive
+  const scrollToBottom = useCallback(() => {
+    setTimeout(() => {
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+        logger.info('Scrolled to bottom of chat')
+      }
+    }, 100)
+  }, [])
+
+  // Track if we're loading older messages to prevent auto-scroll
+  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false)
+  const [shouldScrollToBottom, setShouldScrollToBottom] = useState(false)
+  
+  // Scroll to bottom when panel opens (only when panel becomes visible)
+  useEffect(() => {
+    if (isOpen && !isLoadingOlderMessages) {
+      setShouldScrollToBottom(true)
+    }
+  }, [isOpen]) // Only depend on isOpen
+  
+  // Execute scroll when flag is set
+  useEffect(() => {
+    if (shouldScrollToBottom && !isLoadingOlderMessages) {
+      scrollToBottom()
+      setShouldScrollToBottom(false)
+    }
+  }, [shouldScrollToBottom, isLoadingOlderMessages, scrollToBottom])
 
   const loadConversations = async () => {
     try {
@@ -134,42 +275,6 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
       }
     } catch (error) {
       logger.error('Error loading conversations:', error)
-    }
-  }
-
-  const loadMessages = async (conversationId: string) => {
-    setIsLoadingHistory(true)
-    try {
-      logger.info('Loading messages for conversation', { conversationId })
-      const conversationMessages = await conversationsService.getMessages(conversationId)
-      
-      // Transform to our Message format
-      const formattedMessages: Message[] = conversationMessages.map(msg => ({
-        role: msg.is_user_message ? 'user' : 'assistant',
-        content: msg.content,
-        selections: msg.metadata && 
-                   typeof msg.metadata === 'object' && 
-                   'selections' in msg.metadata && 
-                   Array.isArray(msg.metadata.selections) ? 
-                   (msg.metadata.selections as unknown as SelectionObject[]) : 
-                   undefined,
-        relevantDocuments: msg.metadata && 
-                          typeof msg.metadata === 'object' && 
-                          'relevantDocuments' in msg.metadata ? 
-                          (msg.metadata.relevantDocuments as RelevantDocument[]) : 
-                   undefined,
-        timestamp: msg.created_at
-      }))
-      
-      setMessages(formattedMessages)
-      logger.info('Messages loaded successfully', { 
-        conversationId,
-        messageCount: formattedMessages.length 
-      })
-    } catch (error) {
-      logger.error('Error loading messages:', error)
-    } finally {
-      setIsLoadingHistory(false)
     }
   }
 
@@ -415,7 +520,11 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   if (!isOpen) return null
 
   return (
-    <div className="fixed right-0 top-0 z-40 h-full w-[400px] border-l border-[#333333] bg-[#1e1e1e] shadow-lg transition-all ease-out overflow-hidden">
+    <div className={`${
+      isMobile 
+        ? "h-full w-full bg-[#1e1e1e]" 
+        : "fixed right-0 top-0 z-40 h-full w-[400px] border-l border-[#333333] bg-[#1e1e1e] shadow-lg"
+    } transition-all ease-out overflow-hidden`}>
       {/* Top bar with title and close button */}
       <div className="flex justify-between items-center p-3 border-b border-[#333333] h-12">
         <div className="flex items-center gap-2">
@@ -462,7 +571,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
 
       {showConversations ? (
         /* Conversations View */
-        <div className="flex flex-col h-[calc(100vh-48px)]">
+        <div className={`flex flex-col ${isMobile ? 'h-[calc(100%-48px)]' : 'h-[calc(100vh-48px)]'}`}>
           <div className="flex-1 overflow-y-auto p-3">
             <div className="flex items-center justify-between mb-3">
               <button
@@ -511,7 +620,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
           {/* Chat Messages */}
           <div 
             ref={messagesContainerRef}
-            className="h-[calc(100vh-168px)] overflow-y-auto"
+            className={`${isMobile ? 'h-[calc(100%-168px)]' : 'h-[calc(100vh-168px)]'} overflow-y-auto`}
           >
             <div ref={scrollAreaRef} className="flex flex-col gap-3 p-4">
               {isLoadingHistory ? (
@@ -521,7 +630,13 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
               ) : messages.length === 0 ? (
                 <div className="text-xs text-[#969696]">No messages yet. Start a conversation!</div>
               ) : (
-                messages.map((message, i) => (
+                <>
+                  <ChatPagination
+                    hasOlderMessages={hasOlderMessages}
+                    isLoadingOlder={isLoadingOlder}
+                    onLoadOlder={handleLoadOlder}
+                  />
+                  {messages.map((message, i) => (
                   <div key={i} className="space-y-1">
                     {/* Show selections above the message */}
                     {message.selections && message.selections.length > 0 && (
@@ -672,7 +787,8 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                       </div>
                     )}
                   </div>
-                ))
+                  ))}
+                </>
               )}
               {/* Loading indicator */} 
               {isLoading && (

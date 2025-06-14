@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Page } from '@/lib/supabase/types'
 import { FileText, ArrowLeft, Edit, Trash } from 'lucide-react'
 
@@ -19,6 +20,7 @@ interface ChronologicalSidebarProps {
   onBackToNormal: () => void
   deleteItem: (page: Page) => void
   setRenaming: (page: Page) => void
+  isMobile?: boolean
 }
 
 interface GroupedPages {
@@ -35,9 +37,11 @@ export default function ChronologicalSidebar({
   setSidebarOpen,
   onBackToNormal,
   deleteItem,
-  setRenaming
+  setRenaming,
+  isMobile = false
 }: ChronologicalSidebarProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
+  const router = useRouter()
 
   const handleContextMenu = (e: React.MouseEvent, page: Page) => {
     e.preventDefault()
@@ -56,6 +60,13 @@ export default function ChronologicalSidebar({
     if (contextMenu) {
       setContextMenu(null)
     }
+  }
+
+  const handlePageClick = (page: Page) => {
+    setActivePage(page)
+    setSidebarOpen(false)
+    // Navigate to the page
+    router.push(`/dashboard/page/${page.uuid}`)
   }
   
   // Filter out folders and deleted items, then sort by updated_at descending
@@ -133,7 +144,11 @@ export default function ChronologicalSidebar({
 
   return (
     <div 
-      className="fixed lg:relative inset-y-0 left-0 z-40 w-64 bg-[#1e1e1e] border-r border-[#333333] transform transition-transform duration-200 ease-in-out translate-x-0"
+      className={`${
+        isMobile 
+          ? 'relative h-full w-full bg-[#1e1e1e]' 
+          : 'fixed lg:relative inset-y-0 left-0 z-40 w-64 bg-[#1e1e1e] border-r border-[#333333] transform transition-transform duration-200 ease-in-out translate-x-0'
+      }`}
       onClick={handleClick}
     >
       <div className="flex flex-col h-full">
@@ -173,10 +188,7 @@ export default function ChronologicalSidebar({
                     return (
                       <div
                         key={page.uuid}
-                        onClick={() => {
-                          setActivePage(page)
-                          setSidebarOpen(false)
-                        }}
+                        onClick={() => handlePageClick(page)}
                         onContextMenu={(e) => handleContextMenu(e, page)}
                         className={`
                           flex items-center px-4 py-2 mx-3 rounded-md cursor-pointer transition-all duration-200 group
