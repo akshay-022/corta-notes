@@ -40,6 +40,14 @@ export function updateParagraphMetadata(
     updateData.thoughtId = `thought_${metadata.thoughtTimestamp.getTime()}`
   }
   
+  if (metadata.thoughtId) {
+    updateData.thoughtId = metadata.thoughtId
+  }
+  
+  if (metadata.contentHash) {
+    updateData.contentHash = metadata.contentHash
+  }
+  
   // Set flag to prevent recursive transaction handling
   setUpdatingMetadata(true)
   

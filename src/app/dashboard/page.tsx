@@ -7,13 +7,24 @@ import { Page } from '@/lib/supabase/types'
 import TipTapEditor from '@/components/editor/TipTapEditor'
 import { useNotes } from '@/components/left-sidebar/DashboardSidebarProvider'
 import logger from '@/lib/logger'
+import { useDragAndDrop } from '@/hooks/useDragAndDrop'
+import { superMemorySyncService } from '@/lib/memory/memory-client-sync'
+import BrainStateDebug from '@/components/debug/BrainStateDebug'
+
+interface ContextMenu {
+  x: number
+  y: number
+  type: 'folder' | 'file' | 'root'
+  item?: Page
+}
 
 export default function DashboardPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const pageUuid = searchParams.get('pageUuid')
   const notesCtx = useNotes()
-
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  
   useEffect(() => {
     // If no pageUuid in URL, redirect to last opened page (from localStorage)
     if (!pageUuid) {
@@ -63,6 +74,16 @@ export default function DashboardPage() {
       </div>
 
 
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div 
+          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Brain State Debug Component */}
+      <BrainStateDebug />
     </div>
   )
 } 

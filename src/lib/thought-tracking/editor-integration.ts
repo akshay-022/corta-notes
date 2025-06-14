@@ -1,17 +1,32 @@
 /**
- * Simple TipTap editor integration for thought tracking
+ * Enhanced TipTap editor integration with 1:1 brain state synchronization
  */
 
 import { Editor } from '@tiptap/core'
-import { processThought, getBrainState } from './brain-state'
-import { markParagraphAsProcessing, markParagraphAsProcessed, updateParagraphMetadata, getUnprocessedParagraphs } from './paragraph-metadata'
+import { 
+  processThought, 
+  getBrainState, 
+  syncPageWithBrainState,
+  getThoughtsForPage,
+  deleteThought,
+  updateThought,
+  getThoughtById
+} from './brain-state'
+import { 
+  markParagraphAsProcessing, 
+  markParagraphAsProcessed, 
+  updateParagraphMetadata, 
+  getUnprocessedParagraphs 
+} from './paragraph-metadata'
 
 let isThoughtTrackingEnabled = false
 let isProcessingThoughts = false // Prevent infinite loops
 export let isUpdatingMetadata = false // Prevent metadata update loops - exported for use in metadata functions
 let debounceTimer: NodeJS.Timeout | null = null
 let metadataDebounceTimer: NodeJS.Timeout | null = null // For paragraph metadata updates
+let syncTimer: NodeJS.Timeout | null = null // For content synchronization
 let currentPageUuid: string | undefined
+let lastEditorContent: string = '' // Track content changes
 
 // Export function to set metadata flag
 export function setUpdatingMetadata(value: boolean) {
@@ -19,11 +34,12 @@ export function setUpdatingMetadata(value: boolean) {
 }
 
 /**
- * Setup thought tracking on a TipTap editor
+ * Setup thought tracking on a TipTap editor with enhanced synchronization
  */
 export function setupThoughtTracking(editor: Editor, pageUuid?: string): void {
   isThoughtTrackingEnabled = true
   currentPageUuid = pageUuid
+  lastEditorContent = editor.getText()
   
   // Track latest paragraph for optimization and context
   let latestParagraphChunk: { content: string, position: number } | null = null
@@ -34,17 +50,26 @@ export function setupThoughtTracking(editor: Editor, pageUuid?: string): void {
     // Only process if there are actual content changes (user is typing)
     if (!transaction.docChanged) return
     
+    const currentContent = editor.getText()
+    
+    // Debounced content synchronization (1000ms) - sync brain state with editor
+    if (syncTimer) clearTimeout(syncTimer)
+    syncTimer = setTimeout(() => {
+      syncEditorWithBrainState(editor, currentContent)
+      lastEditorContent = currentContent
+    }, 1000)
+    
     // Debounced double-enter detection (500ms)
     if (debounceTimer) clearTimeout(debounceTimer)
     debounceTimer = setTimeout(() => {
       checkForDoubleEnter(editor)
     }, 500)
     
-    // === NEW: PARAGRAPH METADATA SYSTEM ===
+    // === PARAGRAPH METADATA SYSTEM ===
     
     // Debounced metadata updates (500ms) - only when user is actually typing
     if (metadataDebounceTimer) clearTimeout(metadataDebounceTimer)
-      metadataDebounceTimer = setTimeout(() => {
+    metadataDebounceTimer = setTimeout(() => {
       updateCurrentParagraphMetadata(editor)
       
       // Update latest paragraph tracking
@@ -71,19 +96,151 @@ export function setupThoughtTracking(editor: Editor, pageUuid?: string): void {
     }, 500)
   })
   
-
+  // Handle editor destruction - sync one final time
+  editor.on('destroy', () => {
+    if (currentPageUuid) {
+      syncEditorWithBrainState(editor, editor.getText())
+    }
+  })
   
-  console.log('🧠 Thought tracking enabled (simplified metadata system)')
+  console.log('🧠 Enhanced thought tracking enabled with 1:1 synchronization')
 }
 
 /**
- * Disable thought tracking
- 
-export function disableThoughtTracking(): void {
-  isThoughtTrackingEnabled = false
-  console.log('Thought tracking disabled')
-}*/
+ * Sync editor content with brain state - handles deletions and updates
+ */
+function syncEditorWithBrainState(editor: Editor, currentContent: string): void {
+  if (!currentPageUuid) return
+  
+  console.log('🔄 Syncing editor with brain state...')
+  
+  // Get current thoughts for this page
+  const existingThoughts = getThoughtsForPage(currentPageUuid)
+  
+  // Split content into non-empty lines
+  const currentLines = currentContent.split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+  
+  // Find thoughts that no longer exist in editor content
+  const thoughtsToDelete = existingThoughts.filter(thought => {
+    const thoughtContent = thought.content.trim()
+    return !currentLines.some(line => line === thoughtContent)
+  })
+  
+  // Delete thoughts that are no longer in editor
+  thoughtsToDelete.forEach(thought => {
+    console.log('🗑️ Deleting thought no longer in editor:', thought.content.substring(0, 30) + '...')
+    deleteThought(thought.id)
+    
+    // Also update paragraph metadata if it has a thoughtId
+    updateParagraphsWithThoughtId(editor, thought.id, { status: 'unprocessed', thoughtId: undefined })
+  })
+  
+  // Find content that might have been updated
+  const existingContents = existingThoughts.map(t => t.content.trim())
+  const newLines = currentLines.filter(line => !existingContents.includes(line))
+  
+  // Check for potential updates (lines that are similar but not exact matches)
+  existingThoughts.forEach(thought => {
+    const thoughtContent = thought.content.trim()
+    if (!currentLines.includes(thoughtContent)) {
+      // This thought might have been updated - find the most similar line
+      const similarLine = findMostSimilarLine(thoughtContent, newLines)
+      if (similarLine && calculateSimilarity(thoughtContent, similarLine) > 0.7) {
+        console.log('📝 Updating thought content:', {
+          old: thoughtContent.substring(0, 30) + '...',
+          new: similarLine.substring(0, 30) + '...'
+        })
+        updateThought(thought.id, similarLine)
+        
+        // Remove from newLines since it's been matched
+        const index = newLines.indexOf(similarLine)
+        if (index > -1) newLines.splice(index, 1)
+      }
+    }
+  })
+  
+  console.log(`🔄 Sync complete: deleted ${thoughtsToDelete.length} thoughts, found ${newLines.length} new lines`)
+}
 
+/**
+ * Find the most similar line to a given text
+ */
+function findMostSimilarLine(target: string, lines: string[]): string | null {
+  if (lines.length === 0) return null
+  
+  let bestMatch = lines[0]
+  let bestSimilarity = calculateSimilarity(target, bestMatch)
+  
+  for (let i = 1; i < lines.length; i++) {
+    const similarity = calculateSimilarity(target, lines[i])
+    if (similarity > bestSimilarity) {
+      bestSimilarity = similarity
+      bestMatch = lines[i]
+    }
+  }
+  
+  return bestMatch
+}
+
+/**
+ * Calculate similarity between two strings (simple Levenshtein-based)
+ */
+function calculateSimilarity(str1: string, str2: string): number {
+  const longer = str1.length > str2.length ? str1 : str2
+  const shorter = str1.length > str2.length ? str2 : str1
+  
+  if (longer.length === 0) return 1.0
+  
+  const distance = levenshteinDistance(longer, shorter)
+  return (longer.length - distance) / longer.length
+}
+
+/**
+ * Calculate Levenshtein distance between two strings
+ */
+function levenshteinDistance(str1: string, str2: string): number {
+  const matrix = []
+  
+  for (let i = 0; i <= str2.length; i++) {
+    matrix[i] = [i]
+  }
+  
+  for (let j = 0; j <= str1.length; j++) {
+    matrix[0][j] = j
+  }
+  
+  for (let i = 1; i <= str2.length; i++) {
+    for (let j = 1; j <= str1.length; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1]
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1, // substitution
+          matrix[i][j - 1] + 1,     // insertion
+          matrix[i - 1][j] + 1      // deletion
+        )
+      }
+    }
+  }
+  
+  return matrix[str2.length][str1.length]
+}
+
+/**
+ * Update paragraphs that have a specific thoughtId
+ */
+function updateParagraphsWithThoughtId(editor: Editor, thoughtId: string, updates: any): void {
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name === 'paragraph' && node.attrs.thoughtId === thoughtId) {
+      setUpdatingMetadata(true)
+      editor.commands.setTextSelection(pos)
+      editor.commands.updateAttributes('paragraph', updates)
+      setTimeout(() => setUpdatingMetadata(false), 0)
+    }
+  })
+}
 
 /**
  * Check for double-enter pattern (debounced)
@@ -123,54 +280,24 @@ function checkForDoubleEnter(editor: Editor): void {
   }
 }
 
-
-
 /**
  * Process the current paragraph
  */
 export function processCurrentParagraph(editor: Editor): void {
-  try {
-    const { from } = editor.state.selection
-    
-    // Find current paragraph number and content
-    let currentParagraphNumber = 0
-    let paragraphText = ''
-    
-    editor.state.doc.descendants((node) => {
-      if (node.type.name === 'paragraph') {
-        if (paragraphText === '') { // Only get the first paragraph's content
-          paragraphText = node.textContent.trim()
-          return false
-        }
-        currentParagraphNumber++
-      }
+  const { from } = editor.state.selection
+  const currentText = editor.getText()
+  
+  // Mark as processing
+  markParagraphAsProcessing(editor, from)
+  
+  // Process the thought
+  processThought(currentText, currentPageUuid)
+    .then(() => {
+      console.log('Paragraph processed successfully')
     })
-    
-    if (paragraphText.length > 0) {
-      // Mark as organizing
-      updateParagraphMetadata(editor, currentParagraphNumber, {
-        status: 'organizing'
-      })
-      
-      // Process the thought
-      processThought(paragraphText)
-        .then(() => {
-          // Mark as organized
-          updateParagraphMetadata(editor, currentParagraphNumber, {
-            status: 'organized'
-          })
-        })
-        .catch((error) => {
-          console.error('❌ Error processing thought:', error)
-          // Mark as unprocessed on error
-          updateParagraphMetadata(editor, currentParagraphNumber, {
-            status: 'unprocessed'
-          })
-        })
-    }
-  } catch (error) {
-    console.error('❌ Error processing current paragraph:', error)
-  }
+    .catch(error => {
+      console.error('Error processing paragraph:', error)
+    })
 }
 
 /**
@@ -180,10 +307,11 @@ export function getEditorDebugInfo(editor: Editor) {
   return {
     text: editor.getText(),
     selection: editor.state.selection,
-    thoughtTrackingEnabled: isThoughtTrackingEnabled
+    thoughtTrackingEnabled: isThoughtTrackingEnabled,
+    pageUuid: currentPageUuid,
+    brainStateStats: getBrainState()
   }
 }
-
 
 /**
  * Update current paragraph's metadata with timestamp
@@ -192,32 +320,54 @@ function updateCurrentParagraphMetadata(editor: Editor): void {
   try {
     const { from } = editor.state.selection
     
-    // Find the paragraph number that contains the cursor
-    let currentParagraphNumber = 0
-    
-    editor.state.doc.descendants((node, pos) => {
+    // Get current paragraph content to check if it's worth tracking
+    let paragraphText = ''
+    let paragraphNode: any = null
+    editor.state.doc.nodesBetween(from, from, (node) => {
       if (node.type.name === 'paragraph') {
-        // Check if cursor is within this paragraph's range
-        if (from >= pos && from <= pos + node.nodeSize) {
-          // Found the paragraph containing the cursor!
-          const paragraphText = node.textContent.trim()
-          if (paragraphText.length > 0) {
-            updateParagraphMetadata(editor, currentParagraphNumber, {
-              lastUpdated: new Date(),
-              status: 'unprocessed' // Mark as unprocessed when edited
-            })
-            console.log('📝 Paragraph metadata updated for paragraph', currentParagraphNumber, ':', paragraphText.substring(0, 30) + '...')
-          }
-          return false // Stop searching once we found the right paragraph
-        }
-        currentParagraphNumber++
+        paragraphText = node.textContent.trim()
+        paragraphNode = node
+        return false
       }
     })
+    
+    // Only update metadata for non-empty paragraphs
+    if (paragraphText.length > 0) {
+      // Check if this paragraph is linked to a thought
+      const thoughtId = paragraphNode?.attrs?.thoughtId
+      if (thoughtId) {
+        const thought = getThoughtById(thoughtId)
+        if (thought && thought.content !== paragraphText) {
+          // Content has changed - update the thought
+          console.log('📝 Paragraph content changed, updating thought:', thoughtId)
+          updateThought(thoughtId, paragraphText)
+        }
+      }
+      
+      updateParagraphMetadata(editor, from, {
+        lastUpdated: new Date(),
+        status: 'unprocessed', // Mark as unprocessed when edited
+        contentHash: generateSimpleHash(paragraphText)
+      })
+      console.log('📝 Paragraph metadata updated:', paragraphText.substring(0, 30) + '...')
+    }
   } catch (error) {
     console.error('❌ Error updating paragraph metadata:', error)
   }
 }
 
+/**
+ * Generate simple hash for content change detection
+ */
+function generateSimpleHash(content: string): string {
+  let hash = 0
+  for (let i = 0; i < content.length; i++) {
+    const char = content.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash // Convert to 32-bit integer
+  }
+  return hash.toString(36)
+}
 
 /**
  * Process unorganized paragraph chunks when double-enter is detected
@@ -254,6 +404,27 @@ async function processUnorganizedChunks(editor: Editor): Promise<void> {
       
       // Send chunk to AI for categorization
       await processThought(chunkText, currentPageUuid)
+      
+      // Mark paragraphs as processed and link to thoughts
+      for (const paragraph of chunk) {
+        // Find the thought that was just created for this content
+        const pageThoughts = getThoughtsForPage(currentPageUuid || '')
+        const matchingThought = pageThoughts.find(t => 
+          t.content.includes(paragraph.content) || paragraph.content.includes(t.content)
+        )
+        
+        if (matchingThought) {
+          markParagraphAsProcessed(editor, paragraph.position, 'organized', matchingThought.id)
+          
+          // Link paragraph to thought
+          setUpdatingMetadata(true)
+          editor.commands.setTextSelection(paragraph.position)
+          editor.commands.updateAttributes('paragraph', {
+            thoughtId: matchingThought.id
+          })
+          setTimeout(() => setUpdatingMetadata(false), 0)
+        }
+      }
       
       console.log('📄 ✅ Chunk processed successfully')
     }
@@ -298,6 +469,15 @@ function groupParagraphsIntoChunks(editor: Editor, unorganizedParagraphs: Array<
   }
   
   return chunks
+}
+
+/**
+ * Force sync editor with brain state (for manual triggers)
+ */
+export function forceSyncEditorWithBrainState(editor: Editor): void {
+  if (currentPageUuid) {
+    syncEditorWithBrainState(editor, editor.getText())
+  }
 }
 
 
