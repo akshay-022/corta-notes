@@ -520,11 +520,25 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   if (!isOpen) return null
 
   return (
-    <div className={`${
-      isMobile 
-        ? "h-full w-full bg-[#1e1e1e]" 
-        : "fixed right-0 top-0 z-40 h-full w-[400px] border-l border-[#333333] bg-[#1e1e1e] shadow-lg"
-    } transition-all ease-out overflow-hidden`}>
+    <div 
+      className={`${
+        isMobile 
+          ? "w-full bg-[#1e1e1e]" 
+          : "fixed right-0 top-0 z-40 h-full w-[400px] border-l border-[#333333] bg-[#1e1e1e] shadow-lg"
+      } transition-all ease-out overflow-hidden`}
+      style={{ 
+        touchAction: 'manipulation',
+        height: isMobile ? '100vh' : '100vh',
+        minHeight: isMobile ? '100vh' : '100vh',
+        maxHeight: isMobile ? '100vh' : '100vh',
+        // Use dynamic viewport height on mobile for Safari
+        ...(isMobile && {
+          height: '100dvh',
+          minHeight: '100dvh',
+          maxHeight: '100dvh'
+        })
+      }}
+    >
       {/* Top bar with title and close button */}
       <div className="flex justify-between items-center p-3 border-b border-[#333333] h-12">
         <div className="flex items-center gap-2">
@@ -538,7 +552,8 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
               onChange={(e) => setTitleInputValue(e.target.value)}
               onBlur={handleTitleSave}
               onKeyDown={handleTitleKeyDown}
-              className="text-sm text-[#cccccc] font-medium bg-transparent border-none outline-none focus:bg-[#2a2a2a] px-1 rounded"
+              className="text-[16px] md:text-sm text-[#cccccc] font-medium bg-transparent border-none outline-none focus:bg-[#2a2a2a] px-1 rounded"
+              style={{ fontSize: '16px' }}
               autoFocus
             />
           ) : (
@@ -571,7 +586,16 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
 
       {showConversations ? (
         /* Conversations View */
-        <div className={`flex flex-col ${isMobile ? 'h-[calc(100%-48px)]' : 'h-[calc(100vh-48px)]'}`}>
+        <div 
+          className="flex flex-col"
+          style={{ 
+            height: isMobile ? 'calc(100vh - 48px)' : 'calc(100vh - 48px)',
+            // Use dynamic viewport height on mobile for Safari
+            ...(isMobile && {
+              height: 'calc(100dvh - 48px)'
+            })
+          }}
+        >
           <div className="flex-1 overflow-y-auto p-3">
             <div className="flex items-center justify-between mb-3">
               <button
@@ -616,11 +640,21 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
         </div>
       ) : (
         /* Chat View */
-        <>
+        <div 
+          className="relative flex flex-col"
+          style={{ 
+            height: isMobile ? 'calc(100vh - 48px)' : 'calc(100vh - 48px)',
+            // Use dynamic viewport height on mobile for Safari
+            ...(isMobile && {
+              height: 'calc(100dvh - 48px)'
+            })
+          }}
+        >
           {/* Chat Messages */}
           <div 
             ref={messagesContainerRef}
-            className={`${isMobile ? 'h-[calc(100%-168px)]' : 'h-[calc(100vh-168px)]'} overflow-y-auto`}
+            className={`overflow-y-auto ${isMobile ? 'pb-[180px]' : 'pb-[140px]'}`}
+            style={{ height: 'calc(100% - 120px)' }}
           >
             <div ref={scrollAreaRef} className="flex flex-col gap-3 p-4">
               {isLoadingHistory ? (
@@ -798,8 +832,17 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
               )}
             </div>
           </div>
-          {/* Input Area */}
-          <div className="absolute bottom-0 left-0 right-0 border-t border-[#333333] bg-[#1e1e1e] p-4">
+          {/* Input Area - Pinned to bottom */}
+          <div 
+            className="absolute left-0 right-0 border-t border-[#333333] bg-[#1e1e1e] p-4 z-10"
+            style={{ 
+              position: 'absolute',
+              bottom: isMobile ? 'max(55px, env(safe-area-inset-bottom, 0px) + 20px)' : '15px',
+              left: 0,
+              right: 0,
+              backgroundColor: '#1e1e1e'
+            }}
+          >
         {/* Display multiple selections */} 
         {selections.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1 justify-start">
@@ -831,9 +874,10 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={activeConversation ? "Type a message..." : "Create a conversation first"}
-            className="min-h-[36px] resize-none rounded bg-[#2a2a2a] border border-[#404040] text-xs px-3 py-2 text-[#cccccc] placeholder-[#969696] focus:outline-none focus:border-[#007acc] transition-colors flex-1"
+            className="min-h-[36px] resize-none rounded bg-[#2a2a2a] border border-[#404040] text-[16px] md:text-xs px-3 py-2 text-[#cccccc] placeholder-[#969696] focus:outline-none focus:border-[#007acc] transition-colors flex-1"
             rows={1}
             disabled={isLoading || !activeConversation}
+            style={{ fontSize: '16px' }}
           />
           <button
             onClick={(e) => handleSubmit(e)}
@@ -849,7 +893,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
           </button>
         </div>
       </div>
-        </>
+        </div>
       )}
     </div>
   )
