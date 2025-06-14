@@ -76,6 +76,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const [showConversations, setShowConversations] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleInputValue, setTitleInputValue] = useState('')
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
@@ -589,8 +590,8 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                           </div>
                         )}
                         
-                        {/* Add Apply button for AI responses */}
-                        {onApplyAiResponseToEditor && (
+                        {/* Apply to Editor button - COMMENTED OUT but functionality preserved */}
+                        {/* {onApplyAiResponseToEditor && (
                           <button
                             className="mt-2 text-xs bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] px-2 py-1 rounded transition-colors"
                             disabled={applyingMessageId === (message.timestamp || `msg-${i}`)}
@@ -638,7 +639,25 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                               'Apply to Editor'
                             )}
                           </button>
-                        )}
+                        )} */}
+                        
+                        {/* Copy to Clipboard button */}
+                        <button
+                          className="mt-2 text-xs bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] px-2 py-1 rounded transition-colors"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(message.content)
+                              console.log('Copied to clipboard:', message.content.substring(0, 50) + '...')
+                              const messageId = message.timestamp || `msg-${i}`
+                              setCopiedMessageId(messageId)
+                              setTimeout(() => setCopiedMessageId(null), 2000)
+                            } catch (err) {
+                              console.error("Failed to copy:", err)
+                            }
+                          }}
+                        >
+                          {copiedMessageId === (message.timestamp || `msg-${i}`) ? 'Copied!' : 'Copy to Clipboard'}
+                        </button>
                       </div>
                     ) : (
                       <div className="w-full rounded bg-[#2a2a2a] px-3 py-2 text-xs leading-relaxed text-[#cccccc]">
