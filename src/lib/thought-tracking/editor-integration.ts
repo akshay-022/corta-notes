@@ -232,14 +232,25 @@ function levenshteinDistance(str1: string, str2: string): number {
  * Update paragraphs that have a specific thoughtId
  */
 function updateParagraphsWithThoughtId(editor: Editor, thoughtId: string, updates: any): void {
+  setUpdatingMetadata(true)
+  
+  // Use ProseMirror transaction directly to avoid cursor movement
+  const tr = editor.state.tr
+  let hasChanges = false
+  
   editor.state.doc.descendants((node, pos) => {
     if (node.type.name === 'paragraph' && node.attrs.thoughtId === thoughtId) {
-      setUpdatingMetadata(true)
-      editor.commands.setTextSelection(pos)
-      editor.commands.updateAttributes('paragraph', updates)
-      setTimeout(() => setUpdatingMetadata(false), 0)
+      const newAttrs = { ...node.attrs, ...updates }
+      tr.setNodeMarkup(pos, undefined, newAttrs)
+      hasChanges = true
     }
   })
+  
+  if (hasChanges) {
+    editor.view.dispatch(tr)
+  }
+  
+  setTimeout(() => setUpdatingMetadata(false), 0)
 }
 
 /**
@@ -416,12 +427,15 @@ async function processUnorganizedChunks(editor: Editor): Promise<void> {
         if (matchingThought) {
           markParagraphAsProcessed(editor, paragraph.position, 'organized', matchingThought.id)
           
-          // Link paragraph to thought
+          // Link paragraph to thought without moving cursor using direct transaction
           setUpdatingMetadata(true)
-          editor.commands.setTextSelection(paragraph.position)
-          editor.commands.updateAttributes('paragraph', {
-            thoughtId: matchingThought.id
-          })
+          const tr = editor.state.tr
+          const node = editor.state.doc.nodeAt(paragraph.position)
+          if (node && node.type.name === 'paragraph') {
+            const newAttrs = { ...node.attrs, thoughtId: matchingThought.id }
+            tr.setNodeMarkup(paragraph.position, undefined, newAttrs)
+            editor.view.dispatch(tr)
+          }
           setTimeout(() => setUpdatingMetadata(false), 0)
         }
       }
