@@ -134,6 +134,79 @@ This creates a **living, breathing second brain** that:
 
 The user never has to worry about losing thoughts or manual organization - the system maintains perfect synchronization automatically, creating a cognitive amplifier that truly scales with their thinking process.
 
+### Intelligent Thought Organization (NEW)
+- **Auto-Organization**: Automatically organizes unorganized thoughts using existing organize-note API
+- **Organization Tracking**: Tracks which thoughts have been organized and where
+- **Smart Filtering**: Only organizes thoughts where `isOrganized` is false
+- **Organization Metadata**: Stores organized path, note ID, reasoning, and timestamp
+- **Batch Organization**: Organizes multiple thoughts together for better context
+- **Organization Statistics**: Provides insights into organization rates and patterns
+
+### Organization Features
+```typescript
+interface ThoughtObject {
+  // ... existing fields ...
+  isOrganized: boolean         // Whether it's been organized
+  organizedPath?: string       // Path where organized (e.g., "Projects/AI/Notes.md")
+  organizedNoteId?: string     // UUID of the organized note
+  organizationReasoning?: string // AI reasoning for organization
+  organizedAt?: Date           // When it was organized
+}
+```
+
+### Organization Functions
+- `organizeThoughts()`: Organize unorganized thoughts for a page using organize-note API
+- `getUnorganizedThoughts()`: Get all unorganized thoughts globally
+- `getUnorganizedThoughtsForPage()`: Get unorganized thoughts for specific page
+- `markThoughtAsOrganized()`: Mark a thought as organized with metadata
+- `getOrganizationStats()`: Get organization statistics and rates
+- `organizeCurrentPageThoughts()`: Organize thoughts for the current active page
+- `autoOrganizeIfNeeded()`: Auto-organize when threshold is reached
+- `configureAutoOrganization()`: **NEW** - Configure auto-organization behavior
+- `updateOrganizationContext()`: **NEW** - Update page UUID and file tree context
+- `updateFileTreeContext()`: **NEW** - Update file tree context for organization
+
+### Auto-Organization Configuration
+```typescript
+// Configure auto-organization behavior
+configureAutoOrganization({
+  enabled: true,           // Enable/disable auto-organization
+  threshold: 3,            // Minimum unorganized thoughts to trigger
+  debounceMs: 5000,       // Wait time after brain state save (ms)
+  currentPageUuid: 'uuid', // Current page context
+  fileTree: [],           // File tree for organization
+  organizationCallback: async (fileTree, instructions) => {
+    // Custom organization function (uses organizeCurrentPageThoughts)
+    return await organizeCurrentPageThoughts(fileTree, instructions)
+  }
+})
+
+// Update context when page or file tree changes
+updateOrganizationContext(pageUuid, fileTree)
+updateFileTreeContext(newFileTree)
+```
+
+**Note**: The system now uses `organizeCurrentPageThoughts` by default, which ensures that organized thoughts are properly reflected in the actual pages/notes, not just in the brain state.
+
+### Organization Workflow
+1. **Thought Creation**: New thoughts start with `isOrganized: false`
+2. **Accumulation**: Thoughts accumulate as user types and thinks
+3. **Brain State Save**: Every brain state save triggers debounced organization check
+4. **Threshold Check**: If unorganized thoughts >= threshold, trigger organization
+5. **Page Organization**: Uses `organizeCurrentPageThoughts` to update actual pages/notes
+6. **API Call**: Uses existing `/api/organize-note` endpoint
+7. **Content Preparation**: Combines unorganized thoughts into TipTap format
+8. **AI Organization**: AI analyzes and creates organized notes in appropriate folders
+9. **Metadata Update**: Thoughts marked as organized with path and reasoning
+10. **Persistence**: Organization state saved to localStorage
+
+### Auto-Organization Triggers
+- **Manual**: Call `organizeCurrentPageThoughts()` explicitly
+- **Threshold**: Auto-organize when X unorganized thoughts accumulate
+- **Double-Enter**: Enhanced to also check for organization opportunities
+- **Periodic**: Optional timer-based organization (configurable)
+- **Brain State Save**: **NEW** - Auto-organize after every brain state save (debounced)
+
 ## Important Notes
 
 - **Double Enter Trigger**: User clicks 2 enters (1 gap line) to finish a thought and trigger organization
@@ -141,3 +214,5 @@ The user never has to worry about losing thoughts or manual organization - the s
 - **Conflict Resolution**: System handles content conflicts intelligently
 - **Performance**: Optimized for real-time use without blocking the editor
 - **Data Integrity**: Soft deletes and versioning ensure no data loss
+- **Organization Integration**: Seamlessly integrates with existing organize-note functionality
+- **Smart Organization**: Only organizes thoughts where `isOrganized: false`

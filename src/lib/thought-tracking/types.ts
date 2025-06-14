@@ -16,6 +16,10 @@ export interface ThoughtObject {
   id: string                    // Unique identifier for the thought
   content: string              // The actual thought content
   isOrganized: boolean         // Whether it's been organized
+  organizedPath?: string       // Path where the thought was organized (e.g., "Projects/AI/Notes.md")
+  organizedNoteId?: string     // UUID of the organized note
+  organizationReasoning?: string // AI reasoning for why it was organized this way
+  organizedAt?: Date           // When it was organized
   editorPosition?: number      // Position in the editor (if still present)
   paragraphId?: string         // Link to paragraph metadata
   lastUpdated: Date           // When this thought was last modified

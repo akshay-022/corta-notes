@@ -10,7 +10,13 @@ import {
   getThoughtsForPage,
   deleteThought,
   updateThought,
-  getThoughtById
+  getThoughtById,
+  organizeThoughts,
+  getUnorganizedThoughtsForPage,
+  getOrganizationStats,
+  updateOrganizationContext,
+  configureAutoOrganization,
+  getAutoOrganizationConfig
 } from './brain-state'
 import { 
   markParagraphAsProcessing, 
@@ -37,7 +43,7 @@ export function setUpdatingMetadata(value: boolean) {
 /**
  * Update the current page UUID for thought tracking
  */
-export function updateCurrentPageUuid(pageUuid?: string): void {
+export function updateCurrentPageUuid(pageUuid?: string, fileTree?: any[]): void {
   // Set page changing flag to prevent sync during transition
   isPageChanging = true
   
@@ -50,6 +56,12 @@ export function updateCurrentPageUuid(pageUuid?: string): void {
   currentPageUuid = pageUuid
   console.log('🧠 Updated current page UUID:', pageUuid)
   
+  // Update organization context
+  if (pageUuid) {
+    updateOrganizationContext(pageUuid, fileTree)
+    console.log('🗂️ Updated organization context for page:', pageUuid)
+  }
+  
   // Reset page changing flag after a short delay
   setTimeout(() => {
     isPageChanging = false
@@ -60,11 +72,41 @@ export function updateCurrentPageUuid(pageUuid?: string): void {
 /**
  * Setup thought tracking on a TipTap editor with enhanced synchronization
  */
-export function setupThoughtTracking(editor: Editor, pageUuid?: string): void {
+export function setupThoughtTracking(editor: Editor, pageUuid?: string, fileTree?: any[]): void {
+  console.log('🧠 setupThoughtTracking called with:', {
+    hasEditor: !!editor,
+    pageUuid,
+    hasFileTree: !!fileTree,
+    fileTreeLength: fileTree?.length
+  })
+  
   isThoughtTrackingEnabled = true
   currentPageUuid = pageUuid
   lastEditorContent = editor.getText()
   isPageChanging = false // Ensure page changing flag is reset
+  
+  // Configure auto-organization if we have the required context
+  if (pageUuid && fileTree) {
+    updateOrganizationContext(pageUuid, fileTree)
+    configureAutoOrganization({
+      enabled: true,
+      threshold: 3, // Auto-organize when 3+ unorganized thoughts
+      debounceMs: 5000, // Wait 5 seconds after last brain state save
+      currentPageUuid: pageUuid,
+      fileTree: fileTree,
+      organizationCallback: async (fileTree: any[], instructions?: string) => {
+        // Use organizeCurrentPageThoughts which updates the actual pages
+        return await organizeCurrentPageThoughts(fileTree, instructions)
+      }
+    })
+    console.log('🗂️ Auto-organization configured for page:', pageUuid)
+  } else {
+    console.log('🗂️ Auto-organization NOT configured - missing pageUuid or fileTree:', {
+      hasPageUuid: !!pageUuid,
+      hasFileTree: !!fileTree,
+      fileTreeLength: fileTree?.length
+    })
+  }
   
   // Track latest paragraph for optimization and context
   let latestParagraphChunk: { content: string, position: number } | null = null
@@ -354,8 +396,13 @@ function checkForDoubleEnter(editor: Editor): void {
     
     // Double-enter detected: both current and previous paragraphs are empty
     if (currentParagraphText === '' && previousParagraphText === '') {
-      console.log('🧠 Double-enter detected - organizing unorganized paragraphs')
+      console.log('🧠 Double-enter detected - processing unorganized paragraphs and organizing thoughts')
       processUnorganizedChunks(editor)
+      
+      // Also check if we should auto-organize thoughts
+      // Note: This would need fileTree to be passed in, so we'll make it optional for now
+      // In a real implementation, you'd want to pass fileTree through the setup or make it available globally
+      console.log('🗂️ Double-enter detected - checking for auto-organization opportunity')
     }
   } catch (error) {
     console.error('❌ Error checking for double-enter:', error)
@@ -562,6 +609,183 @@ function groupParagraphsIntoChunks(editor: Editor, unorganizedParagraphs: Array<
 export function forceSyncEditorWithBrainState(editor: Editor): void {
   if (currentPageUuid) {
     syncEditorWithBrainState(editor, editor.getText())
+  }
+}
+
+/**
+ * Test function to debug auto-organization
+ * Call this from browser console: window.testAutoOrganization()
+ */
+export function testAutoOrganization() {
+  console.log('🧪 Testing Auto-Organization Debug Info...')
+  
+  const debugInfo = getAutoOrganizationDebugInfo()
+  console.log('Debug Info:', debugInfo)
+  
+  if (!currentPageUuid) {
+    console.log('❌ No current page UUID - cannot test auto-organization')
+    return
+  }
+  
+  console.log('🧪 Current page UUID:', currentPageUuid)
+  console.log('🧪 Organization callback configured:', !!debugInfo.organizationConfig.hasCallback)
+  
+  if (debugInfo.organizationConfig.hasCallback) {
+    console.log('✅ Auto-organization is properly configured to use organizeCurrentPageThoughts')
+    console.log('🧪 This means organized thoughts will update actual pages/notes')
+  } else {
+    console.log('⚠️ Auto-organization will use fallback organizeThoughts (brain state only)')
+  }
+  
+  console.log('🧪 To test auto-organization, you need to:')
+  console.log('1. Make sure file tree is available')
+  console.log('2. Call enableAutoOrganization(fileTree) with your file tree')
+  console.log('3. Create some thoughts by typing in the editor')
+}
+
+// Functions are exported and can be imported where needed for testing
+
+/**
+ * Organize unorganized thoughts for the current page
+ */
+export async function organizeCurrentPageThoughts(
+  fileTree: any[], 
+  organizationInstructions?: string
+): Promise<{ success: boolean; organizedCount: number; error?: string }> {
+  if (!currentPageUuid) {
+    return { success: false, organizedCount: 0, error: 'No current page UUID' }
+  }
+  
+  console.log('🗂️ Organizing thoughts for current page:', currentPageUuid)
+  
+  try {
+    const result = await organizeThoughts(currentPageUuid, fileTree, organizationInstructions)
+    
+    if (result.success && result.organizedCount > 0) {
+      console.log(`🗂️ ✅ Successfully organized ${result.organizedCount} thoughts`)
+    }
+    
+    return result
+  } catch (error) {
+    console.error('❌ Error organizing current page thoughts:', error)
+    return { 
+      success: false, 
+      organizedCount: 0, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    }
+  }
+}
+
+/**
+ * Get organization info for current page
+ */
+export function getCurrentPageOrganizationInfo() {
+  if (!currentPageUuid) {
+    return { unorganizedCount: 0, totalCount: 0, organizationRate: 0 }
+  }
+  
+  const unorganizedThoughts = getUnorganizedThoughtsForPage(currentPageUuid)
+  const allThoughts = getThoughtsForPage(currentPageUuid)
+  
+  return {
+    unorganizedCount: unorganizedThoughts.length,
+    totalCount: allThoughts.length,
+    organizationRate: allThoughts.length > 0 ? ((allThoughts.length - unorganizedThoughts.length) / allThoughts.length) * 100 : 0
+  }
+}
+
+/**
+ * Get debug info about auto-organization status
+ */
+export function getAutoOrganizationDebugInfo() {
+  const orgStats = getOrganizationStats()
+  const pageInfo = getCurrentPageOrganizationInfo()
+  const orgConfig = getAutoOrganizationConfig()
+  
+  return {
+    currentPageUuid,
+    isThoughtTrackingEnabled,
+    pageInfo,
+    globalStats: orgStats,
+    organizationConfig: orgConfig,
+    debugInfo: {
+      hasCurrentPage: !!currentPageUuid,
+      thoughtTrackingEnabled: isThoughtTrackingEnabled,
+      isPageChanging,
+      lastEditorContentLength: lastEditorContent.length
+    }
+  }
+}
+
+/**
+ * Update the file tree context for organization
+ */
+export function updateFileTreeContext(fileTree: any[]): void {
+  updateOrganizationContext(currentPageUuid, fileTree)
+  console.log('🗂️ Updated file tree context:', { fileTreeLength: fileTree.length })
+}
+
+/**
+ * Manually configure auto-organization with current context
+ * Call this when file tree becomes available
+ */
+export function enableAutoOrganization(fileTree?: any[], threshold: number = 3): void {
+  if (!currentPageUuid) {
+    console.log('🗂️ Cannot enable auto-organization: no current page UUID')
+    return
+  }
+  
+  if (!fileTree || fileTree.length === 0) {
+    console.log('🗂️ Cannot enable auto-organization: no file tree provided')
+    return
+  }
+  
+  updateOrganizationContext(currentPageUuid, fileTree)
+  configureAutoOrganization({
+    enabled: true,
+    threshold: threshold,
+    debounceMs: 5000,
+    currentPageUuid: currentPageUuid,
+    fileTree: fileTree,
+    organizationCallback: async (fileTree: any[], instructions?: string) => {
+      // Use organizeCurrentPageThoughts which updates the actual pages
+      return await organizeCurrentPageThoughts(fileTree, instructions)
+    }
+  })
+  
+  console.log('🗂️ ✅ Auto-organization manually enabled for page:', currentPageUuid, 'with', fileTree.length, 'file tree items')
+}
+
+/**
+ * Auto-organize thoughts when certain conditions are met
+ */
+export async function autoOrganizeIfNeeded(
+  editor: Editor, 
+  fileTree: any[], 
+  threshold: number = 5
+): Promise<void> {
+  if (!currentPageUuid) return
+  
+  // Update file tree context
+  updateFileTreeContext(fileTree)
+  
+  const unorganizedThoughts = getUnorganizedThoughtsForPage(currentPageUuid)
+  
+  // Auto-organize if we have more than threshold unorganized thoughts
+  if (unorganizedThoughts.length >= threshold) {
+    console.log(`🗂️ Auto-organizing: ${unorganizedThoughts.length} unorganized thoughts found (threshold: ${threshold})`)
+    
+    const result = await organizeThoughts(
+      currentPageUuid, 
+      fileTree, 
+      'Auto-organize these thoughts into appropriate categories and folders based on their content'
+    )
+    
+    if (result.success) {
+      console.log(`🗂️ ✅ Auto-organized ${result.organizedCount} thoughts`)
+    } else {
+      console.error('❌ Auto-organization failed:', result.error)
+    }
   }
 }
 

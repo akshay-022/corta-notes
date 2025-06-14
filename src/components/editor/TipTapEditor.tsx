@@ -245,7 +245,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEd
   // Setup thought tracking when editor is ready
   useEffect(() => {
     if (editor) {
-      setupThoughtTracking(editor, page.uuid)
+      setupThoughtTracking(editor, page.uuid, allPages)
       console.log('🧠 Thought tracking initialized for editor with page:', page.uuid)
     }
   }, [editor, page.uuid])

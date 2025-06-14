@@ -219,8 +219,8 @@ export default function Sidebar({
       return item.parent_uuid === parentId
     })
     
-    console.log(`Building tree for parentId: ${parentId}, found ${filtered.length} items:`, 
-      filtered.map(item => ({ title: item.title, uuid: item.uuid, parent_uuid: item.parent_uuid })))
+    // console.log(`Building tree for parentId: ${parentId}, found ${filtered.length} items:`, 
+    //   filtered.map(item => ({ title: item.title, uuid: item.uuid, parent_uuid: item.parent_uuid })))
     
     return filtered.sort((a, b) => {
       const aIsFolder = (a.metadata as any)?.isFolder

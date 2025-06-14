@@ -7,6 +7,51 @@ import { GlobalBrainState, ThoughtObject, ThoughtChange } from './types'
 // LocalStorage key
 const BRAIN_STATE_KEY = 'corta-brain-state-v2'
 
+// Organization configuration
+let organizationConfig = {
+  enabled: true,
+  threshold: 3, // Minimum unorganized thoughts to trigger organization
+  debounceMs: 5000, // Wait 5 seconds after last save before organizing
+  currentPageUuid: undefined as string | undefined,
+  fileTree: [] as any[],
+  organizationCallback: undefined as ((fileTree: any[], instructions?: string) => Promise<{ success: boolean; organizedCount: number; error?: string; changedPaths?: string[] }>) | undefined,
+  highlightCallback: undefined as ((foldersToHighlight: Set<string>) => void) | undefined
+}
+
+let organizationTimer: NodeJS.Timeout | null = null
+
+/**
+ * Configure auto-organization behavior
+ */
+export function configureAutoOrganization(config: {
+  enabled?: boolean
+  threshold?: number
+  debounceMs?: number
+  currentPageUuid?: string
+  fileTree?: any[]
+  organizationCallback?: (fileTree: any[], instructions?: string) => Promise<{ success: boolean; organizedCount: number; error?: string; changedPaths?: string[] }>
+  highlightCallback?: (foldersToHighlight: Set<string>) => void
+}): void {
+  organizationConfig = { ...organizationConfig, ...config }
+  console.log('🗂️ Auto-organization configured:', {
+    enabled: organizationConfig.enabled,
+    threshold: organizationConfig.threshold,
+    debounceMs: organizationConfig.debounceMs,
+    hasPageUuid: !!organizationConfig.currentPageUuid,
+    fileTreeLength: organizationConfig.fileTree.length,
+    hasCallback: !!organizationConfig.organizationCallback
+  })
+}
+
+/**
+ * Update organization context (page UUID and file tree)
+ */
+export function updateOrganizationContext(pageUuid?: string, fileTree?: any[]): void {
+  if (pageUuid !== undefined) organizationConfig.currentPageUuid = pageUuid
+  if (fileTree !== undefined) organizationConfig.fileTree = fileTree
+  console.log('🗂️ Organization context updated:', { pageUuid, fileTreeLength: fileTree?.length })
+}
+
 /**
  * Generate unique ID for thoughts
  */
@@ -95,7 +140,7 @@ function createEmptyBrainState(): GlobalBrainState {
 }
 
 /**
- * Save brain state to localStorage
+ * Save brain state to localStorage and trigger organization if needed
  */
 function saveBrainStateToStorage(): void {
   try {
@@ -103,9 +148,110 @@ function saveBrainStateToStorage(): void {
     
     localStorage.setItem(BRAIN_STATE_KEY, JSON.stringify(globalBrainState))
     console.log('🧠 Brain state saved to localStorage')
+    
+    // Trigger debounced organization
+    triggerDebouncedOrganization()
   } catch (error) {
     console.error('🧠 Error saving brain state to localStorage:', error)
   }
+}
+
+/**
+ * Trigger debounced organization after brain state changes
+ */
+function triggerDebouncedOrganization(): void {
+  console.log('🗂️ triggerDebouncedOrganization called with config:', {
+    enabled: organizationConfig.enabled,
+    currentPageUuid: organizationConfig.currentPageUuid,
+    fileTreeLength: organizationConfig.fileTree.length,
+    threshold: organizationConfig.threshold
+  })
+  
+  // Skip if organization is disabled
+  if (!organizationConfig.enabled) {
+    console.log('🗂️ Skipping auto-organization: disabled')
+    return
+  }
+  
+  // Skip if we don't have the required context
+  if (!organizationConfig.currentPageUuid || organizationConfig.fileTree.length === 0) {
+    console.log('🗂️ Skipping auto-organization: missing page UUID or file tree', {
+      hasPageUuid: !!organizationConfig.currentPageUuid,
+      fileTreeLength: organizationConfig.fileTree.length
+    })
+    return
+  }
+  
+  // Clear existing timer
+  if (organizationTimer) {
+    clearTimeout(organizationTimer)
+  }
+  
+  // Set new debounced timer
+  organizationTimer = setTimeout(async () => {
+    try {
+      console.log('🗂️ Checking for auto-organization opportunity...')
+      
+      const unorganizedThoughts = getUnorganizedThoughtsForPage(organizationConfig.currentPageUuid!)
+      
+      if (unorganizedThoughts.length >= organizationConfig.threshold) {
+        console.log(`🗂️ Auto-organizing: ${unorganizedThoughts.length} unorganized thoughts (threshold: ${organizationConfig.threshold})`)
+        
+        let result: { success: boolean; organizedCount: number; error?: string; changedPaths?: string[] }
+        
+        // Use callback if available (preferred - uses organizeCurrentPageThoughts)
+        if (organizationConfig.organizationCallback) {
+          console.log('🗂️ Using organization callback (organizeCurrentPageThoughts)')
+          result = await organizationConfig.organizationCallback(
+            organizationConfig.fileTree,
+            `Auto-organize ${unorganizedThoughts.length} thoughts into appropriate categories and folders`
+          )
+        } else {
+          // Fallback to direct organizeThoughts call
+          console.log('🗂️ Using direct organizeThoughts call (fallback)')
+          result = await organizeThoughts(
+            organizationConfig.currentPageUuid!,
+            organizationConfig.fileTree,
+            `Auto-organize ${unorganizedThoughts.length} thoughts into appropriate categories and folders`
+          )
+        }
+        
+        if (result.success) {
+          console.log(`🗂️ ✅ Auto-organized ${result.organizedCount} thoughts`)
+          if (result.changedPaths && result.changedPaths.length > 0) {
+            console.log('🗂️ Changed paths during auto-organization:', result.changedPaths)
+            
+            // Highlight folders in the changed paths (matching page.tsx pattern)
+            const foldersToHighlight = new Set<string>()
+            
+            result.changedPaths.forEach((path: string) => {
+              // Split path and add each folder level for highlighting
+              const pathParts = path.split('/')
+              pathParts.forEach((folderName: string) => {
+                foldersToHighlight.add(folderName.trim())
+              })
+            })
+            
+            console.log('🗂️ Setting highlighted folders from auto-organization:', Array.from(foldersToHighlight))
+            
+            // Trigger folder highlighting through the organization callback
+            // This will need to be handled by the UI layer that has access to setHighlightedFolders
+            if (organizationConfig.highlightCallback) {
+              organizationConfig.highlightCallback(foldersToHighlight)
+            }
+          }
+        } else {
+          console.error('❌ Auto-organization failed:', result.error)
+        }
+      } else {
+        console.log(`🗂️ No auto-organization needed: ${unorganizedThoughts.length} unorganized thoughts (threshold: ${organizationConfig.threshold})`)
+      }
+    } catch (error) {
+      console.error('❌ Error in auto-organization:', error)
+    }
+  }, organizationConfig.debounceMs)
+  
+  console.log(`🗂️ Auto-organization scheduled in ${organizationConfig.debounceMs}ms`)
 }
 
 // Global brain state (singleton)
@@ -448,6 +594,198 @@ export function getBrainStateStats() {
       name: cat,
       count: getThoughtsByCategory(cat).length
     }))
+  }
+}
+
+/**
+ * Get all unorganized thoughts
+ */
+export function getUnorganizedThoughts(): ThoughtObject[] {
+  return Object.values(globalBrainState.thoughtsById)
+    .filter(thought => !thought.isDeleted && !thought.isOrganized)
+}
+
+/**
+ * Get unorganized thoughts for a specific page
+ */
+export function getUnorganizedThoughtsForPage(pageUuid: string): ThoughtObject[] {
+  const thoughtIds = globalBrainState.thoughtsByPage[pageUuid] || []
+  return thoughtIds
+    .map(id => globalBrainState.thoughtsById[id])
+    .filter(thought => thought && !thought.isDeleted && !thought.isOrganized)
+}
+
+/**
+ * Organize thoughts using the existing organize-note API
+ */
+export async function organizeThoughts(
+  pageUuid: string, 
+  fileTree: any[], 
+  organizationInstructions?: string
+): Promise<{ success: boolean; organizedCount: number; error?: string; changedPaths?: string[] }> {
+  try {
+    // BEFORE: Log the action and prepare data
+    console.log('🗂️ Starting thought organization for page:', pageUuid)
+    
+    // Get unorganized thoughts for this page
+    const unorganizedThoughts = getUnorganizedThoughtsForPage(pageUuid)
+    
+    if (unorganizedThoughts.length === 0) {
+      console.log('🗂️ No unorganized thoughts found for page:', pageUuid)
+      return { success: true, organizedCount: 0 }
+    }
+    
+    console.log(`🗂️ Found ${unorganizedThoughts.length} unorganized thoughts to organize`)
+    
+    // Get organization instructions (similar to page.tsx pattern)
+    const finalInstructions = organizationInstructions || 'Organize these thoughts into appropriate categories and folders'
+    console.log('🗂️ Organization instructions:', finalInstructions)
+    
+    // Combine all unorganized thoughts into a single content structure
+    const combinedContent = {
+      type: 'doc',
+      content: unorganizedThoughts.map(thought => ({
+        type: 'paragraph',
+        content: [{
+          type: 'text',
+          text: thought.content
+        }]
+      }))
+    }
+    
+    // API CALL: Call the organize-note API (matching the pattern from both files)
+    console.log('🗂️ Calling organization API...')
+    const response = await fetch('/api/organize-note', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        noteId: pageUuid,
+        noteContent: combinedContent,
+        organizationInstructions: finalInstructions,
+        fileTree: fileTree
+      })
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to organize thoughts')
+    }
+    
+    const result = await response.json()
+    console.log('🗂️ Organization API response:', result)
+    
+    // AFTER: Process successful response (similar to both page.tsx and DashboardSidebarProvider.tsx)
+    if (result.success) {
+      console.log('🗂️ Organization successful:', result.message)
+      console.log('🗂️ Changed paths:', result.changedPaths)
+      
+      // Update the thoughts as organized
+      if (result.organizedNotes) {
+        for (const organizedNote of result.organizedNotes) {
+          // Find thoughts that were organized into this note
+          // For now, we'll mark all unorganized thoughts as organized
+          // In a more sophisticated implementation, we could match content
+          unorganizedThoughts.forEach(thought => {
+            markThoughtAsOrganized(
+              thought.id,
+              organizedNote.folderPath || 'Unknown Path',
+              organizedNote.noteId || 'Unknown Note',
+              'Organized by AI into appropriate category',
+              new Date()
+            )
+          })
+        }
+      }
+      
+      // Save the updated brain state
+      saveBrainStateToStorage()
+      console.log(`🗂️ ✅ Successfully organized ${unorganizedThoughts.length} thoughts`)
+      
+      return { 
+        success: true, 
+        organizedCount: unorganizedThoughts.length,
+        changedPaths: result.changedPaths || []
+      }
+    } else {
+      // Handle API success=false case
+      console.error('🗂️ Organization failed:', result.error)
+      return { 
+        success: false, 
+        organizedCount: 0, 
+        error: result.error || 'Organization failed without specific error'
+      }
+    }
+    
+  } catch (error) {
+    // ERROR HANDLING: Log and return error (matching both files' pattern)
+    console.error('❌ Error organizing thoughts:', error)
+    return { 
+      success: false, 
+      organizedCount: 0, 
+      error: error instanceof Error ? error.message : 'Unknown error occurred during organization'
+    }
+  }
+}
+
+/**
+ * Mark a thought as organized
+ */
+export function markThoughtAsOrganized(
+  thoughtId: string,
+  organizedPath: string,
+  organizedNoteId: string,
+  organizationReasoning: string,
+  organizedAt: Date
+): boolean {
+  const thought = globalBrainState.thoughtsById[thoughtId]
+  if (!thought) {
+    console.error('🗂️ Thought not found for organization:', thoughtId)
+    return false
+  }
+  
+  thought.isOrganized = true
+  thought.organizedPath = organizedPath
+  thought.organizedNoteId = organizedNoteId
+  thought.organizationReasoning = organizationReasoning
+  thought.organizedAt = organizedAt
+  thought.lastUpdated = new Date()
+  
+  console.log(`🗂️ Marked thought as organized: ${thoughtId} -> ${organizedPath}`)
+  return true
+}
+
+/**
+ * Get organization statistics
+ */
+export function getOrganizationStats() {
+  const allThoughts = Object.values(globalBrainState.thoughtsById)
+    .filter(t => !t.isDeleted)
+  
+  const organizedThoughts = allThoughts.filter(t => t.isOrganized)
+  const unorganizedThoughts = allThoughts.filter(t => !t.isOrganized)
+  
+  return {
+    total: allThoughts.length,
+    organized: organizedThoughts.length,
+    unorganized: unorganizedThoughts.length,
+    organizationRate: allThoughts.length > 0 ? (organizedThoughts.length / allThoughts.length) * 100 : 0
+  }
+}
+
+/**
+ * Get auto-organization configuration for debugging
+ */
+export function getAutoOrganizationConfig() {
+  return {
+    enabled: organizationConfig.enabled,
+    threshold: organizationConfig.threshold,
+    debounceMs: organizationConfig.debounceMs,
+    currentPageUuid: organizationConfig.currentPageUuid,
+    fileTreeLength: organizationConfig.fileTree.length,
+    hasCallback: !!organizationConfig.organizationCallback,
+    hasTimer: !!organizationTimer
   }
 }
 
