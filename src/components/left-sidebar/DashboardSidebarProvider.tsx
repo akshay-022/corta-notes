@@ -8,6 +8,7 @@ import Sidebar from '@/components/left-sidebar/Sidebar'
 import { useDragAndDrop } from '@/hooks/useDragAndDrop'
 import { superMemorySyncService } from '@/lib/memory/memory-client-sync'
 import { createClient } from '@/lib/supabase/supabase-client'
+import { loadRelevantNotes } from '@/lib/supabase/page-loader'
 import logger from '@/lib/logger'
 import MobileLayoutWrapper from '@/components/mobile/MobileLayoutWrapper'
 import ChatPanel, { ChatPanelHandle } from '../right-sidebar/ChatPanel'
@@ -165,7 +166,7 @@ export default function DashboardSidebarProvider({ children }: { children: React
   const refreshOrganizedNotes = async () => {
     if (!user) return
     try {
-      await loadRelevantNotes(user, activePage)
+      await loadRelevantNotes(user.id)
     } catch (error) {
       console.error('❌ Failed to refresh organized notes:', error)
     }
