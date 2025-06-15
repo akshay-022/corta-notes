@@ -51,24 +51,30 @@ export function updateParagraphMetadata(
   // Set flag to prevent recursive transaction handling
   setUpdatingMetadata(true)
   
-  // Get all paragraphs
-  const paragraphs: Array<{ node: any, pos: number }> = []
-  editor.state.doc.descendants((node, pos) => {
-    if (node.type.name === 'paragraph') {
-      paragraphs.push({ node, pos })
+  // Find the specific paragraph by number (more efficient - stops early)
+  let currentParagraphIndex = 0
+  let targetParagraph: { node: any, pos: number } | null = null
+
+  editor.state.doc.nodesBetween(0, editor.state.doc.content.size, (node, pos) => {
+    // Count ALL nodes, not just paragraphs
+    if (currentParagraphIndex === paragraphNumber) {
+      // Found our target node!
+      targetParagraph = { node, pos }
+      return false // Stop traversing immediately
     }
+    currentParagraphIndex++
   })
-  
-  // Update the specific paragraph directly
-  if (paragraphs[paragraphNumber]) {
-    const { node, pos } = paragraphs[paragraphNumber]
+
+  // Update the specific node directly
+  if (targetParagraph) {
+    const { node, pos } = targetParagraph
     const tr = editor.state.tr.setNodeMarkup(pos, undefined, {
-      ...node.attrs,  // Keep existing attributes
+      ...(node as any).attrs,  // Keep existing attributes
       ...updateData   // Update with new metadata
     })
     editor.view.dispatch(tr)
   } else {
-    console.warn(`⚠️ Paragraph ${paragraphNumber} not found. Total paragraphs: ${paragraphs.length}`)
+    console.warn(`⚠️ Node ${paragraphNumber} not found`)
   }
   
   // Reset flag after transaction completes
@@ -132,9 +138,9 @@ export function markParagraphAsProcessed(
   setUpdatingMetadata(true)
   const tr = editor.state.tr
   
-  // Get all paragraphs to find the correct position
+  // Get all paragraphs to find the correct position using nodesBetween
   const paragraphs: Array<{ node: any, pos: number }> = []
-  editor.state.doc.descendants((node, pos) => {
+  editor.state.doc.nodesBetween(0, editor.state.doc.content.size, (node, pos) => {
     if (node.type.name === 'paragraph') {
       paragraphs.push({ node, pos })
     }
@@ -166,24 +172,65 @@ export function markParagraphAsProcessing(editor: Editor, paragraphNumber: numbe
 }
 
 /**
- * Get all unprocessed paragraphs in the editor
+ * Get all unprocessed paragraphs in the editor with their paragraph numbers
  */
-export function getUnprocessedParagraphs(editor: Editor): Array<{content: string, position: number}> {
-  const unprocessed: Array<{content: string, position: number}> = []
+export function getUnprocessedParagraphs(editor: Editor): Array<{content: string, paragraphNumber: number}> {
+  const unprocessed: Array<{content: string, paragraphNumber: number}> = []
+  let paragraphNumber = 0
+  let totalParagraphsFound = 0
   
-  editor.state.doc.descendants((node, pos) => {
-    if (node.type.name === 'paragraph' && 
-        node.attrs.processingStatus === 'unprocessed' &&
-        node.textContent.trim().length > 0) {
-      unprocessed.push({
-        content: node.textContent,
-        position: pos
-      })
+  console.log('🔍 Starting to count ALL paragraphs in document...')
+  console.log('🔍 Document size:', editor.state.doc.content.size)
+  
+  // Use nodesBetween to traverse the ENTIRE document from start to end
+  editor.state.doc.nodesBetween(0, editor.state.doc.content.size, (node, pos) => {
+    if (node.type.name === 'paragraph') {
+      totalParagraphsFound++
+      const content = node.textContent.trim()
+      const status = node.attrs.processingStatus
+      
+      console.log(`🔍 Paragraph #${paragraphNumber}: "${content.substring(0, 30)}..." (status: ${status}, empty: ${content.length === 0}, pos: ${pos})`)
+      
+      if (status === 'unprocessed' && content.length > 0) {
+        unprocessed.push({
+          content: node.textContent,
+          paragraphNumber: paragraphNumber
+        })
+        console.log(`✅ Added paragraph #${paragraphNumber} to unprocessed list`)
+      }
+      paragraphNumber++
     }
   })
   
-  console.log(`📊 Found ${unprocessed.length} unprocessed paragraphs`)
+  console.log(`🔍 Total paragraphs found: ${totalParagraphsFound}`)
+  console.log(`🔍 Unprocessed paragraphs: ${unprocessed.length}`)
+  console.log(`🔍 Final paragraph numbers assigned:`, unprocessed.map(p => ({ num: p.paragraphNumber, content: p.content.substring(0, 20) + '...' })))
+  
   return unprocessed
+}
+
+/**
+ * Helper function to convert document position to paragraph number
+ */
+export function getPositionParagraphNumber(editor: Editor, position: number): number {
+  let paragraphNumber = 0
+  let found = false
+  
+  // Use nodesBetween to traverse the ENTIRE document from start to end
+  editor.state.doc.nodesBetween(0, editor.state.doc.content.size, (node, pos) => {
+    if (node.type.name === 'paragraph') {
+      if (pos <= position && position <= pos + node.nodeSize) {
+        found = true
+        return false // Stop searching
+      }
+      if (!found) {
+        paragraphNumber++
+      }
+    }
+  })
+  
+  console.log(`🔍 Position ${position} maps to paragraph #${paragraphNumber} (found: ${found})`)
+  return found ? paragraphNumber : -1
 }
 
 /**
@@ -192,18 +239,15 @@ export function getUnprocessedParagraphs(editor: Editor): Array<{content: string
 export function updateBrainActivity(editor: Editor, activities: string[]): void {
   const { from } = editor.state.selection
   
-  // Find current paragraph number
-  let currentParagraphNumber = 0
-  editor.state.doc.descendants((node, pos) => {
-    if (node.type.name === 'paragraph') {
-      if (pos <= from) {
-        currentParagraphNumber++
-      }
-    }
-  })
+  // Use helper function to get current paragraph number
+  const currentParagraphNumber = getPositionParagraphNumber(editor, from)
   
-  updateParagraphMetadata(editor, currentParagraphNumber - 1, {
-    brainActivity: activities,
-    lastUpdated: new Date()
-  })
+  if (currentParagraphNumber >= 0) {
+    updateParagraphMetadata(editor, currentParagraphNumber, {
+      brainActivity: activities,
+      lastUpdated: new Date()
+    })
+  } else {
+    console.warn('⚠️ Could not determine current paragraph number for brain activity update')
+  }
 } 

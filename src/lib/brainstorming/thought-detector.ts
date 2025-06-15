@@ -65,8 +65,8 @@ export function detectLastThought(editor: any): string {
     editor.state.doc.content.content.forEach((node: { type: { name: string }, textContent: string, attrs: { lastUpdated?: string } }) => {
       // Get content from any node that has text
       const content = node.textContent.trim()
-      if (content) {
-        const timestamp = node.attrs.lastUpdated ? new Date(node.attrs.lastUpdated) : new Date()
+      if (content && node.attrs.lastUpdated) {
+        const timestamp = new Date(node.attrs.lastUpdated)
         contentBlocks.push({ content, timestamp })
       }
     })

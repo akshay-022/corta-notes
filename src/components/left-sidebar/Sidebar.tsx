@@ -37,8 +37,8 @@ interface SidebarProps {
   highlightedFolders: Set<string>
   setHighlightedFolders: (folders: Set<string> | ((prev: Set<string>) => Set<string>)) => void
   logout: () => void
+  onRefreshOrganizedNotes: () => Promise<void>
   onManualSync: () => void
-  onRefreshOrganizedNotes: () => void
   dragAndDrop: {
     dragState: { isDragging: boolean; dragItem: DragItem | null; dragOverElement: string | null }
     getDragHandlers: (item: DragItem) => any
@@ -65,10 +65,10 @@ export default function Sidebar({
   highlightedFolders,
   setHighlightedFolders,
   logout,
-  onManualSync,
-  isMobile,
   onRefreshOrganizedNotes,
-  dragAndDrop
+  onManualSync,
+  dragAndDrop,
+  isMobile
 }: SidebarProps) {
   const [renamingItem, setRenamingItem] = useState<Page | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -221,8 +221,8 @@ export default function Sidebar({
       return item.parent_uuid === parentId
     })
     
-    // console.log(`Building tree for parentId: ${parentId}, found ${filtered.length} items:`, 
-    //   filtered.map(item => ({ title: item.title, uuid: item.uuid, parent_uuid: item.parent_uuid })))
+    console.log(`Building tree for parentId: ${parentId}, found ${filtered.length} items:`, 
+      filtered.map(item => ({ title: item.title, uuid: item.uuid, parent_uuid: item.parent_uuid })))
     
     return filtered.sort((a, b) => {
       const aIsFolder = (a.metadata as any)?.isFolder
@@ -285,9 +285,7 @@ export default function Sidebar({
           className={`relative flex items-center cursor-pointer text-sm group transition-all duration-300 ${
             isHighlighted 
               ? 'border-l-2 border-[#65a30d]' 
-              : activePage?.uuid === item.uuid
-                ? 'bg-[#2a2a2a]'
-                : 'hover:bg-[#2a2d2e]'
+              : 'hover:bg-[#2a2d2e]'
           }`}
         >
           <div
@@ -308,7 +306,6 @@ export default function Sidebar({
               if (isFolder) {
                 toggleFolder(item.uuid)
               } else {
-                setActivePage(item)
                 router.push(`/dashboard/page/${item.uuid}`)
                 setSidebarOpen(false)
               }
@@ -468,7 +465,7 @@ export default function Sidebar({
                   isActive={false}
                   message="Drop here to move to recent notes"
                 />
-        {isSearchActive ? (
+{isSearchActive ? (
                   // Show search results - make them draggable
                   searchResults.map((doc, index) => {
                     // Find the corresponding page for this search result
@@ -571,15 +568,12 @@ export default function Sidebar({
                           isDraggedItem={isDraggedItem}
                           isDropTarget={false}
                           isValidDropTarget={false}
-                          className={`flex items-center text-sm group transition-colors py-1 cursor-pointer ${
-                            activePage?.uuid === item.uuid ? 'bg-[#2a2a2a]' : 'hover:bg-[#2a2d2e]'
-                          }`}
+                          className="flex items-center hover:bg-[#2a2d2e] text-sm group transition-colors py-1 cursor-pointer"
                         >
                           <div
                             {...dragHandlers}
                             style={{ paddingLeft: '16px', paddingRight: '16px' }}
                             onClick={() => {
-                              setActivePage(item)
                               router.push(`/dashboard/page/${item.uuid}`)
                               setSidebarOpen(false)
                             }}
@@ -625,17 +619,11 @@ export default function Sidebar({
               </div>
             )}
 
-            {/* Auto-organized notes section */}
-            <div className="px-4 pb-2 flex items-center justify-between">
-              <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">Auto-organized notes</h3>
-              <button
-                onClick={onRefreshOrganizedNotes}
-                className="text-[#969696] hover:text-[#cccccc] p-1 rounded transition-colors"
-                title="Refresh organized notes"
-              >
-                <RefreshCw size={12} />
-              </button>
-            </div>
+            {/* Auto-organized notes section - takes all remaining space */}
+            <div className="flex-1 flex flex-col min-h-0">
+              <div className="px-4 pb-2 flex-shrink-0">
+                <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">Auto-organized notes</h3>
+              </div>
 
               {/* File tree - only organized notes and folders - takes all remaining space */}
               <div 
@@ -717,6 +705,7 @@ export default function Sidebar({
             </div>
           </div>
         </div>
+      </div>
 
       {/* Context Menu */}
       {contextMenu && (
