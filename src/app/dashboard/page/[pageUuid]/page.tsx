@@ -44,6 +44,7 @@ export default function DashboardPageByUuid() {
         <TipTapEditor 
           page={activePage} 
           allPages={notesCtx?.pages || []}
+          pageRefreshCallback={notesCtx?.refreshOrganizedNotes}
           onUpdate={(updatedPage: Page) => {
             setActivePage(updatedPage)
             if (notesCtx) {

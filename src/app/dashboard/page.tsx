@@ -44,12 +44,12 @@ export default function DashboardPage() {
   if (!notesCtx) {
     return (
       <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center">
-        <div className="text-gray-400 text-sm">Loading...</div>
+        <div className="text-gray-400 text-sm">Loading notes context...</div>
       </div>
     )
   }
 
-  const { pages, activePage, setActivePage } = notesCtx
+  const { pages, activePage, setActivePage, refreshOrganizedNotes } = notesCtx
 
   return (
     <div className="h-screen bg-[#1a1a1a] flex overflow-hidden">
@@ -59,6 +59,7 @@ export default function DashboardPage() {
           <TipTapEditor 
             page={activePage} 
             allPages={pages}
+            pageRefreshCallback={refreshOrganizedNotes}
             onUpdate={(updatedPage: Page) => {
               setActivePage(updatedPage)
             }}

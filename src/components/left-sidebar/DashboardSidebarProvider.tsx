@@ -26,6 +26,7 @@ export const NotesContext = createContext<{
   activePage: Page | null
   setActivePage: (page: Page | null) => void
   updatePage: (updatedPage: Page) => void
+  refreshOrganizedNotes: () => Promise<void>
 } | null>(null)
 
 export function useNotes() {
@@ -166,7 +167,28 @@ export default function DashboardSidebarProvider({ children }: { children: React
   const refreshOrganizedNotes = async () => {
     if (!user) return
     try {
-      await loadRelevantNotes(user.id)
+      console.log('🔄 Refreshing organized notes from database...')
+      const freshPages = await loadRelevantNotes(user.id)
+      console.log(`🔄 Loaded ${freshPages.length} fresh pages from database`)
+      
+      // Update existing pages with fresh data, preserving all N pages
+      setPages(prevPages => {
+        const updatedPages = [...prevPages]
+        
+        // Update existing pages with fresh data
+        freshPages.forEach(freshPage => {
+          const existingIndex = updatedPages.findIndex(p => p.uuid === freshPage.uuid)
+          if (existingIndex !== -1) {
+            updatedPages[existingIndex] = freshPage
+          } else {
+            // Add new pages that weren't in the original set
+            updatedPages.push(freshPage)
+          }
+        })
+        
+        return updatedPages
+      })
+      console.log('🔄 ✅ Pages state updated with fresh organized notes while preserving all pages')
     } catch (error) {
       console.error('❌ Failed to refresh organized notes:', error)
     }
@@ -282,6 +304,11 @@ export default function DashboardSidebarProvider({ children }: { children: React
       })
       const result = await response.json()
       if (result.success) {
+        console.log('🗂️ Organization successful, refreshing organized notes...')
+        
+        // Refresh organized notes to show newly created/updated files
+        await refreshOrganizedNotes()
+        
         if (result.changedPaths && result.changedPaths.length > 0) {
           const foldersToHighlight = new Set<string>()
           result.changedPaths.forEach((path: string) => {
@@ -324,7 +351,7 @@ export default function DashboardSidebarProvider({ children }: { children: React
   }
 
   return (
-    <NotesContext.Provider value={{ pages, activePage, setActivePage, updatePage }}>
+    <NotesContext.Provider value={{ pages, activePage, setActivePage, updatePage, refreshOrganizedNotes }}>
       {isMobile ? (
         <MobileLayoutWrapper
           sidebar={
