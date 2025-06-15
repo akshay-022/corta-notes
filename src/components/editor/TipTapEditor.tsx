@@ -17,9 +17,10 @@ interface TipTapEditorProps {
   page: Page
   onUpdate: (page: Page) => void
   allPages?: Page[] // Add pages data for context
+  pageRefreshCallback?: () => Promise<void> // Add page refresh callback
 }
 
-export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEditorProps) {
+export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefreshCallback }: TipTapEditorProps) {
   const [title, setTitle] = useState(page.title)
   const [isSaving, setIsSaving] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -100,7 +101,10 @@ export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEd
   const updateTitle = async (newTitle: string) => {
     const { data, error } = await supabase
       .from('pages')
-      .update({ title: newTitle })
+      .update({ 
+        title: newTitle,
+        updated_at: new Date().toISOString()
+      })
       .eq('uuid', page.uuid)
       .select()
       .single()
@@ -256,10 +260,10 @@ export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEd
   // Setup thought tracking when editor is ready
   useEffect(() => {
     if (editor) {
-      setupThoughtTracking(editor, page.uuid, allPages)
+      setupThoughtTracking(editor, page.uuid, allPages, pageRefreshCallback)
       console.log('🧠 Thought tracking initialized for editor with page:', page.uuid)
     }
-  }, [editor, page.uuid])
+  }, [editor, page.uuid, pageRefreshCallback])
 
   // Update editor content when page changes (but not when user is typing)
   useEffect(() => {

@@ -89,11 +89,14 @@ export type Database = {
           is_locked: boolean | null
           is_published: boolean | null
           metadata: Json | null
+          organized: boolean | null
           parent_uuid: string | null
           title: string
+          type: string | null
           updated_at: string | null
           user_id: string | null
           uuid: string
+          visible: boolean | null
         }
         Insert: {
           content?: Json | null
@@ -106,11 +109,14 @@ export type Database = {
           is_locked?: boolean | null
           is_published?: boolean | null
           metadata?: Json | null
+          organized?: boolean | null
           parent_uuid?: string | null
           title: string
+          type?: string | null
           updated_at?: string | null
           user_id?: string | null
           uuid?: string
+          visible?: boolean | null
         }
         Update: {
           content?: Json | null
@@ -123,11 +129,14 @@ export type Database = {
           is_locked?: boolean | null
           is_published?: boolean | null
           metadata?: Json | null
+          organized?: boolean | null
           parent_uuid?: string | null
           title?: string
+          type?: string | null
           updated_at?: string | null
           user_id?: string | null
           uuid?: string
+          visible?: boolean | null
         }
         Relationships: [
           {

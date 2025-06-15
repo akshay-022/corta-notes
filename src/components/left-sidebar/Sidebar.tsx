@@ -168,16 +168,12 @@ export default function Sidebar({
       })
     } else if (item) {
       // If right-clicking on an item, check if that item is organized
-      isInOrganizedSection = !!(
-        (item.metadata as any)?.isFolder || 
-        (item.metadata as any)?.organizeStatus === 'yes' ||
-        !(item.metadata as any)?.hasOwnProperty('organizeStatus')
-      )
+      isInOrganizedSection = item.organized === true
       
       logger.info('Item context menu detection', { 
         itemTitle: item.title,
-        isFolder: (item.metadata as any)?.isFolder,
-        organizeStatus: (item.metadata as any)?.organizeStatus,
+        isFolder: item.type === 'folder',
+        organized: item.organized,
         isInOrganizedSection 
       })
     }
@@ -211,6 +207,31 @@ export default function Sidebar({
     })
   }
 
+  // Helper function to filter pages by organized status and visibility
+  const getUnorganizedPages = () => {
+    return pages.filter(page => 
+      page.organized === false && 
+      page.visible !== false && // Show visible pages (default to true if null)
+      !page.is_deleted // Exclude deleted pages
+    )
+  }
+
+  const getOrganizedPages = () => {
+    return pages.filter(page => 
+      page.organized === true && 
+      page.visible !== false && // Show visible pages (default to true if null)
+      !page.is_deleted // Exclude deleted pages
+    )
+  }
+
+  // Helper function to get recent unorganized notes (for the recent section)
+  const getRecentUnorganizedNotes = () => {
+    return getUnorganizedPages()
+      .filter(page => page.type === 'file')
+      .sort((a, b) => new Date(b.updated_at || b.created_at || '').getTime() - new Date(a.updated_at || a.created_at || '').getTime())
+      .slice(0, 10) // Show latest 10 notes
+  }
+
   const buildTree = (items: Page[], parentId?: string | null) => {
     const filtered = items.filter(item => {
       // If no parentId provided, get root level items (no parent or null parent)
@@ -225,8 +246,8 @@ export default function Sidebar({
       filtered.map(item => ({ title: item.title, uuid: item.uuid, parent_uuid: item.parent_uuid })))
     
     return filtered.sort((a, b) => {
-      const aIsFolder = (a.metadata as any)?.isFolder
-      const bIsFolder = (b.metadata as any)?.isFolder
+      const aIsFolder = a.type === 'folder'
+      const bIsFolder = b.type === 'folder'
       // Folders first
       if (aIsFolder && !bIsFolder) return -1
       if (!aIsFolder && bIsFolder) return 1
@@ -235,10 +256,13 @@ export default function Sidebar({
     })
   }
 
-  const renderTreeItem = (item: Page, level: number = 0) => {
-    const isFolder = (item.metadata as any)?.isFolder
+  const renderTreeItem = (item: Page, level: number = 0, section: 'organized' | 'unorganized' = 'organized') => {
+    const isFolder = item.type === 'folder'
     const isExpanded = expandedFolders.has(item.uuid)
-    const children = buildTree(pages, item.uuid)
+    
+    // For tree items, get children from the same section (organized/unorganized)
+    const sectionPages = section === 'organized' ? getOrganizedPages() : getUnorganizedPages()
+    const children = buildTree(sectionPages, item.uuid)
     const hasChildren = children.length > 0
     const isHighlighted = highlightedFolders.has(item.title)
     
@@ -252,12 +276,12 @@ export default function Sidebar({
       })
     }
 
-    // Set up drag functionality for organized items
+    // Set up drag functionality using the new structure
     const dragItem: DragItem = {
       id: item.uuid,
       type: isFolder ? 'folder' : 'note',
       title: item.title,
-      sourceSection: 'organized'
+      sourceSection: section // Use the section parameter directly
     }
     const dragHandlers = dragAndDrop.getDragHandlers(dragItem)
     const isDraggedItem = dragAndDrop.dragState.dragItem?.id === item.uuid
@@ -266,13 +290,15 @@ export default function Sidebar({
     const dropTarget: DropTarget = {
       id: isFolder ? item.uuid : null,
       type: isFolder ? 'folder' : 'section',
-      section: 'organized'
+      section: section // Use the section parameter directly
     }
     const dropHandlers = isFolder ? dragAndDrop.getDropHandlers(dropTarget) : {}
     const isDropTarget = dragAndDrop.dragState.dragOverElement === item.uuid
+    
+    // Update validation for new structure: only allow drops from unorganized to organized, or within organized
     const isValidDropTarget = isFolder && (
-      dragAndDrop.dragState.dragItem?.sourceSection === 'recent' ||
-      dragAndDrop.dragState.dragItem?.sourceSection === 'organized'
+      (dragAndDrop.dragState.dragItem?.sourceSection === 'unorganized' && section === 'organized') ||
+      (dragAndDrop.dragState.dragItem?.sourceSection === 'organized' && section === 'organized')
     )
 
     return (
@@ -353,7 +379,7 @@ export default function Sidebar({
         {isFolder && isExpanded && (
           <div>
             {children.map(child => 
-              renderTreeItem(child, level + 1)
+              renderTreeItem(child, level + 1, section)
             )}
           </div>
         )}
@@ -445,8 +471,8 @@ export default function Sidebar({
 
           {/* Scrollable Content Section */}
           <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Soon to be organized notes OR Search Results */}
-            {(isSearchActive || pages.filter(page => !((page.metadata as any)?.isFolder) && (page.metadata as any)?.organizeStatus === 'soon').length > 0) && (
+            {/* Recent unorganized notes OR Search Results */}
+            {(isSearchActive || getRecentUnorganizedNotes().length > 0) && (
               <div className="flex-shrink-0">
                 <div className="px-4 pb-2">
                   <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">
@@ -458,12 +484,12 @@ export default function Sidebar({
                   {...dragAndDrop.getDropHandlers({
                     id: null,
                     type: 'section',
-                    section: 'recent'
+                    section: 'unorganized'
                   })}
                 >
                 <DropZoneIndicator 
                   isActive={false}
-                  message="Drop here to move to recent notes"
+                  message="Drop here to move to unorganized notes"
                 />
 {isSearchActive ? (
                   // Show search results - make them draggable
@@ -507,7 +533,7 @@ export default function Sidebar({
                       id: correspondingPage.uuid,
                       type: 'note',
                       title: correspondingPage.title,
-                      sourceSection: 'recent' // Search results act like recent notes for drag purposes
+                      sourceSection: 'unorganized' // Search results act like unorganized notes for drag purposes
                     }
                     const dragHandlers = dragAndDrop.getDragHandlers(dragItem)
                     const isDraggedItem = dragAndDrop.dragState.dragItem?.id === correspondingPage.uuid
@@ -548,15 +574,13 @@ export default function Sidebar({
                     )
                   })
                 ) : (
-                  // Show recent notes
-                  pages
-                    .filter(page => !((page.metadata as any)?.isFolder) && (page.metadata as any)?.organizeStatus === 'soon')
-                    .map(item => {
+                  // Show recent unorganized notes
+                  getRecentUnorganizedNotes().map(item => {
                       const dragItem: DragItem = {
                         id: item.uuid,
                         type: 'note',
                         title: item.title,
-                        sourceSection: 'recent'
+                        sourceSection: 'unorganized'
                       }
                       const dragHandlers = dragAndDrop.getDragHandlers(dragItem)
                       const isDraggedItem = dragAndDrop.dragState.dragItem?.id === item.uuid
@@ -592,22 +616,12 @@ export default function Sidebar({
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  startOrganizing(item)
-                                }}
-                                className="p-1 hover:bg-[#404040] rounded text-[#969696] hover:text-[#cccccc] transition-colors"
-                                title="Add organization instructions"
-                              >
-                                <Edit size={12} />
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
                                   sendForOrganization(item)
                                 }}
-                                className="p-1 hover:bg-[#404040] rounded text-[#969696] hover:text-[#cccccc] transition-colors"
-                                title="Send for organization"
+                                className="p-1 hover:bg-[#404040] rounded transition-colors"
+                                title={`Organize "${item.title}"`}
                               >
-                                <Check size={12} />
+                                <Clock size={12} className="text-[#969696]" />
                               </button>
                             </div>
                           </div>
@@ -632,9 +646,7 @@ export default function Sidebar({
                 onContextMenu={(e) => handleContextMenu(e, 'root')}
               >
               {/* Only show section drop zone when there are no organized items or when specifically hovering empty space */}
-              {buildTree(pages.filter(page => 
-                (page.metadata as any)?.organizeStatus === 'yes'
-              )).length === 0 && dragAndDrop.dragState.isDragging && (
+              {buildTree(getOrganizedPages()).length === 0 && dragAndDrop.dragState.isDragging && (
                 <div 
                   className="h-full flex items-center justify-center"
                   {...dragAndDrop.getDropHandlers({
@@ -651,15 +663,11 @@ export default function Sidebar({
                 </div>
               )}
               
-              {/* Render the tree items */}
-              {buildTree(pages.filter(page => 
-                (page.metadata as any)?.organizeStatus === 'yes'
-              )).map(item => renderTreeItem(item))}
+              {/* Render the organized tree items */}
+              {buildTree(getOrganizedPages()).map(item => renderTreeItem(item, 0, 'organized'))}
               
               {/* Bottom drop zone for root level when items exist */}
-              {buildTree(pages.filter(page => 
-                (page.metadata as any)?.organizeStatus === 'yes'
-              )).length > 0 && dragAndDrop.dragState.isDragging && (
+              {buildTree(getOrganizedPages()).length > 0 && dragAndDrop.dragState.isDragging && (
                 <div 
                   className="h-16 flex items-center justify-center mx-4 mt-2"
                   {...dragAndDrop.getDropHandlers({
@@ -677,9 +685,7 @@ export default function Sidebar({
               )}
               
               {/* Invisible fill area to ensure all empty space is clickable */}
-              {buildTree(pages.filter(page => 
-                (page.metadata as any)?.organizeStatus === 'yes'
-              )).length > 0 && (
+              {buildTree(getOrganizedPages()).length > 0 && (
                 <div className="flex-1 min-h-[100px]" />
               )}
               </div>

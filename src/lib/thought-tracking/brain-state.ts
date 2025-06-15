@@ -240,6 +240,7 @@ function triggerDebouncedOrganization(): void {
             // This will need to be handled by the UI layer that has access to setHighlightedFolders
             if (organizationConfig.highlightCallback) {
               organizationConfig.highlightCallback(foldersToHighlight)
+              console.log('🗂️ ✅ Folder highlighting triggered for auto-organization')
             }
           }
         } else {
@@ -715,8 +716,9 @@ export async function organizeThoughts(
 
       // Use the page refresh callback if available
       if (organizationConfig.pageRefreshCallback) {
-        console.log('🔄 Refreshing pages using callback...')
+        console.log('🔄 Refreshing pages using callback to clear cache...')
         await organizationConfig.pageRefreshCallback()
+        console.log('🔄 ✅ Page refresh callback completed - cache should be cleared')
       } else {
         console.warn('⚠️ No page refresh callback configured - pages may not reflect changes')
       }

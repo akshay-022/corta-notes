@@ -72,7 +72,7 @@ export default function ChronologicalSidebar({
   // Filter out folders and deleted items, then sort by updated_at descending
   const sortedPages = pages
     .filter(page => 
-      !(page.metadata as any)?.isFolder && 
+      page.type === 'file' && 
       !page.is_deleted
     )
     .sort((a, b) => {

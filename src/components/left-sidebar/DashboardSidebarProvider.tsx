@@ -26,6 +26,7 @@ export const NotesContext = createContext<{
   activePage: Page | null
   setActivePage: (page: Page | null) => void
   updatePage: (updatedPage: Page) => void
+  refreshOrganizedNotes: () => Promise<void>
 } | null>(null)
 
 export function useNotes() {
@@ -124,7 +125,7 @@ export default function DashboardSidebarProvider({ children }: { children: React
             }
           } else if (pagesData.length > 0) {
             // Find first file (not folder) if no pageUuid
-            const firstFile = pagesData.find(p => !(p.metadata as any)?.isFolder)
+            const firstFile = pagesData.find(p => p.type === 'file')
             if (firstFile) {
               logger.info('Setting first file as active:', { pageId: firstFile.uuid })
               setActivePage(firstFile)
@@ -166,17 +167,44 @@ export default function DashboardSidebarProvider({ children }: { children: React
   const refreshOrganizedNotes = async () => {
     if (!user) return
     try {
-      await loadRelevantNotes(user.id)
+      console.log('🔄 Refreshing all pages from database to clear cache...')
+      
+      // Load ALL pages (same as initial load) to ensure we get newly created organized notes
+      const { data: freshPages, error } = await supabase
+        .from('pages')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_deleted', false)
+        .order('title', { ascending: true })
+
+      if (error) {
+        console.error('❌ Error refreshing pages:', error)
+        return
+      }
+
+      console.log(`🔄 Loaded ${freshPages?.length || 0} fresh pages from database`)
+      
+      if (freshPages) {
+        // Replace all pages with fresh data from database
+        setPages(freshPages)
+        
+        // Update active page if it exists in the fresh data
+        if (activePage) {
+          const updatedActivePage = freshPages.find(p => p.uuid === activePage.uuid)
+          if (updatedActivePage) {
+            setActivePage(updatedActivePage)
+          }
+        }
+      }
+      
+      console.log('🔄 ✅ All pages refreshed from database - cache cleared')
     } catch (error) {
-      console.error('❌ Failed to refresh organized notes:', error)
+      console.error('❌ Failed to refresh pages:', error)
     }
   }
 
   const createNewItem = async (isFolder: boolean, parentId?: string, shouldBeOrganized?: boolean) => {
     if (!user) return
-    let organizeStatus: string | undefined = undefined
-    if (shouldBeOrganized) organizeStatus = 'yes'
-    else if (!isFolder) organizeStatus = 'soon'
     const { data, error } = await supabase
       .from('pages')
       .insert({
@@ -184,7 +212,9 @@ export default function DashboardSidebarProvider({ children }: { children: React
         user_id: user.id,
         content: { type: 'doc', content: [] },
         parent_uuid: parentId || null,
-        metadata: { isFolder, organizeStatus }
+        type: isFolder ? 'folder' : 'file',
+        organized: shouldBeOrganized === true,
+        visible: true
       })
       .select()
       .single()
@@ -247,18 +277,20 @@ export default function DashboardSidebarProvider({ children }: { children: React
     }
   }
 
-  const moveItem = async (itemId: string, newParentId: string | null, newOrganizeStatus: 'soon' | 'yes') => {
+  const moveItem = async (itemId: string, newParentId: string | null, newOrganizedStatus: boolean) => {
     if (!user) return
     const itemToMove = pages.find(p => p.uuid === itemId)
     if (!itemToMove) return
-    const newMetadata = { ...(itemToMove.metadata as any), organizeStatus: newOrganizeStatus }
     const { error } = await supabase
       .from('pages')
-      .update({ parent_uuid: newParentId, metadata: newMetadata })
+      .update({ 
+        parent_uuid: newParentId, 
+        organized: newOrganizedStatus 
+      })
       .eq('uuid', itemId)
       .eq('user_id', user.id)
     if (!error) {
-      const updatedItem = { ...itemToMove, parent_uuid: newParentId, metadata: newMetadata }
+      const updatedItem = { ...itemToMove, parent_uuid: newParentId, organized: newOrganizedStatus }
       setPages(pages.map(p => p.uuid === itemId ? updatedItem : p))
       if (activePage?.uuid === itemId) setActivePage(updatedItem)
       if (newParentId) setExpandedFolders(prev => new Set([...prev, newParentId]))
@@ -281,6 +313,11 @@ export default function DashboardSidebarProvider({ children }: { children: React
       })
       const result = await response.json()
       if (result.success) {
+        console.log('🗂️ Organization successful, refreshing organized notes...')
+        
+        // Refresh organized notes to show newly created/updated files
+        await refreshOrganizedNotes()
+        
         if (result.changedPaths && result.changedPaths.length > 0) {
           const foldersToHighlight = new Set<string>()
           result.changedPaths.forEach((path: string) => {
@@ -323,7 +360,7 @@ export default function DashboardSidebarProvider({ children }: { children: React
   }
 
   return (
-    <NotesContext.Provider value={{ pages, activePage, setActivePage, updatePage }}>
+    <NotesContext.Provider value={{ pages, activePage, setActivePage, updatePage, refreshOrganizedNotes }}>
       {isMobile ? (
         <MobileLayoutWrapper
           sidebar={
