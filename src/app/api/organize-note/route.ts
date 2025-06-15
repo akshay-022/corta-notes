@@ -514,7 +514,8 @@ async function executeOrganizationPlan(
             lastBrainStateOrganizedAt: new Date().toISOString(),
             organizationReasoning: section.reasoning,
             organizedThoughtIds: section.thoughtIds || [],
-            originalNoteId: currentNote.uuid
+            originalNoteId: currentNote.uuid,
+            organizeStatus: 'yes' // Ensure organize status is set for cache refresh
           }
         })
         .eq('uuid', existingNote.uuid)
@@ -550,7 +551,8 @@ async function executeOrganizationPlan(
             organizationReasoning: section.reasoning,
             organizedThoughtIds: section.thoughtIds || [],
             createdFromBrainState: true,
-            brainStateOrganizedAt: new Date().toISOString()
+            brainStateOrganizedAt: new Date().toISOString(),
+            organizeStatus: 'yes' // Set organize status so it appears in loadRelevantNotes
           }
         })
         .select()
@@ -623,7 +625,10 @@ async function createNestedFolderPath(
           parent_uuid: currentParentId,
           type: 'folder',
           organized: true,
-          visible: true
+          visible: true,
+          metadata: {
+            organizeStatus: 'yes' // Set organize status so folders appear in loadRelevantNotes
+          }
         })
         .select()
         .single()

@@ -167,30 +167,39 @@ export default function DashboardSidebarProvider({ children }: { children: React
   const refreshOrganizedNotes = async () => {
     if (!user) return
     try {
-      console.log('🔄 Refreshing organized notes from database...')
-      const freshPages = await loadRelevantNotes(user.id)
-      console.log(`🔄 Loaded ${freshPages.length} fresh pages from database`)
+      console.log('🔄 Refreshing all pages from database to clear cache...')
       
-      // Update existing pages with fresh data, preserving all N pages
-      setPages(prevPages => {
-        const updatedPages = [...prevPages]
+      // Load ALL pages (same as initial load) to ensure we get newly created organized notes
+      const { data: freshPages, error } = await supabase
+        .from('pages')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_deleted', false)
+        .order('title', { ascending: true })
+
+      if (error) {
+        console.error('❌ Error refreshing pages:', error)
+        return
+      }
+
+      console.log(`🔄 Loaded ${freshPages?.length || 0} fresh pages from database`)
+      
+      if (freshPages) {
+        // Replace all pages with fresh data from database
+        setPages(freshPages)
         
-        // Update existing pages with fresh data
-        freshPages.forEach(freshPage => {
-          const existingIndex = updatedPages.findIndex(p => p.uuid === freshPage.uuid)
-          if (existingIndex !== -1) {
-            updatedPages[existingIndex] = freshPage
-          } else {
-            // Add new pages that weren't in the original set
-            updatedPages.push(freshPage)
+        // Update active page if it exists in the fresh data
+        if (activePage) {
+          const updatedActivePage = freshPages.find(p => p.uuid === activePage.uuid)
+          if (updatedActivePage) {
+            setActivePage(updatedActivePage)
           }
-        })
-        
-        return updatedPages
-      })
-      console.log('🔄 ✅ Pages state updated with fresh organized notes while preserving all pages')
+        }
+      }
+      
+      console.log('🔄 ✅ All pages refreshed from database - cache cleared')
     } catch (error) {
-      console.error('❌ Failed to refresh organized notes:', error)
+      console.error('❌ Failed to refresh pages:', error)
     }
   }
 
