@@ -159,6 +159,21 @@ export function setupThoughtTracking(
     metadataDebounceTimer = setTimeout(() => {
       updateCurrentParagraphMetadata(editor)
     }, 500)
+
+    // Detect Enter press / new paragraph creation
+    const isEnterPressed = transaction.steps.some((step: any) => {
+      // Check for exact Enter press signature: insertion that splits paragraph into 2
+      return step.from === step.to &&                    // Insertion (not replacement)
+             step.structure === true &&                  // Structural change
+             step.slice?.content?.childCount === 2
+    })
+
+    
+    if (isEnterPressed) {
+      console.log('🔍 Enter detected - updating previous paragraph metadata')
+      updateCurrentParagraphMetadata(editor, true)
+    }
+
   })
   
   // Handle editor destruction - sync one final time
@@ -394,10 +409,15 @@ export function getEditorDebugInfo(editor: Editor) {
 /**
  * Update current paragraph's metadata with timestamp
  */
-function updateCurrentParagraphMetadata(editor: Editor): void {
+function updateCurrentParagraphMetadata(editor: Editor, isEnterJustPressed: boolean = false): void {
   try {
-    const { from } = editor.state.selection
-    
+    let { from } = editor.state.selection
+
+    if (isEnterJustPressed) {
+      from = from - 1
+    }
+
+
     // Get current paragraph content to check if it's worth tracking
     let paragraphText = ''
     let paragraphNode: any = null
