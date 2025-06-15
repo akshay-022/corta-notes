@@ -327,11 +327,13 @@ export default function DashboardSidebarProvider({ children }: { children: React
             })
           })
           setHighlightedFolders(foldersToHighlight)
+          console.log('🗂️ ✅ Highlighting folders:', Array.from(foldersToHighlight))
         }
       } else {
         alert(`Organization failed: ${result.error}`)
       }
     } catch (error) {
+      console.error('❌ Organization error:', error)
       alert('Failed to organize note. Please try again.')
     }
   }

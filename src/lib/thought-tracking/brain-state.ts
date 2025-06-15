@@ -468,24 +468,41 @@ export function syncPageWithBrainState(pageUuid: string, editorContent: string):
  * Process thought with enhanced tracking (replaces old addThoughtToCategory)
  */
 export async function processThought(fullText: string, currentPageUuid?: string): Promise<void> {
+  console.log('🧠 === PROCESSING THOUGHT ===')
+  console.log('🧠 Content length:', fullText.length)
+  console.log('🧠 Content preview:', fullText.substring(0, 100) + (fullText.length > 100 ? '...' : ''))
+  console.log('🧠 Page UUID:', currentPageUuid)
+  
+  // Skip empty or very short content
+  if (!fullText || fullText.trim().length < 5) {
+    console.log('🧠 ❌ Content too short, skipping:', fullText.trim().length)
+    return
+  }
+  
   // Check if this exact content already exists
   const existingThought = Object.values(globalBrainState.thoughtsById)
-    .find(t => t.content === fullText && !t.isDeleted && t.pageUuid === currentPageUuid)
+    .find(t => t.content.trim() === fullText.trim() && !t.isDeleted && t.pageUuid === currentPageUuid)
   
   if (existingThought) {
-    console.log('🧠 Thought already exists, skipping processing:', existingThought.id)
+    console.log('🧠 ❌ Thought already exists, skipping processing:', existingThought.id)
     return
   }
 
-  console.log('🧠 Processing new thought:', fullText.substring(0, 50) + '...')
+  console.log('🧠 ✅ Processing new thought...')
   
+  try {
   // Categorize the text using LLM
-  const category = await categorizeThought(fullText)
+    const category = await categorizeThought(fullText.trim())
+    console.log('🧠 ✅ Categorization completed:', category)
   
   // Create new thought
-  createThought(fullText, category, currentPageUuid)
+    const thought = createThought(fullText.trim(), category, currentPageUuid)
+    console.log('🧠 ✅ Thought created successfully:', thought.id)
   
-  console.log('🧠 ✅ Thought processed and organized into category:', category)
+  } catch (error) {
+    console.error('🧠 ❌ Error processing thought:', error)
+    throw error
+  }
 }
 
 /**
@@ -813,6 +830,71 @@ export function getAutoOrganizationConfig() {
 export const addThoughtToCategory = (content: string, category: string) => {
   console.warn('🧠 addThoughtToCategory is deprecated, use createThought instead')
   return createThought(content, category)
+}
+
+/**
+ * Debug function to test brain state functionality
+ */
+export function debugBrainState(): void {
+  console.log('🧠 === BRAIN STATE DEBUG INFO ===')
+  console.log('🧠 Global brain state:', globalBrainState)
+  console.log('🧠 Total thoughts:', Object.keys(globalBrainState.thoughtsById).length)
+  console.log('🧠 Total categories:', Object.keys(globalBrainState.categories).length)
+  console.log('🧠 Total pages:', Object.keys(globalBrainState.thoughtsByPage).length)
+  console.log('🧠 Organization config:', getAutoOrganizationConfig())
+  
+  // Test localStorage
+  try {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(BRAIN_STATE_KEY)
+      console.log('🧠 LocalStorage key exists:', !!stored)
+      console.log('🧠 LocalStorage data:', stored ? JSON.parse(stored) : null)
+    } else {
+      console.log('🧠 Running in server environment (no localStorage)')
+    }
+  } catch (error) {
+    console.error('🧠 Error accessing localStorage:', error)
+  }
+}
+
+/**
+ * Test function to manually add a thought (for debugging)
+ */
+export async function testAddThought(content: string, pageUuid?: string): Promise<void> {
+  console.log('🧠 === TESTING THOUGHT ADDITION ===')
+  console.log('🧠 Content:', content)
+  console.log('🧠 Page UUID:', pageUuid)
+  
+  try {
+    // Check if thought already exists
+    const existingThought = Object.values(globalBrainState.thoughtsById)
+      .find(t => t.content === content && !t.isDeleted && t.pageUuid === pageUuid)
+    
+    if (existingThought) {
+      console.log('🧠 ❌ Thought already exists:', existingThought.id)
+      return
+    }
+    
+    console.log('🧠 ✅ Thought is new, proceeding with categorization...')
+    
+    // Test LLM categorization
+    const category = await categorizeThought(content)
+    console.log('🧠 ✅ Categorization successful:', category)
+    
+    // Create thought
+    const thought = createThought(content, category, pageUuid)
+    console.log('🧠 ✅ Thought created:', thought)
+    
+    // Verify it was saved
+    const savedThought = getThoughtById(thought.id)
+    console.log('🧠 ✅ Thought retrieved from state:', savedThought)
+    
+    console.log('🧠 === TEST COMPLETED SUCCESSFULLY ===')
+    
+  } catch (error) {
+    console.error('🧠 ❌ Test failed:', error)
+    throw error
+  }
 }
 
 

@@ -114,6 +114,13 @@ export async function POST(request: NextRequest) {
       .eq('uuid', noteId)
       .eq('user_id', user.id)
 
+    // Log cache invalidation info for client-side handling
+    console.log('📦 Cache invalidation needed for organized files')
+    console.log('📦 User ID:', user.id)
+    console.log('📦 Organized files paths:', organizationResults.changedPaths)
+    console.log('📦 Created folders:', organizationResults.createdFolders)
+    console.log('📦 Organized notes:', organizationResults.organizedNotes)
+
     return NextResponse.json({ 
       success: true, 
       message: `Successfully organized ${unorganizedThoughts.length} brain state thoughts! ${organizationResults.organizedNotes.filter(n => n.action === 'appended').length} notes were appended to, ${organizationResults.organizedNotes.filter(n => n.action === 'created').length} new notes were created.`,
@@ -185,7 +192,7 @@ ORGANIZATION APPROACH:
 
         if (searchResults && searchResults.length > 0) {
           // Filter out low-confidence results (below 30%)
-          const highConfidenceResults = searchResults.filter(doc => {
+          const highConfidenceResults = searchResults.filter((doc: any) => {
             const confidence = doc.score || 0;
             return confidence >= 0.3;
           });
@@ -194,11 +201,11 @@ ORGANIZATION APPROACH:
           
           // Get page data for high confidence results
           const pageUuids = highConfidenceResults
-            .map(result => result.metadata?.pageUuid)
+            .map((result: any) => result.metadata?.pageUuid)
             .filter(Boolean)
           
           if (pageUuids.length > 0 && supabase) {
-            // Single database query for all pageUuids
+            // Single database query for all pageUuids - only include organized files
             const { data: pagesData } = await supabase
               .from('pages')
               .select('uuid, title, folder_path, type, organized, visible')
@@ -359,6 +366,11 @@ function createCleanFileTree(fileTree: any[]) {
   function buildHierarchy(items: any[], parentId: string | null = null): any[] {
     return items
       .filter(item => item.parent_uuid === parentId)
+      .filter(item => {
+        // Only include organized files or folders
+        const isFolder = (item.metadata as any)?.isFolder
+        return isFolder || item.organized === true
+      })
       .map(item => {
         const isFolder = item.type === 'folder'
         const node: any = {
@@ -498,7 +510,8 @@ async function executeOrganizationPlan(
       item.type === 'file' && 
       item.organized === true &&
       item.title === pathResult.fileName && 
-      item.parent_uuid === pathResult.parentFolderId
+      item.parent_uuid === pathResult.parentFolderId &&
+      item.organized === true // Only merge with organized files
     )
 
     if (existingNote) {
@@ -550,7 +563,7 @@ async function executeOrganizationPlan(
         action: 'appended'
       })
     } else {
-      // Create a new organized note
+      // Create a new organized note with organized = true
       console.log(`Creating new organized note: ${pathResult.fileName}`)
       
       const { data: newNote, error: noteError } = await supabase
@@ -610,7 +623,7 @@ async function createNestedFolderPath(
   userId: string, 
   fullPath: string, 
   fileTree: any[]
-): Promise<{parentFolderId: string | null, fileName: string, isNewFolder: boolean}> {
+): Promise<{parentFolderId: string | null, fileName: string, isNewFolder: boolean} | null> {
   // Split the path - last part is filename, everything else are folders
   const pathParts = fullPath.split('/').map(name => name.trim())
   const fileName = pathParts[pathParts.length - 1] // Last part is the file name
