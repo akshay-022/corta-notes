@@ -114,6 +114,13 @@ export async function POST(request: NextRequest) {
       .eq('uuid', noteId)
       .eq('user_id', user.id)
 
+    // Log cache invalidation info for client-side handling
+    console.log('📦 Cache invalidation needed for organized files')
+    console.log('📦 User ID:', user.id)
+    console.log('📦 Organized files paths:', organizationResults.changedPaths)
+    console.log('📦 Created folders:', organizationResults.createdFolders)
+    console.log('📦 Organized notes:', organizationResults.organizedNotes)
+
     return NextResponse.json({ 
       success: true, 
       message: `Successfully organized ${unorganizedThoughts.length} brain state thoughts! ${organizationResults.organizedNotes.filter(n => n.action === 'appended').length} notes were appended to, ${organizationResults.organizedNotes.filter(n => n.action === 'created').length} new notes were created.`,
@@ -121,7 +128,17 @@ export async function POST(request: NextRequest) {
       changedPaths: organizationResults.changedPaths,
       createdFolders: organizationResults.createdFolders,
       organizedNotes: organizationResults.organizedNotes,
+<<<<<<< HEAD
       organizedThoughts: unorganizedThoughts.length
+=======
+      cacheInvalidation: {
+        invalidateCache: true,
+        userId: user.id, 
+        affectedPaths: organizationResults.changedPaths,
+        newFolders: organizationResults.createdFolders,
+        newNotes: organizationResults.organizedNotes
+      }
+>>>>>>> 2c0e738 (Organise working)
     })
 
   } catch (error) {
@@ -139,12 +156,17 @@ async function analyzeAndOrganizeBrainState(unorganizedThoughts: any[], instruct
   // Create a clean file tree hierarchy for GPT - only show organized files
   const cleanFileTree = createCleanFileTree(fileTree.filter(item => item.organized === true))
   
+<<<<<<< HEAD
   // Prepare brain state thoughts content for organization
   const thoughtsContent = unorganizedThoughts.map((thought: any, index: number) => 
     `${index + 1}. "${thought.content}"
    Last Updated: ${new Date(thought.lastUpdated).toLocaleDateString()}
    Category: ${thought.category || 'Uncategorized'}`
   ).join('\n\n')
+=======
+  // Create a clean file tree hierarchy for GPT - only include organized files
+  const cleanFileTree = createCleanFileTree(fileTree)
+>>>>>>> 2c0e738 (Organise working)
   
   // Build additional context from brain state
   let brainStateContext = ''
@@ -185,7 +207,7 @@ ORGANIZATION APPROACH:
 
         if (searchResults && searchResults.length > 0) {
           // Filter out low-confidence results (below 30%)
-          const highConfidenceResults = searchResults.filter(doc => {
+          const highConfidenceResults = searchResults.filter((doc: any) => {
             const confidence = doc.score || 0;
             return confidence >= 0.3;
           });
@@ -194,16 +216,22 @@ ORGANIZATION APPROACH:
           
           // Get page data for high confidence results
           const pageUuids = highConfidenceResults
-            .map(result => result.metadata?.pageUuid)
+            .map((result: any) => result.metadata?.pageUuid)
             .filter(Boolean)
           
           if (pageUuids.length > 0 && supabase) {
-            // Single database query for all pageUuids
+            // Single database query for all pageUuids - only include organized files
             const { data: pagesData } = await supabase
               .from('pages')
+<<<<<<< HEAD
               .select('uuid, title, folder_path, type, organized, visible')
               .in('uuid', pageUuids)
               .eq('organized', true) // Only get organized files for patterns
+=======
+              .select('uuid, title, folder_path, organized')
+              .in('uuid', pageUuids)
+              .eq('organized', true) // Only include organized files
+>>>>>>> 2c0e738 (Organise working)
             
             const relevantDocuments = []
             for (const result of highConfidenceResults) {
@@ -223,12 +251,21 @@ ORGANIZATION APPROACH:
               }
             }
 
+<<<<<<< HEAD
             console.log(`Found ${relevantDocuments.length} relevant organized documents`)
             
             if (relevantDocuments.length > 0) {
               memoryContext = `
 SIMILAR ORGANIZED CONTENT FOUND:
 These organized documents contain similar content to your brain state thoughts. Consider organizing your thoughts in similar locations:
+=======
+          console.log(`Found ${relevantDocuments.length} relevant organized documents with known locations`)
+          
+          // Create context summary for GPT with actual folder paths and content-based reasoning
+          memoryContext = `
+RELEVANT ORGANIZED DOCUMENTS FOUND IN YOUR KNOWLEDGE BASE:
+These documents are similar to the content being organized. Consider their locations when deciding where to organize the new content:
+>>>>>>> 2c0e738 (Organise working)
 
 ${relevantDocuments
   .map((doc, index) => 
@@ -278,6 +315,7 @@ IMPORTANT: You must respond with ONLY a valid JSON object in exactly this format
 Rules:
 1. targetFolder must be the FULL PATH including filename using "/" separator
 2. The LAST part of the path is the FILENAME for the organized note
+<<<<<<< HEAD
 3. STRONGLY PREFER EXISTING ORGANIZED FILES: Use existing files when thoughts are related
 4. Only create NEW files when thoughts don't fit any existing organized file
 5. COPY-PASTE approach: Keep the original thought content intact, just structure it cleanly
@@ -287,6 +325,19 @@ Rules:
 9. Group related thoughts together by theme/topic
 10. Use simple, clean formatting (bullet points, short headers if needed)
 11. Respond with ONLY the JSON, no markdown formatting or extra text
+=======
+3. Everything before the last "/" are folder names that will be created if they don't exist
+4. If folders exist in the current file tree, use exact names in the path
+5. PREFER EXISTING ORGANIZED FILES: Look at the current file tree and use existing file names when the content is related or similar - don't create new files unnecessarily
+6. Only suggest NEW filenames when the content doesn't fit well with any existing organized file
+7. If using an existing organized file, the content will be merged/appended to that file
+8. You can split content across multiple folder paths (multiple contentSections)
+9. For each unique targetFolder path, have only ONE contentSection with cumulative content
+10. Content can be the same or different portions of the original note
+11. Always provide clear reasoning for the folder path and filename choice (especially if choosing existing vs new file)
+12. Respond with ONLY the JSON, no markdown formatting or extra text
+13. CRITICAL: You can only organize to files that are marked as "organized" in the database. Do not suggest organizing to files that are not organized.
+>>>>>>> 2c0e738 (Organise working)
 
 FORMATTING STYLE:
 - Use bullet points for thoughts
@@ -304,13 +355,18 @@ ${thoughtsContent}
 
 Organization Instructions: ${instructions || 'No specific instructions - organize these thoughts cleanly into appropriate files.'}
 
+<<<<<<< HEAD
 Current Organized File Tree:
+=======
+Current File Tree (ONLY ORGANIZED FILES):
+>>>>>>> 2c0e738 (Organise working)
 ${JSON.stringify(cleanFileTree, null, 2)}
 
 ${brainStateContext}
 
 ${memoryContext}
 
+<<<<<<< HEAD
 Please copy-paste these brain state thoughts into appropriate organized files. Focus on:
 1. Clean structure and formatting
 2. Using existing organized files when thoughts are related
@@ -319,6 +375,16 @@ Please copy-paste these brain state thoughts into appropriate organized files. F
 5. ${memoryContext ? 'Consider the similar organized content locations' : 'Use the existing file structure as guidance'}
 
 ${!instructions ? 'Since no specific instructions were provided, organize based on content themes and existing file structure.' : ''}`
+=======
+IMPORTANT: 
+1. Look carefully at the existing ORGANIZED files in the file tree. If the new content is related to or would fit well with an existing organized file, use that existing file's name and path.
+2. ${memoryContext ? 'Consider the similar organized documents found in your knowledge base - they show where similar content is typically organized.' : ''}
+3. Only create new files when the content is truly different or unrelated to existing organized files.
+4. If memory service found similar documents, strongly consider organizing this content in a similar folder structure unless user instructions explicitly say otherwise.
+5. CRITICAL: You can only organize to files that are marked as "organized" in the database. All new files will be created with organized=true.
+
+${!instructions ? 'Since no specific instructions were provided, analyze the content and suggest the most logical organization based on the content type, topic, existing organized file structure, and similar document patterns.' : ''}`
+>>>>>>> 2c0e738 (Organise working)
           }
         ],
         temperature: 0.2,
@@ -359,13 +425,22 @@ function createCleanFileTree(fileTree: any[]) {
   function buildHierarchy(items: any[], parentId: string | null = null): any[] {
     return items
       .filter(item => item.parent_uuid === parentId)
+      .filter(item => {
+        // Only include organized files or folders
+        const isFolder = (item.metadata as any)?.isFolder
+        return isFolder || item.organized === true
+      })
       .map(item => {
         const isFolder = item.type === 'folder'
         const node: any = {
           id: item.uuid,
           name: item.title,
           type: isFolder ? 'folder' : 'file',
+<<<<<<< HEAD
           organized: item.organized
+=======
+          organized: item.organized || false
+>>>>>>> 2c0e738 (Organise working)
         }
         
         if (isFolder) {
@@ -493,17 +568,27 @@ async function executeOrganizationPlan(
       noteContent = convertMarkdownToTipTap(section.content)
     }
 
+<<<<<<< HEAD
     // Check if the target file already exists in organized tree
+=======
+    // Check if the target file already exists and is organized
+>>>>>>> 2c0e738 (Organise working)
     const existingNote = fileTree.find(item => 
       item.type === 'file' && 
       item.organized === true &&
       item.title === pathResult.fileName && 
-      item.parent_uuid === pathResult.parentFolderId
+      item.parent_uuid === pathResult.parentFolderId &&
+      item.organized === true // Only merge with organized files
     )
 
     if (existingNote) {
+<<<<<<< HEAD
       // APPEND content to existing organized note instead of replacing
       console.log(`Appending to existing organized note: ${pathResult.fileName}`)
+=======
+      // Merge content into existing organized note
+      console.log(`Merging content into existing organized note: ${pathResult.fileName}`)
+>>>>>>> 2c0e738 (Organise working)
       
       // Get the current content of the existing note
       const { data: currentNoteData, error: fetchError } = await supabase
@@ -550,7 +635,7 @@ async function executeOrganizationPlan(
         action: 'appended'
       })
     } else {
-      // Create a new organized note
+      // Create a new organized note with organized = true
       console.log(`Creating new organized note: ${pathResult.fileName}`)
       
       const { data: newNote, error: noteError } = await supabase
@@ -560,9 +645,13 @@ async function executeOrganizationPlan(
           user_id: userId,
           content: noteContent,
           parent_uuid: pathResult.parentFolderId,
+<<<<<<< HEAD
           type: 'file',
           organized: true,
           visible: true,
+=======
+          organized: true, // Set organized to true for new files
+>>>>>>> 2c0e738 (Organise working)
           metadata: { 
             originalNoteId: currentNote.uuid,
             organizationReasoning: section.reasoning,
@@ -610,7 +699,7 @@ async function createNestedFolderPath(
   userId: string, 
   fullPath: string, 
   fileTree: any[]
-): Promise<{parentFolderId: string | null, fileName: string, isNewFolder: boolean}> {
+): Promise<{parentFolderId: string | null, fileName: string, isNewFolder: boolean} | null> {
   // Split the path - last part is filename, everything else are folders
   const pathParts = fullPath.split('/').map(name => name.trim())
   const fileName = pathParts[pathParts.length - 1] // Last part is the file name
@@ -632,7 +721,11 @@ async function createNestedFolderPath(
     )
     
     if (!existingFolder) {
+<<<<<<< HEAD
       // Create the organized folder
+=======
+      // Create the folder with organized = true
+>>>>>>> 2c0e738 (Organise working)
       const { data: newFolder, error: folderError } = await supabase
         .from('pages')
         .insert({
@@ -640,19 +733,29 @@ async function createNestedFolderPath(
           user_id: userId,
           content: { type: 'doc', content: [] },
           parent_uuid: currentParentId,
+<<<<<<< HEAD
           type: 'folder',
           organized: true,
           visible: true,
           metadata: {
             organizeStatus: 'yes' // Set organize status so folders appear in loadRelevantNotes
           }
+=======
+          organized: true, // Set organized to true for new folders
+          metadata: { isFolder: true }
+>>>>>>> 2c0e738 (Organise working)
         })
         .select()
         .single()
 
       if (folderError) {
+<<<<<<< HEAD
         console.error(`Failed to create organized folder "${folderName}":`, folderError)
         return { parentFolderId: null, fileName, isNewFolder: false }
+=======
+        console.error(`Failed to create folder "${folderName}":`, folderError)
+        return null
+>>>>>>> 2c0e738 (Organise working)
       }
       
       existingFolder = newFolder
