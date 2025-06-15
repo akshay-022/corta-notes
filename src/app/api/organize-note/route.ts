@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ 
       success: true, 
-      message: `Successfully organized ${unorganizedThoughts.length} brain state thoughts!`,
+      message: `Successfully organized ${unorganizedThoughts.length} brain state thoughts! ${organizationResults.organizedNotes.filter(n => n.action === 'appended').length} notes were appended to, ${organizationResults.organizedNotes.filter(n => n.action === 'created').length} new notes were created.`,
       plan: organizationPlan,
       changedPaths: organizationResults.changedPaths,
       createdFolders: organizationResults.createdFolders,
@@ -502,18 +502,35 @@ async function executeOrganizationPlan(
     )
 
     if (existingNote) {
-      // UPDATE (replace) content in existing organized note - don't merge/append
-      console.log(`Updating existing organized note: ${pathResult.fileName}`)
+      // APPEND content to existing organized note instead of replacing
+      console.log(`Appending to existing organized note: ${pathResult.fileName}`)
+      
+      // Get the current content of the existing note
+      const { data: currentNoteData, error: fetchError } = await supabase
+        .from('pages')
+        .select('content')
+        .eq('uuid', existingNote.uuid)
+        .single()
+
+      if (fetchError) {
+        throw new Error(`Failed to fetch existing note content: ${fetchError.message}`)
+      }
+
+      // Merge the existing content with new content
+      const mergedContent = mergeContentWithExisting(currentNoteData.content, noteContent)
       
       const { data: updatedNote, error: updateError } = await supabase
         .from('pages')
         .update({
-          content: noteContent, // Replace content entirely
+          content: mergedContent, // Use merged content instead of replacing
           metadata: {
             ...existingNote.metadata,
             lastBrainStateOrganizedAt: new Date().toISOString(),
             organizationReasoning: section.reasoning,
-            organizedThoughtIds: section.thoughtIds || [],
+            organizedThoughtIds: [
+              ...(existingNote.metadata?.organizedThoughtIds || []),
+              ...(section.thoughtIds || [])
+            ],
             originalNoteId: currentNote.uuid,
             organizeStatus: 'yes' // Ensure organize status is set for cache refresh
           }
@@ -530,7 +547,7 @@ async function executeOrganizationPlan(
         noteId: existingNote.uuid,
         title: pathResult.fileName,
         folderPath: targetFolderPath,
-        action: 'updated'
+        action: 'appended'
       })
     } else {
       // Create a new organized note
@@ -727,4 +744,46 @@ function extractTextFromTipTap(content: any): string {
   
   content.content.forEach(extractText)
   return text.trim()
+}
+
+function mergeContentWithExisting(existingContent: any, newContent: any): any {
+  // Handle case where existing content is empty or invalid
+  if (!existingContent || !existingContent.content || !Array.isArray(existingContent.content)) {
+    return newContent
+  }
+  
+  // Handle case where new content is empty or invalid
+  if (!newContent || !newContent.content || !Array.isArray(newContent.content)) {
+    return existingContent
+  }
+  
+  // Add a separator between existing and new content
+  const separator = {
+    type: 'horizontalRule'
+  }
+  
+  // Add a timestamp header for the new content
+  const timestampHeader = {
+    type: 'paragraph',
+    content: [
+      {
+        type: 'text',
+        text: `--- Added ${new Date().toLocaleDateString()} ---`,
+        marks: [{ type: 'italic' }]
+      }
+    ]
+  }
+  
+  // Merge the content arrays
+  const mergedContent = {
+    type: 'doc',
+    content: [
+      ...existingContent.content,
+      separator,
+      timestampHeader,
+      ...newContent.content
+    ]
+  }
+  
+  return mergedContent
 } 
