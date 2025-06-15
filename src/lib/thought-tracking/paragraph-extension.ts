@@ -77,6 +77,16 @@ export const ThoughtParagraph = Paragraph.extend({
           return { 'data-thought-id': attributes.thoughtId }
         },
       },
+      
+      // Content hash for change detection
+      contentHash: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-content-hash'),
+        renderHTML: attributes => {
+          if (!attributes.contentHash) return {}
+          return { 'data-content-hash': attributes.contentHash }
+        },
+      },
     }
   },
 

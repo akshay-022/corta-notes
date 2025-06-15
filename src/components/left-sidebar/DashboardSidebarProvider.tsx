@@ -24,6 +24,7 @@ export const NotesContext = createContext<{
   pages: Page[]
   activePage: Page | null
   setActivePage: (page: Page | null) => void
+  updatePage: (updatedPage: Page) => void
 } | null>(null)
 
 export function useNotes() {
@@ -161,6 +162,15 @@ export default function DashboardSidebarProvider({ children }: { children: React
     }
   }
 
+  const refreshOrganizedNotes = async () => {
+    if (!user) return
+    try {
+      await loadRelevantNotes(user, activePage)
+    } catch (error) {
+      console.error('❌ Failed to refresh organized notes:', error)
+    }
+  }
+
   const createNewItem = async (isFolder: boolean, parentId?: string, shouldBeOrganized?: boolean) => {
     if (!user) return
     let organizeStatus: string | undefined = undefined
@@ -288,6 +298,14 @@ export default function DashboardSidebarProvider({ children }: { children: React
     }
   }
 
+  // Function to update a page in the context (for editor updates)
+  const updatePage = (updatedPage: Page) => {
+    setPages(pages.map(p => p.uuid === updatedPage.uuid ? updatedPage : p))
+    if (activePage?.uuid === updatedPage.uuid) {
+      setActivePage(updatedPage)
+    }
+  }
+
   const logout = async () => {
     await supabase.auth.signOut()
     router.push('/login')
@@ -304,7 +322,7 @@ export default function DashboardSidebarProvider({ children }: { children: React
   }
 
   return (
-    <NotesContext.Provider value={{ pages, activePage, setActivePage }}>
+    <NotesContext.Provider value={{ pages, activePage, setActivePage, updatePage }}>
       {isMobile ? (
         <MobileLayoutWrapper
           sidebar={
@@ -324,6 +342,7 @@ export default function DashboardSidebarProvider({ children }: { children: React
               updatePageMetadata={updatePageMetadata}
               sendForOrganization={sendForOrganization}
               highlightedFolders={highlightedFolders}
+              onRefreshOrganizedNotes={refreshOrganizedNotes}
               setHighlightedFolders={setHighlightedFolders}
               logout={logout}
               onManualSync={handleManualSync}
@@ -375,6 +394,7 @@ export default function DashboardSidebarProvider({ children }: { children: React
               highlightedFolders={highlightedFolders}
               setHighlightedFolders={setHighlightedFolders}
               logout={logout}
+              onRefreshOrganizedNotes={refreshOrganizedNotes}
               onManualSync={handleManualSync}
               dragAndDrop={dragAndDrop}
               isMobile={false}

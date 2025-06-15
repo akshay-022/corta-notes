@@ -24,6 +24,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEd
   const [isSaving, setIsSaving] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [isUserTyping, setIsUserTyping] = useState(false)
+  const [isUserEditingTitle, setIsUserEditingTitle] = useState(false) // Track title editing specifically
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [selections, setSelections] = useState<Array<{id: string, text: string, startLine: number, endLine: number}>>([])
   
@@ -106,15 +107,24 @@ export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEd
 
     if (data) {
       onUpdate(data)
+    } else if (error) {
+      console.error('updateTitle error:', error)
     }
+    
+    // Clear the editing flag after the update is complete
+    setIsUserEditingTitle(false)
   }
 
   const handleTitleSubmit = () => {
+    console.log('handleTitleSubmit', title)
     setIsEditingTitle(false)
     if (title !== page.title && title.trim()) {
+      console.log('updateTitle', title.trim())
       updateTitle(title.trim())
     } else {
+      console.log('resetTitle', page.title)
       setTitle(page.title) // Reset if unchanged
+      setIsUserEditingTitle(false) // Only clear flag if no update needed
     }
   }
 
@@ -126,12 +136,14 @@ export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEd
     } else if (e.key === 'Escape') {
       setTitle(page.title)
       setIsEditingTitle(false)
+      setIsUserEditingTitle(false) // Clear the title editing flag
       editor?.commands.focus()
     }
   }
 
   const startEditingTitle = () => {
     setIsEditingTitle(true)
+    setIsUserEditingTitle(true) // Set the title editing flag
     setTimeout(() => titleInputRef.current?.focus(), 0)
   }
 
@@ -166,7 +178,6 @@ export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEd
     
     if (from === to) {
       // No selection, clear selections
-      console.log('No text selected, clearing selections')
       setSelections([])
       return
     }
@@ -245,7 +256,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEd
   // Setup thought tracking when editor is ready
   useEffect(() => {
     if (editor) {
-      setupThoughtTracking(editor, page.uuid)
+      setupThoughtTracking(editor, page.uuid, allPages)
       console.log('🧠 Thought tracking initialized for editor with page:', page.uuid)
     }
   }, [editor, page.uuid])
@@ -262,11 +273,13 @@ export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEd
       }
       setTitle(page.title)
       setIsUserTyping(false)
-    } else if (!isUserTyping) {
-      // Only update title if user isn't typing
+      setIsUserEditingTitle(false) // Reset title editing flag on page change
+    } else if (!isUserEditingTitle) {
+      // Update title from props if user is not actively editing the title
+      // (regardless of whether they're typing in the editor content)
       setTitle(page.title)
     }
-  }, [page, editor, isUserTyping])
+  }, [page, editor, isUserEditingTitle]) // Changed dependency from isUserTyping to isUserEditingTitle
 
   if (!editor) {
     return (

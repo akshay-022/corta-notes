@@ -46,7 +46,10 @@ export default function DashboardPageByUuid() {
           allPages={notesCtx?.pages || []}
           onUpdate={(updatedPage: Page) => {
             setActivePage(updatedPage)
-            if (notesCtx) notesCtx.setActivePage(updatedPage)
+            if (notesCtx) {
+              notesCtx.setActivePage(updatedPage)
+              notesCtx.updatePage(updatedPage) // Update the pages array in context
+            }
           }}
         />
       ) : (
