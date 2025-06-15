@@ -4,13 +4,13 @@ export interface DragItem {
   id: string
   type: 'note' | 'folder'
   title: string
-  sourceSection: 'recent' | 'organized'
+  sourceSection: 'unorganized' | 'organized'
 }
 
 export interface DropTarget {
-  id: string | null // null for root of organized section
+  id: string | null // null for root of section
   type: 'folder' | 'section'
-  section: 'recent' | 'organized'
+  section: 'unorganized' | 'organized'
 }
 
 export interface DragDropState {
@@ -21,7 +21,7 @@ export interface DragDropState {
 }
 
 export interface UseDragAndDropProps {
-  onMoveItem: (itemId: string, newParentId: string | null, newOrganizeStatus: 'soon' | 'yes') => void
+  onMoveItem: (itemId: string, newParentId: string | null, newOrganizedStatus: boolean) => void
 }
 
 export function useDragAndDrop({ onMoveItem }: UseDragAndDropProps) {
@@ -64,25 +64,41 @@ export function useDragAndDrop({ onMoveItem }: UseDragAndDropProps) {
 
     console.log('Dropping item:', dragItem, 'onto target:', dropTarget)
 
-    // Determine the new organize status and parent
-    let newOrganizeStatus: 'soon' | 'yes' = dragItem.sourceSection === 'recent' ? 'soon' : 'yes'
+    // Determine the new organized status based on target section
+    let newOrganizedStatus: boolean
     let newParentId: string | null = null
 
     if (dropTarget.section === 'organized') {
-      newOrganizeStatus = 'yes'
+      // Moving to organized section - set organized = true
+      newOrganizedStatus = true
       newParentId = dropTarget.id // null for root, string for folder
-    } else if (dropTarget.section === 'recent') {
-      newOrganizeStatus = 'soon'
-      newParentId = null // Recent notes are always at root level
+    } else if (dropTarget.section === 'unorganized') {
+      // Moving to unorganized section - set organized = false
+      newOrganizedStatus = false
+      newParentId = null // Unorganized notes are always at root level
+    } else {
+      // Fallback - shouldn't happen
+      return
     }
 
-    // Only move if there's actually a change
-    const isMovingToOrganized = dragItem.sourceSection === 'recent' && dropTarget.section === 'organized'
+    // Validate allowed moves based on new structure:
+    // 1. Unorganized items can move to organized section (organize them)
+    // 2. Organized items can move within organized section (reorganize them)
+    // 3. Organized items CANNOT move back to unorganized section (separate trees)
+    
+    const isMovingToOrganized = dragItem.sourceSection === 'unorganized' && dropTarget.section === 'organized'
     const isMovingWithinOrganized = dragItem.sourceSection === 'organized' && dropTarget.section === 'organized'
+    const isMovingToUnorganized = dragItem.sourceSection === 'organized' && dropTarget.section === 'unorganized'
 
-    // Organized items can ONLY move within organized section
+    if (isMovingToUnorganized) {
+      console.log('Cannot move organized items back to unorganized section')
+      endDrag()
+      return
+    }
+
+    // Allow valid moves
     if (isMovingToOrganized || isMovingWithinOrganized) {
-      onMoveItem(dragItem.id, newParentId, newOrganizeStatus)
+      onMoveItem(dragItem.id, newParentId, newOrganizedStatus)
     }
 
     endDrag()

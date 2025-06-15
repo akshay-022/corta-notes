@@ -100,7 +100,10 @@ export default function TipTapEditor({ page, onUpdate, allPages = [] }: TipTapEd
   const updateTitle = async (newTitle: string) => {
     const { data, error } = await supabase
       .from('pages')
-      .update({ title: newTitle })
+      .update({ 
+        title: newTitle,
+        updated_at: new Date().toISOString()
+      })
       .eq('uuid', page.uuid)
       .select()
       .single()

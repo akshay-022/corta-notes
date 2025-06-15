@@ -124,7 +124,7 @@ export default function DashboardSidebarProvider({ children }: { children: React
             }
           } else if (pagesData.length > 0) {
             // Find first file (not folder) if no pageUuid
-            const firstFile = pagesData.find(p => !(p.metadata as any)?.isFolder)
+            const firstFile = pagesData.find(p => p.type === 'file')
             if (firstFile) {
               logger.info('Setting first file as active:', { pageId: firstFile.uuid })
               setActivePage(firstFile)
@@ -174,9 +174,6 @@ export default function DashboardSidebarProvider({ children }: { children: React
 
   const createNewItem = async (isFolder: boolean, parentId?: string, shouldBeOrganized?: boolean) => {
     if (!user) return
-    let organizeStatus: string | undefined = undefined
-    if (shouldBeOrganized) organizeStatus = 'yes'
-    else if (!isFolder) organizeStatus = 'soon'
     const { data, error } = await supabase
       .from('pages')
       .insert({
@@ -184,7 +181,9 @@ export default function DashboardSidebarProvider({ children }: { children: React
         user_id: user.id,
         content: { type: 'doc', content: [] },
         parent_uuid: parentId || null,
-        metadata: { isFolder, organizeStatus }
+        type: isFolder ? 'folder' : 'file',
+        organized: shouldBeOrganized === true,
+        visible: true
       })
       .select()
       .single()
@@ -247,18 +246,20 @@ export default function DashboardSidebarProvider({ children }: { children: React
     }
   }
 
-  const moveItem = async (itemId: string, newParentId: string | null, newOrganizeStatus: 'soon' | 'yes') => {
+  const moveItem = async (itemId: string, newParentId: string | null, newOrganizedStatus: boolean) => {
     if (!user) return
     const itemToMove = pages.find(p => p.uuid === itemId)
     if (!itemToMove) return
-    const newMetadata = { ...(itemToMove.metadata as any), organizeStatus: newOrganizeStatus }
     const { error } = await supabase
       .from('pages')
-      .update({ parent_uuid: newParentId, metadata: newMetadata })
+      .update({ 
+        parent_uuid: newParentId, 
+        organized: newOrganizedStatus 
+      })
       .eq('uuid', itemId)
       .eq('user_id', user.id)
     if (!error) {
-      const updatedItem = { ...itemToMove, parent_uuid: newParentId, metadata: newMetadata }
+      const updatedItem = { ...itemToMove, parent_uuid: newParentId, organized: newOrganizedStatus }
       setPages(pages.map(p => p.uuid === itemId ? updatedItem : p))
       if (activePage?.uuid === itemId) setActivePage(updatedItem)
       if (newParentId) setExpandedFolders(prev => new Set([...prev, newParentId]))

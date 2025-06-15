@@ -85,17 +85,19 @@ export async function POST(request: NextRequest) {
     // Execute the organization plan
     const organizationResults = await executeOrganizationPlan(supabase, user.id, currentNote, organizationPlan, fileTree)
 
-    // Update the original note's organize status - keep it as 'soon' so it remains in recent notes
+    // Keep the original note as unorganized but mark it with organization info in metadata
+    // The organized content goes to separate organized files
+    const updatedMetadata = {
+      ...currentNote.metadata,
+      organizationInstructions: organizationInstructions,
+      organizedAt: new Date().toISOString(),
+      hasBeenOrganized: true // Flag to indicate this note has been organized before
+    }
+
     await supabase
       .from('pages')
       .update({ 
-        metadata: { 
-          ...currentNote.metadata,
-          organizeStatus: 'soon',
-          organizationInstructions: organizationInstructions,
-          organizedAt: new Date().toISOString(),
-          hasBeenOrganized: true // Flag to indicate this note has been organized before
-        }
+        metadata: updatedMetadata
       })
       .eq('uuid', noteId)
       .eq('user_id', user.id)
@@ -205,7 +207,7 @@ SYNTHESIS INSTRUCTIONS:
             // Single database query for all pageUuids
             const { data: pagesData } = await supabase
               .from('pages')
-              .select('uuid, title, folder_path')
+              .select('uuid, title, folder_path, type, organized, visible')
               .in('uuid', pageUuids)
             
             // Map results to the high confidence search results
@@ -362,7 +364,7 @@ function createCleanFileTree(fileTree: any[]) {
     return items
       .filter(item => item.parent_uuid === parentId)
       .map(item => {
-        const isFolder = (item.metadata as any)?.isFolder
+        const isFolder = item.type === 'folder'
         const node: any = {
           id: item.uuid,
           name: item.title,
@@ -505,16 +507,17 @@ async function executeOrganizationPlan(
       }
     }
 
-    // Check if the target file already exists
+    // Check if the target file already exists in organized tree
     const existingNote = fileTree.find(item => 
-      !item.metadata?.isFolder && 
+      item.type === 'file' && 
+      item.organized === true &&
       item.title === pathResult.fileName && 
       item.parent_uuid === pathResult.parentFolderId
     )
 
     if (existingNote) {
-      // Merge content into existing note
-      console.log(`Merging content into existing note: ${pathResult.fileName}`)
+      // Merge content into existing organized note
+      console.log(`Merging content into existing organized note: ${pathResult.fileName}`)
       
       // Append new content to existing content
       const existingContent = existingNote.content || { type: 'doc', content: [] }
@@ -526,7 +529,6 @@ async function executeOrganizationPlan(
           content: mergedContent,
           metadata: {
             ...existingNote.metadata,
-            organizeStatus: 'yes',
             lastOrganizedAt: new Date().toISOString(),
             organizationReasoning: section.reasoning
           }
@@ -536,7 +538,7 @@ async function executeOrganizationPlan(
         .single()
 
       if (updateError) {
-        throw new Error(`Failed to update existing note: ${updateError.message}`)
+        throw new Error(`Failed to update existing organized note: ${updateError.message}`)
       }
 
       results.organizedNotes.push({
@@ -556,8 +558,10 @@ async function executeOrganizationPlan(
           user_id: userId,
           content: noteContent,
           parent_uuid: pathResult.parentFolderId,
+          type: 'file',
+          organized: true,
+          visible: true,
           metadata: { 
-            organizeStatus: 'yes',
             originalNoteId: currentNote.uuid,
             organizationReasoning: section.reasoning
           }
@@ -580,7 +584,7 @@ async function executeOrganizationPlan(
     console.log('Created organized note in folder path:', targetFolderPath)
   }
 
-  // Mark the original note as organized (don't delete it, just change status)
+  // Original note remains unorganized - we don't change its organized status
   console.log('Organization plan executed successfully')
   
   return results
@@ -604,15 +608,16 @@ async function createNestedFolderPath(
   for (let i = 0; i < folderNames.length; i++) {
     const folderName = folderNames[i]
     
-    // Look for existing folder at this level
+    // Look for existing organized folder at this level
     let existingFolder = fileTree.find(item => 
-      item.metadata?.isFolder && 
+      item.type === 'folder' && 
+      item.organized === true &&
       item.title === folderName && 
       item.parent_uuid === currentParentId
     )
     
     if (!existingFolder) {
-      // Create the folder
+      // Create the organized folder
       const { data: newFolder, error: folderError } = await supabase
         .from('pages')
         .insert({
@@ -620,19 +625,21 @@ async function createNestedFolderPath(
           user_id: userId,
           content: { type: 'doc', content: [] },
           parent_uuid: currentParentId,
-          metadata: { isFolder: true }
+          type: 'folder',
+          organized: true,
+          visible: true
         })
         .select()
         .single()
 
       if (folderError) {
-        console.error(`Failed to create folder "${folderName}":`, folderError)
+        console.error(`Failed to create organized folder "${folderName}":`, folderError)
         return { parentFolderId: null, fileName, isNewFolder: false }
       }
       
       existingFolder = newFolder
       isNewFolder = true
-      console.log(`Created new folder: ${folderName}`)
+      console.log(`Created new organized folder: ${folderName}`)
       
       // Add to file tree for future lookups in this request
       fileTree.push(existingFolder)
