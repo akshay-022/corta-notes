@@ -16,7 +16,9 @@ import {
   getOrganizationStats,
   updateOrganizationContext,
   configureAutoOrganization,
-  getAutoOrganizationConfig
+  getAutoOrganizationConfig,
+  debugBrainState,
+  testAddThought
 } from './brain-state'
 import { 
   updateParagraphMetadata, 
@@ -139,16 +141,11 @@ export function setupThoughtTracking(
     // Only sync if content has actually changed from last known state
     if (currentContent === lastEditorContent) return
     
-    // Debounced content synchronization (2000ms) - sync brain state with editor
-    // Increased delay to prevent aggressive syncing
-    if (syncTimer) clearTimeout(syncTimer)
-    syncTimer = setTimeout(() => {
-      // Double-check we're not in a page change before syncing
-      if (!isPageChanging && currentPageUuid) {
-        syncEditorWithBrainState(editor, currentContent)
-        lastEditorContent = currentContent
-      }
-    }, 2000)
+    // DISABLED: Automatic syncing to prevent accidental deletion of thoughts
+    // The sync function was too aggressive and deleted thoughts when users were typing
+    // Manual sync can still be triggered via forceSyncEditorWithBrainState()
+    console.log('🔄 Auto-sync disabled - use manual sync if needed')
+    lastEditorContent = currentContent
     
     // Removed double-enter detection - no longer needed
     
@@ -170,17 +167,18 @@ export function setupThoughtTracking(
 
     
     if (isEnterPressed) {
-      console.log('🔍 Enter detected - updating previous paragraph metadata')
+      console.log('🔍 Enter detected - updating previous paragraph metadata and processing thought')
       updateCurrentParagraphMetadata(editor, true)
+      
+      // Process the previous paragraph content as a thought (the one that was just completed)
+      processPreviousParagraph(editor)
     }
 
   })
   
-  // Handle editor destruction - sync one final time
+  // Handle editor destruction - disabled final sync to prevent data loss
   editor.on('destroy', () => {
-    if (currentPageUuid) {
-      syncEditorWithBrainState(editor, editor.getText())
-    }
+    console.log('🔄 Editor destroyed - auto-sync disabled to prevent data loss')
   })
   
   console.log('🧠 Enhanced thought tracking enabled with 1:1 synchronization')
@@ -189,7 +187,7 @@ export function setupThoughtTracking(
 /**
  * Sync editor content with brain state - handles deletions and updates
  * Only operates on thoughts that belong to the current page
- * CONSERVATIVE: Only deletes thoughts when we're very confident they've been removed
+ * ULTRA-CONSERVATIVE: Only deletes thoughts when we're absolutely certain they've been removed
  */
 function syncEditorWithBrainState(editor: Editor, currentContent: string): void {
   if (!currentPageUuid || isPageChanging) {
@@ -208,44 +206,64 @@ function syncEditorWithBrainState(editor: Editor, currentContent: string): void 
     return
   }
   
+  // ULTRA-CONSERVATIVE APPROACH: Only sync if we're absolutely certain
+  // Skip sync entirely if:
+  // 1. Content is too short (likely page load)
+  // 2. Content is too different from last known state
+  // 3. Too many thoughts would be affected
+  
+  const contentSimilarity = calculateSimilarity(lastEditorContent, currentContent)
+  
+  if (currentContent.trim().length < 10) {
+    console.log('🔄 Content too short, skipping sync to prevent data loss')
+    return
+  }
+  
+  if (contentSimilarity < 0.5) {
+    console.log('🔄 Content too different from last known state, skipping sync to prevent data loss')
+    console.log('🔄 Similarity:', contentSimilarity, 'Last content length:', lastEditorContent.length, 'Current length:', currentContent.length)
+    return
+  }
+  
   // Split content into non-empty lines
   const currentLines = currentContent.split('\n')
     .map(line => line.trim())
     .filter(line => line.length > 0)
   
-  // CONSERVATIVE DELETION: Only delete if we're very sure
-  // Check if the editor content is substantially different (not just a page load)
-  const contentSimilarity = calculateSimilarity(lastEditorContent, currentContent)
-  
-  if (contentSimilarity < 0.3) {
-    console.log('🔄 Content too different from last known state, skipping deletion to prevent data loss')
-    console.log('🔄 Similarity:', contentSimilarity, 'Last content length:', lastEditorContent.length, 'Current length:', currentContent.length)
+  // Only consider deletion if we have a substantial amount of content
+  if (currentLines.length < 2) {
+    console.log('🔄 Too few content lines, skipping deletion to prevent data loss')
     return
   }
   
-  // Find thoughts that no longer exist in editor content
-  // Only delete thoughts that belong to the current page AND we're confident about
-  const thoughtsToDelete = existingThoughts.filter(thought => {
+  // Find thoughts that MIGHT no longer exist in editor content
+  const thoughtsToConsiderForDeletion = existingThoughts.filter(thought => {
     const thoughtContent = thought.content.trim()
-    // Only consider for deletion if:
-    // 1. The thought belongs to the current page
-    // 2. It's not found in current content
-    // 3. The content change seems intentional (not a page load)
     return thought.pageUuid === currentPageUuid && 
-           !currentLines.some(line => line === thoughtContent) &&
-           contentSimilarity > 0.5 // Only delete if content is reasonably similar to last state
+           !currentLines.some(line => {
+             // Check for exact match OR high similarity
+             return line === thoughtContent || calculateSimilarity(line, thoughtContent) > 0.8
+           })
   })
   
-  // Only proceed with deletion if we found very few thoughts to delete
-  // This prevents mass deletion during page loads
-  if (thoughtsToDelete.length > Math.max(1, existingThoughts.length * 0.5)) {
-    console.log('🔄 Too many thoughts would be deleted (' + thoughtsToDelete.length + '/' + existingThoughts.length + '), skipping to prevent data loss')
+  // ULTRA-CONSERVATIVE: Only delete if very few thoughts are affected
+  // This prevents accidental mass deletion
+  if (thoughtsToConsiderForDeletion.length > 1 || thoughtsToConsiderForDeletion.length > existingThoughts.length * 0.2) {
+    console.log('🔄 Too many thoughts would be deleted (' + thoughtsToConsiderForDeletion.length + '/' + existingThoughts.length + '), skipping deletion to prevent data loss')
     return
   }
   
-  // Delete thoughts that are no longer in editor (only for current page)
+  // Only delete if we're absolutely certain
+  // Additional check: make sure the thought isn't just partially edited
+  const thoughtsToDelete = thoughtsToConsiderForDeletion.filter(thought => {
+    const thoughtContent = thought.content.trim()
+    // Don't delete if any current line is similar to this thought
+    return !currentLines.some(line => calculateSimilarity(line, thoughtContent) > 0.6)
+  })
+  
+  // Delete thoughts that are definitely no longer in editor
   thoughtsToDelete.forEach(thought => {
-    console.log('🗑️ Deleting thought no longer in editor (page: ' + currentPageUuid + '):', thought.content.substring(0, 30) + '...')
+    console.log('🗑️ Deleting thought confirmed not in editor (page: ' + currentPageUuid + '):', thought.content.substring(0, 30) + '...')
     deleteThought(thought.id)
     
     // Also update paragraph metadata if it has a thoughtId
@@ -260,13 +278,13 @@ function syncEditorWithBrainState(editor: Editor, currentContent: string): void 
   
   // Check for potential updates (lines that are similar but not exact matches)
   existingThoughts
-    .filter(thought => thought.pageUuid === currentPageUuid)
+    .filter(thought => thought.pageUuid === currentPageUuid && !thoughtsToDelete.includes(thought))
     .forEach(thought => {
       const thoughtContent = thought.content.trim()
       if (!currentLines.includes(thoughtContent)) {
         // This thought might have been updated - find the most similar line
         const similarLine = findMostSimilarLine(thoughtContent, newLines)
-        if (similarLine && calculateSimilarity(thoughtContent, similarLine) > 0.7) {
+        if (similarLine && calculateSimilarity(thoughtContent, similarLine) > 0.8) {
           console.log('📝 Updating thought content (page: ' + currentPageUuid + '):', {
             old: thoughtContent.substring(0, 30) + '...',
             new: similarLine.substring(0, 30) + '...'
@@ -381,16 +399,74 @@ function updateParagraphsWithThoughtId(editor: Editor, thoughtId: string, update
  * Process the current paragraph
  */
 export function processCurrentParagraph(editor: Editor): void {
-  const currentText = editor.getText()
+  // Get the current paragraph content, not the entire editor text
+  let currentText = ''
+  let { from } = editor.state.selection
   
-  // Process the thought
-  processThought(currentText, currentPageUuid)
-    .then(() => {
-      console.log('Paragraph processed successfully')
-    })
-    .catch(error => {
-      console.error('Error processing paragraph:', error)
-    })
+  // Find the current paragraph content
+  editor.state.doc.descendants((node, pos) => {
+    if (pos <= from && from <= pos + node.nodeSize) {
+      // This is the node containing the cursor
+      currentText = node.textContent.trim()
+      return false // Stop searching
+    }
+  })
+  
+  console.log('🧠 Processing current paragraph:', currentText.substring(0, 50) + (currentText.length > 50 ? '...' : ''))
+  
+  // Only process if we have meaningful content
+  if (currentText && currentText.length > 5) {
+    // Process the thought
+    processThought(currentText, currentPageUuid)
+      .then(() => {
+        console.log('🧠 ✅ Paragraph processed successfully')
+      })
+      .catch(error => {
+        console.error('🧠 ❌ Error processing paragraph:', error)
+      })
+  } else {
+    console.log('🧠 ⚠️ Skipping paragraph processing - content too short or empty')
+  }
+}
+
+/**
+ * Process the previous paragraph (used when Enter is pressed to complete a thought)
+ */
+export function processPreviousParagraph(editor: Editor): void {
+  let previousText = ''
+  let { from } = editor.state.selection
+  let foundPrevious = false
+  
+  // Find the previous paragraph content
+  editor.state.doc.descendants((node, pos) => {
+    if (foundPrevious || node.type.name !== 'paragraph') return
+    
+    // Check if this paragraph is before the current cursor position
+    if (pos + node.nodeSize < from) {
+      // This is a paragraph before the cursor, keep tracking it as potential previous
+      previousText = node.textContent.trim()
+    } else if (pos >= from) {
+      // We've reached the current position, so we have the previous paragraph
+      foundPrevious = true
+      return false // Stop searching
+    }
+  })
+  
+  console.log('🧠 Processing previous paragraph (Enter pressed):', previousText.substring(0, 50) + (previousText.length > 50 ? '...' : ''))
+  
+  // Only process if we have meaningful content
+  if (previousText && previousText.length > 5) {
+    // Process the thought
+    processThought(previousText, currentPageUuid)
+      .then(() => {
+        console.log('🧠 ✅ Previous paragraph processed successfully')
+      })
+      .catch(error => {
+        console.error('🧠 ❌ Error processing previous paragraph:', error)
+      })
+  } else {
+    console.log('🧠 ⚠️ Skipping previous paragraph processing - content too short or empty')
+  }
 }
 
 /**
@@ -731,6 +807,100 @@ export function getPageRefreshStatus(): { configured: boolean; hasCallback: bool
     configured: !!pageRefreshCallback,
     hasCallback: !!pageRefreshCallback
   }
+}
+
+/**
+ * Debug function to test brain state from browser console
+ * Usage: window.debugBrainState()
+ */
+export function debugBrainStateFromConsole(): void {
+  console.log('🧠 === BRAIN STATE DEBUG (from console) ===')
+  debugBrainState()
+  
+  console.log('🧠 Current page context:')
+  console.log('🧠 - Current page UUID:', currentPageUuid)
+  console.log('🧠 - Thought tracking enabled:', isThoughtTrackingEnabled)
+  console.log('🧠 - Is processing thoughts:', isProcessingThoughts)
+  console.log('🧠 - Is updating metadata:', isUpdatingMetadata)
+  
+  if (currentPageUuid) {
+    const pageThoughts = getThoughtsForPage(currentPageUuid)
+    const unorganizedThoughts = getUnorganizedThoughtsForPage(currentPageUuid)
+    console.log('🧠 - Page thoughts:', pageThoughts.length)
+    console.log('🧠 - Unorganized thoughts:', unorganizedThoughts.length)
+  }
+}
+
+/**
+ * Test adding a thought from browser console
+ * Usage: window.testAddThoughtFromConsole("My test thought")
+ */
+export async function testAddThoughtFromConsole(content: string): Promise<void> {
+  console.log('🧠 === TESTING THOUGHT FROM CONSOLE ===')
+  
+  if (!content || content.trim().length === 0) {
+    console.error('🧠 ❌ Please provide content for the thought')
+    return
+  }
+  
+  try {
+    await testAddThought(content, currentPageUuid)
+    console.log('🧠 ✅ Test completed successfully!')
+    
+    // Show updated stats
+    const stats = getBrainState()
+    console.log('🧠 Updated brain state stats:')
+    console.log('🧠 - Total thoughts:', Object.keys(stats.thoughtsById).length)
+    console.log('🧠 - Total categories:', Object.keys(stats.categories).length)
+    
+  } catch (error) {
+    console.error('🧠 ❌ Test failed:', error)
+  }
+}
+
+/**
+ * Test processing the current paragraph content (for debugging)
+ * Usage: window.testProcessCurrentParagraph()
+ */
+export function testProcessCurrentParagraph(): void {
+  console.log('🧠 === TESTING CURRENT PARAGRAPH PROCESSING ===')
+  
+  if (!currentPageUuid) {
+    console.error('🧠 ❌ No current page UUID set')
+    return
+  }
+  
+  // Get some test content instead of relying on editor
+  const testContent = "This is a test thought for debugging brain state processing"
+  
+  console.log('🧠 Test content:', testContent)
+  console.log('🧠 Current page UUID:', currentPageUuid)
+  
+  processThought(testContent, currentPageUuid)
+    .then(() => {
+      console.log('🧠 ✅ Test processing completed')
+      
+      // Show results
+      const brainState = getBrainState()
+      console.log('🧠 Updated brain state:')
+      console.log('🧠 - Total thoughts:', Object.keys(brainState.thoughtsById).length)
+      console.log('🧠 - Total categories:', Object.keys(brainState.categories).length)
+      console.log('🧠 - Page thoughts:', getThoughtsForPage(currentPageUuid!))
+    })
+    .catch(error => {
+      console.error('🧠 ❌ Test processing failed:', error)
+    })
+}
+
+// Make debug functions available globally for console access
+if (typeof window !== 'undefined') {
+  (window as any).debugBrainState = debugBrainStateFromConsole;
+  (window as any).testAddThoughtFromConsole = testAddThoughtFromConsole;
+  (window as any).testProcessCurrentParagraph = testProcessCurrentParagraph;
+  (window as any).processCurrentParagraph = processCurrentParagraph;
+  (window as any).processPreviousParagraph = processPreviousParagraph;
+  (window as any).getBrainState = getBrainState;
+  (window as any).testAutoOrganization = testAutoOrganization;
 }
 
 
