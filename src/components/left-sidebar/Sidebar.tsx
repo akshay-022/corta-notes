@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, LogOut, Plus, Edit3, Edit, Check, X, RefreshCw, Clock, Trash } from 'lucide-react'
 import { Page } from '@/lib/supabase/types'
 import { DragDropStyles, isValidDrop, DropZoneIndicator } from '@/components/left-sidebar/DragDropStyles'
@@ -45,6 +45,8 @@ interface SidebarProps {
     getDropHandlers: (target: DropTarget) => any
   }
   isMobile?: boolean
+  newlyCreatedItem?: Page | null
+  onClearNewlyCreatedItem?: () => void
 }
 
 export default function Sidebar({
@@ -68,7 +70,9 @@ export default function Sidebar({
   onRefreshOrganizedNotes,
   onManualSync,
   dragAndDrop,
-  isMobile
+  isMobile,
+  newlyCreatedItem,
+  onClearNewlyCreatedItem
 }: SidebarProps) {
   const [renamingItem, setRenamingItem] = useState<Page | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -79,6 +83,18 @@ export default function Sidebar({
   const [viewMode, setViewMode] = useState<'normal' | 'chronological'>('normal')
 
   const router = useRouter();
+
+  // Auto-trigger rename mode for newly created items
+  useEffect(() => {
+    if (newlyCreatedItem) {
+      logger.info('Auto-triggering rename for newly created item:', { title: newlyCreatedItem.title })
+      startRename(newlyCreatedItem)
+      // Clear the newly created item to prevent re-triggering
+      if (onClearNewlyCreatedItem) {
+        onClearNewlyCreatedItem()
+      }
+    }
+  }, [newlyCreatedItem, onClearNewlyCreatedItem])
 
   const startRename = (item: Page) => {
     setRenamingItem(item)

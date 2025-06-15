@@ -49,6 +49,7 @@ export default function DashboardSidebarProvider({ children }: { children: React
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [selections, setSelections] = useState<any[]>([])
+  const [newlyCreatedItem, setNewlyCreatedItem] = useState<Page | null>(null)
   const chatPanelRef = useRef<ChatPanelHandle>(null)
 
   // Mobile detection
@@ -225,6 +226,12 @@ export default function DashboardSidebarProvider({ children }: { children: React
         setSidebarOpen(false)
       }
       if (parentId) setExpandedFolders(prev => new Set([...prev, parentId]))
+      
+      // Auto-trigger rename mode for the newly created item
+      // We need to use a small delay to ensure the item is rendered first
+      setTimeout(() => {
+        setNewlyCreatedItem(data)
+      }, 100)
     }
     setContextMenu(null)
   }
@@ -353,6 +360,11 @@ export default function DashboardSidebarProvider({ children }: { children: React
 
   const dragAndDrop = useDragAndDrop({ onMoveItem: moveItem })
 
+  // Function to clear newly created item (called when rename is done)
+  const clearNewlyCreatedItem = () => {
+    setNewlyCreatedItem(null)
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center">
@@ -388,6 +400,8 @@ export default function DashboardSidebarProvider({ children }: { children: React
               onManualSync={handleManualSync}
               dragAndDrop={dragAndDrop}
               isMobile={true}
+              newlyCreatedItem={newlyCreatedItem}
+              onClearNewlyCreatedItem={clearNewlyCreatedItem}
             />
           }
           editor={children}
@@ -438,6 +452,8 @@ export default function DashboardSidebarProvider({ children }: { children: React
               onManualSync={handleManualSync}
               dragAndDrop={dragAndDrop}
               isMobile={false}
+              newlyCreatedItem={newlyCreatedItem}
+              onClearNewlyCreatedItem={clearNewlyCreatedItem}
             />
           </div>
           {/* Desktop Main content */}

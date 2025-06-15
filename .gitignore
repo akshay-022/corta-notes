@@ -43,3 +43,7 @@ next-env.d.ts
 .vscode/chrome*
 
 *.svg
+
+# cloudflare workers
+.wrangler/
+worker-configuration.json
