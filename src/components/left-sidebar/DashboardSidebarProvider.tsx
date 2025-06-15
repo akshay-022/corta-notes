@@ -227,11 +227,8 @@ export default function DashboardSidebarProvider({ children }: { children: React
       }
       if (parentId) setExpandedFolders(prev => new Set([...prev, parentId]))
       
-      // Auto-trigger rename mode for the newly created item
-      // We need to use a small delay to ensure the item is rendered first
-      setTimeout(() => {
-        setNewlyCreatedItem(data)
-      }, 100)
+      // Auto-trigger rename mode for the newly created item immediately
+      setNewlyCreatedItem(data)
     }
     setContextMenu(null)
   }

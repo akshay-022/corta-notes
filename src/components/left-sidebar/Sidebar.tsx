@@ -88,7 +88,9 @@ export default function Sidebar({
   useEffect(() => {
     if (newlyCreatedItem) {
       logger.info('Auto-triggering rename for newly created item:', { title: newlyCreatedItem.title })
-      startRename(newlyCreatedItem)
+      // Set as renaming item so the input field works properly
+      setRenamingItem(newlyCreatedItem)
+      setRenameValue('') // Start with blank for new items
       // Clear the newly created item to prevent re-triggering
       if (onClearNewlyCreatedItem) {
         onClearNewlyCreatedItem()
@@ -99,6 +101,11 @@ export default function Sidebar({
   const startRename = (item: Page) => {
     setRenamingItem(item)
     setRenameValue(item.title)
+  }
+
+  const startRenameForNewItem = (item: Page) => {
+    setRenamingItem(item)
+    setRenameValue('') // Start with blank field for newly created items
   }
 
   const handleRenameSubmit = () => {
@@ -369,10 +376,10 @@ export default function Sidebar({
             </div>
             
             {/* Title - with inline editing */}
-            {renamingItem?.uuid === item.uuid ? (
+            {(renamingItem?.uuid === item.uuid || newlyCreatedItem?.uuid === item.uuid) ? (
               <input
                 type="text"
-                value={renameValue}
+                value={newlyCreatedItem?.uuid === item.uuid ? '' : renameValue}
                 onChange={(e) => setRenameValue(e.target.value)}
                 onBlur={handleRenameSubmit}
                 onKeyDown={(e) => {
