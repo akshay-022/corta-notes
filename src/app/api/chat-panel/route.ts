@@ -74,28 +74,91 @@ export async function POST(req: Request) {
       finalMessages = [{ role: "user", content: currentMessage }];
     }
 
-    // Make the call to OpenAI with final messages
+    // Make the call to OpenAI with streaming enabled
     const resp = await openai.createChatCompletion({
-      model: "gpt-4o",
+      model: "chatgpt-4o-latest",
       messages: finalMessages,
+      stream: true,
       // max_tokens: 150,
       // temperature: 0.7,
     });
 
-    const result = await resp.json();
-    
-    // Return the response with context info
-    const response = {
-      response: result.choices?.[0]?.message?.content || 'No response generated', 
-      contextUsed: relevantDocuments.length > 0,
-      documentsFound: relevantDocuments.length,
-      relevantDocuments: relevantDocuments.map(doc => ({ 
-        title: doc.title,
-        pageUuid: doc.pageUuid
-      }))
-    };
+    // Create a streaming response
+    const encoder = new TextEncoder();
+    let responseText = '';
 
-    return NextResponse.json(response);
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          const reader = resp.body?.getReader();
+          if (!reader) {
+            throw new Error('No reader available');
+          }
+
+          while (true) {
+            const { done, value } = await reader.read();
+            
+            if (done) {
+              // Send final metadata when stream is complete
+              const finalData = {
+                type: 'metadata',
+                contextUsed: relevantDocuments.length > 0,
+                documentsFound: relevantDocuments.length,
+                relevantDocuments: relevantDocuments.map(doc => ({ 
+                  title: doc.title,
+                  pageUuid: doc.pageUuid
+                }))
+              };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(finalData)}\n\n`));
+              controller.close();
+              break;
+            }
+
+            // Parse the streaming response
+            const chunk = new TextDecoder().decode(value);
+            const lines = chunk.split('\n');
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  const delta = data.choices?.[0]?.delta?.content;
+                  
+                  if (delta) {
+                    responseText += delta;
+                    // Send each token as it arrives
+                    const tokenData = {
+                      type: 'token',
+                      content: delta
+                    };
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(tokenData)}\n\n`));
+                  }
+                } catch (e) {
+                  // Skip invalid JSON lines
+                  continue;
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Streaming error:', error);
+          const errorData = {
+            type: 'error',
+            error: error instanceof Error ? error.message : 'Unknown streaming error'
+          };
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`));
+          controller.close();
+        }
+      }
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    });
   } catch (error) {
     console.error('LLM API Error:', error);
     return NextResponse.json({ error: 'Failed to process request' }, { status: 500 });

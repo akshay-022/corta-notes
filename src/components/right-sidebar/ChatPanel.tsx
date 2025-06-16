@@ -85,10 +85,17 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const scrollAreaRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
 
   const MESSAGES_PER_PAGE = 20
+
+  // Simple scroll to bottom function
+  const scrollToBottom = useCallback(() => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+      logger.info('Scrolled to bottom of chat')
+    }
+  }, [])
 
   // Load conversations when component mounts
   useEffect(() => {
@@ -96,16 +103,21 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     loadConversations()
   }, [])
 
-  // Log when panel becomes visible
+  // Scroll to bottom when panel opens
   useEffect(() => {
     if (isOpen) {
       logger.info('ChatPanel became visible', { 
         hasActiveConversation: !!activeConversation,
         conversationCount: conversations.length,
-        isMobile: isMobile
+        isMobile: isMobile,
+        messageCount: messages.length
       })
+      // If there are already messages loaded, scroll to bottom immediately
+      if (messages.length > 0) {
+        scrollToBottom()
+      }
     }
-  }, [isOpen, activeConversation, conversations.length, isMobile])
+  }, [isOpen, scrollToBottom, messages.length])
 
   const loadMessages = useCallback(async (conversationId: string, offset = 0, append = false): Promise<void> => {
     if (offset === 0) {
@@ -149,10 +161,6 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
         setMessages(prev => [...formattedMessages, ...prev])
       } else {
         setMessages(formattedMessages)
-        // Only trigger scroll to bottom for initial load (offset = 0)
-        if (offset === 0) {
-          setShouldScrollToBottom(true)
-        }
       }
 
       // Check if there are more messages to load
@@ -180,18 +188,18 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     if (activeConversation) {
       logger.info('Active conversation changed, loading messages...', { conversationId: activeConversation.id })
       setCurrentOffset(0)
-      loadMessages(activeConversation.id, 0, false)
+      loadMessages(activeConversation.id, 0, false).then(() => {
+        // Always scroll to bottom after messages load
+        scrollToBottom()
+      })
     } else {
       setMessages([])
     }
-  }, [activeConversation, loadMessages])
+  }, [activeConversation, loadMessages, scrollToBottom])
 
   // Load older messages function
   const handleLoadOlder = useCallback(() => {
     if (!activeConversation || isLoadingOlder) return
-    
-    // Set flag to prevent auto-scroll
-    setIsLoadingOlderMessages(true)
     
     // Store current scroll position before loading older messages
     const currentScrollTop = messagesContainerRef.current?.scrollTop || 0
@@ -214,40 +222,9 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
             heightDifference
           })
         }
-        // Reset the flag after scroll position is adjusted
-        setIsLoadingOlderMessages(false)
       }, 100)
     })
   }, [activeConversation, currentOffset, isLoadingOlder, loadMessages, MESSAGES_PER_PAGE])
-
-  // Auto-scroll to bottom when chat panel opens or new messages arrive
-  const scrollToBottom = useCallback(() => {
-    setTimeout(() => {
-      if (messagesContainerRef.current) {
-        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
-        logger.info('Scrolled to bottom of chat')
-      }
-    }, 100)
-  }, [])
-
-  // Track if we're loading older messages to prevent auto-scroll
-  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false)
-  const [shouldScrollToBottom, setShouldScrollToBottom] = useState(false)
-  
-  // Scroll to bottom when panel opens (only when panel becomes visible)
-  useEffect(() => {
-    if (isOpen && !isLoadingOlderMessages) {
-      setShouldScrollToBottom(true)
-    }
-  }, [isOpen]) // Only depend on isOpen
-  
-  // Execute scroll when flag is set
-  useEffect(() => {
-    if (shouldScrollToBottom && !isLoadingOlderMessages) {
-      scrollToBottom()
-      setShouldScrollToBottom(false)
-    }
-  }, [shouldScrollToBottom, isLoadingOlderMessages, scrollToBottom])
 
   const loadConversations = async () => {
     try {
@@ -389,15 +366,22 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
       selections: selections.length > 0 ? [...selections] : undefined 
     }
     
-    setMessages(prev => [...prev, userMessage])
+    // Add empty assistant message that will be filled during streaming
+    const assistantMessage: Message = { 
+      role: 'assistant' as const, 
+      content: '',
+      relevantDocuments: undefined
+    }
     
-    // Scroll to bottom after adding user message
-    setTimeout(() => {
-      if (messagesContainerRef.current) {
-        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
-      }
-    }, 100)
+    // Add both messages at once to prevent scroll jumping
+    setMessages(prev => [...prev, userMessage, assistantMessage])
     
+    // Clear selections after sending
+    setSelections([])
+    
+    // Scroll to bottom once after adding both messages
+    scrollToBottom()
+
     try {
       // Save user message to database
       await conversationsService.addMessage(
@@ -428,7 +412,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
         thoughtContextLength: thoughtContext.length,
       })
 
-      // Call the LLM API with thought context and supermemory context separate
+      // Call the LLM API with streaming enabled
       const apiResponse = await fetch('/api/chat-panel', {
         method: 'POST',
         headers: {
@@ -447,23 +431,87 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
         throw new Error(errorData.error || `API Error: ${apiResponse.statusText}`)
       }
 
-      const data = await apiResponse.json()
-      const assistantMessageContent = data.response
-      const relevantDocuments = data.relevantDocuments || []
-
-      console.log('LLM API response:', { 
-        responseLength: assistantMessageContent?.length,
-        documentsFound: relevantDocuments.length 
-      })
-
-      // Add assistant response to messages
-      const assistantMessage: Message = { 
-        role: 'assistant' as const, 
-        content: assistantMessageContent,
-        relevantDocuments: relevantDocuments.length > 0 ? relevantDocuments : undefined
-      }
-      setMessages(prev => [...prev, assistantMessage])
+      // Handle streaming response
+      let assistantMessageContent = ''
+      let relevantDocuments: RelevantDocument[] = []
       
+      // Assistant message is already added above, just get its index
+      const assistantMessageIndex = messages.length + 1 // +1 because we added user message above
+
+      // Read the streaming response
+      const reader = apiResponse.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (reader) {
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            
+            if (done) break
+            
+            const chunk = decoder.decode(value)
+            const lines = chunk.split('\n')
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.slice(6))
+                  
+                  if (data.type === 'token' && data.content) {
+                    assistantMessageContent += data.content
+                    
+                    // Hide "Thinking..." as soon as first token arrives
+                    if (assistantMessageContent === data.content) {
+                      setIsLoading(false)
+                    }
+                    
+                    // Update the assistant message in real-time
+                    setMessages(prev => {
+                      const updated = [...prev]
+                      updated[assistantMessageIndex] = {
+                        ...updated[assistantMessageIndex],
+                        content: assistantMessageContent
+                      }
+                      return updated
+                    })
+                    
+                    // NO auto-scrolling during streaming to prevent jitter
+                    
+                  } else if (data.type === 'metadata') {
+                    relevantDocuments = data.relevantDocuments || []
+                    
+                    // Update the final message with relevant documents
+                    setMessages(prev => {
+                      const updated = [...prev]
+                      updated[assistantMessageIndex] = {
+                        ...updated[assistantMessageIndex],
+                        relevantDocuments: relevantDocuments.length > 0 ? relevantDocuments : undefined
+                      }
+                      return updated
+                    })
+                    
+                    console.log('LLM API streaming complete:', { 
+                      responseLength: assistantMessageContent?.length,
+                      documentsFound: relevantDocuments.length 
+                    })
+                    
+                    // NO scrolling after streaming - user controls scroll position
+                    
+                  } else if (data.type === 'error') {
+                    throw new Error(data.error || 'Streaming error')
+                  }
+                } catch (parseError) {
+                  // Skip invalid JSON lines
+                  continue
+                }
+              }
+            }
+          }
+        } finally {
+          reader.releaseLock()
+        }
+      }
+
       // Save assistant message to database with relevant documents metadata
       const assistantMetadata = relevantDocuments.length > 0 ? {
         relevantDocuments: relevantDocuments.map((doc: RelevantDocument) => ({
@@ -478,13 +526,6 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
         false,
         assistantMetadata
       )
-
-      // Scroll to bottom after assistant response
-      setTimeout(() => {
-        if (messagesContainerRef.current) {
-          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
-        }
-      }, 100)
 
     } catch (error) {
       console.error("Error calling LLM API:", error)
@@ -653,10 +694,13 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
           {/* Chat Messages */}
           <div 
             ref={messagesContainerRef}
-            className={`overflow-y-auto ${isMobile ? 'pb-[180px]' : 'pb-[140px]'}`}
-            style={{ height: 'calc(100% - 120px)' }}
+            className={`overflow-y-auto ${isMobile ? 'pb-[180px]' : ''}`}
+            style={{ 
+              height: 'calc(100% - 120px)',
+              ...(isMobile ? {} : { paddingBottom: '150%' })
+            }}
           >
-            <div ref={scrollAreaRef} className="flex flex-col gap-3 p-4">
+            <div className="flex flex-col gap-3 p-4">
               {isLoadingHistory ? (
                 <div className="text-xs text-[#969696]">Loading chat history...</div>
               ) : !activeConversation ? (
@@ -670,158 +714,162 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                     isLoadingOlder={isLoadingOlder}
                     onLoadOlder={handleLoadOlder}
                   />
-                  {messages.map((message, i) => (
-                  <div key={i} className="space-y-1">
-                    {/* Show selections above the message */}
-                    {message.selections && message.selections.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mb-1 text-[10px] text-[#969696] justify-start">
-                        {message.selections.map(sel => (
-                          <span
-                            key={sel.id}
-                            className="inline-flex items-center rounded bg-[#2a2a2a] px-1.5 py-0.5"
-                          >
-                            {(() => {
-                              const words = sel.text.split(/[\s\n]+/).filter(w => w.trim())
-                              if (words.length === 0) return ""
-                              if (words.length === 1) return words[0]
-                              return `${words[0]}...${words[words.length - 1]}`
-                            })()}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {message.role === "assistant" ? (
-                      <div className="text-xs text-[#cccccc] leading-relaxed">
-                        <div className="prose prose-invert prose-xs max-w-none">
-                          <ReactMarkdown 
-                            components={{
-                            p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                            strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
-                            em: ({ children }) => <em className="italic">{children}</em>,
-                            ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
-                            ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-                            li: ({ children }) => <li className="text-[#cccccc]">{children}</li>,
-                            code: ({ children }) => <code className="bg-[#2a2a2a] px-1 py-0.5 rounded text-[#60a5fa] text-[10px]">{children}</code>,
-                            pre: ({ children }) => <pre className="bg-[#2a2a2a] p-2 rounded overflow-x-auto text-[10px] mb-2">{children}</pre>,
-                            blockquote: ({ children }) => <blockquote className="border-l-2 border-[#60a5fa] pl-3 mb-2 italic text-[#969696]">{children}</blockquote>,
-                            h1: ({ children }) => <h1 className="text-sm font-bold mb-2 text-white">{children}</h1>,
-                            h2: ({ children }) => <h2 className="text-sm font-semibold mb-2 text-white">{children}</h2>,
-                            h3: ({ children }) => <h3 className="text-xs font-semibold mb-1 text-white">{children}</h3>,
-                          }}
-                                                    >
-                              {message.content}
-                            </ReactMarkdown>
+                  {messages.map((message, i) => {
+                    return (
+                      <div key={i} className="space-y-1">
+                        {/* Show selections above the message */}
+                        {message.selections && message.selections.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mb-1 text-[10px] text-[#969696] justify-start">
+                            {message.selections.map(sel => (
+                              <span
+                                key={sel.id}
+                                className="inline-flex items-center rounded bg-[#2a2a2a] px-1.5 py-0.5"
+                              >
+                                {(() => {
+                                  const words = sel.text.split(/[\s\n]+/).filter(w => w.trim())
+                                  if (words.length === 0) return ""
+                                  if (words.length === 1) return words[0]
+                                  return `${words[0]}...${words[words.length - 1]}`
+                                })()}
+                              </span>
+                            ))}
                           </div>
-                        
-                        {/* Display relevant documents as simple links */}
-                        {message.relevantDocuments && message.relevantDocuments.length > 0 && (
-                          <div className="mt-3 pt-2 border-t border-[#333333]">
-                            <div className="flex flex-wrap gap-2">
-                              {message.relevantDocuments.map((doc, docIndex) => (
-                                <button
-                                  key={doc.id || docIndex}
-                                  className="text-[10px] text-[#60a5fa] hover:text-[#4a9fff] underline transition-colors"
-                                  onClick={() => {
-                                    if (doc.pageUuid) {
-                                      logger.info('Opening page in new tab:', { title: doc.title, pageUuid: doc.pageUuid })
-                                      // Open the page in a new tab
-                                      window.open(`/dashboard/page/${doc.pageUuid}`, '_blank', 'noopener,noreferrer')
-                                    } else {
-                                      logger.warn('No page UUID available for document:', doc.title)
+                        )}
+
+                        {message.role === "assistant" ? (
+                          <div className="text-xs text-[#cccccc] leading-relaxed">
+                            <div className="prose prose-invert prose-xs max-w-none">
+                              <ReactMarkdown 
+                                components={{
+                                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                                strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+                                em: ({ children }) => <em className="italic">{children}</em>,
+                                ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+                                ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+                                li: ({ children }) => <li className="text-[#cccccc]">{children}</li>,
+                                code: ({ children }) => <code className="bg-[#2a2a2a] px-1 py-0.5 rounded text-[#60a5fa] text-[10px]">{children}</code>,
+                                pre: ({ children }) => <pre className="bg-[#2a2a2a] p-2 rounded overflow-x-auto text-[10px] mb-2">{children}</pre>,
+                                blockquote: ({ children }) => <blockquote className="border-l-2 border-[#60a5fa] pl-3 mb-2 italic text-[#969696]">{children}</blockquote>,
+                                h1: ({ children }) => <h1 className="text-sm font-bold mb-2 text-white">{children}</h1>,
+                                h2: ({ children }) => <h2 className="text-sm font-semibold mb-2 text-white">{children}</h2>,
+                                h3: ({ children }) => <h3 className="text-xs font-semibold mb-1 text-white">{children}</h3>,
+                              }}
+                                                        >
+                                  {message.content}
+                                </ReactMarkdown>
+                              </div>
+                            
+                            {/* Display relevant documents as simple links */}
+                            {message.relevantDocuments && message.relevantDocuments.length > 0 && (
+                              <div className="mt-3 pt-2 border-t border-[#333333]">
+                                <div className="flex flex-wrap gap-2">
+                                  {message.relevantDocuments.map((doc, docIndex) => (
+                                    <button
+                                      key={doc.id || docIndex}
+                                      className="text-[10px] text-[#60a5fa] hover:text-[#4a9fff] underline transition-colors"
+                                      onClick={() => {
+                                        if (doc.pageUuid) {
+                                          logger.info('Opening page in new tab:', { title: doc.title, pageUuid: doc.pageUuid })
+                                          // Open the page in a new tab
+                                          window.open(`/dashboard/page/${doc.pageUuid}`, '_blank', 'noopener,noreferrer')
+                                        } else {
+                                          logger.warn('No page UUID available for document:', doc.title)
+                                        }
+                                      }}
+                                    >
+                                      {doc.title}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Apply to Editor button - COMMENTED OUT but functionality preserved */}
+                            {/* {onApplyAiResponseToEditor && (
+                              <button
+                                className="mt-2 text-xs bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] px-2 py-1 rounded transition-colors"
+                                disabled={applyingMessageId === (message.timestamp || `msg-${i}`)}
+                                onClick={async (e: React.MouseEvent<HTMLButtonElement>) => {
+                                  e.preventDefault()
+                                  const currentMessageId = message.timestamp || `msg-${i}`
+                                  setApplyingMessageId(currentMessageId)
+                                  
+                                  // Find the preceding user message with selections
+                                  let precedingUserMessageSelections: SelectionObject[] | undefined = undefined
+                                  if (i > 0) {
+                                    for (let j = i - 1; j >= 0; j--) {
+                                      if (messages[j].role === 'user') {
+                                        precedingUserMessageSelections = messages[j].selections
+                                        break
+                                      }
                                     }
-                                  }}
-                                >
-                                  {doc.title}
-                                </button>
-                              ))}
-                            </div>
+                                  }
+                                  
+                                  console.log("Apply to Editor button clicked", { 
+                                    messageId: currentMessageId,
+                                    contentLength: message.content.length,
+                                    hasCallback: !!onApplyAiResponseToEditor,
+                                    hasPrecedingSelections: !!precedingUserMessageSelections,
+                                    selectionCount: precedingUserMessageSelections?.length || 0
+                                  })
+                                  
+                                  try {
+                                    if (onApplyAiResponseToEditor) {
+                                      await onApplyAiResponseToEditor(message.content, precedingUserMessageSelections)
+                                    }
+                                  } catch (err) {
+                                    console.error("Error applying AI response:", err)
+                                  } finally {
+                                    setApplyingMessageId(null)
+                                  }
+                                }}
+                              >
+                                {applyingMessageId === (message.timestamp || `msg-${i}`) ? (
+                                  <>
+                                    <span className="inline-block w-3 h-3 mr-1.5 animate-spin rounded-full border-2 border-[#969696] border-t-transparent" />
+                                    Applying...
+                                  </>
+                                ) : (
+                                  'Apply to Editor'
+                                )}
+                              </button>
+                            )} */}
+                            
+                            {/* Copy to Clipboard button */}
+                            {message.content && (
+                              <button
+                                className="mt-2 text-xs bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] px-2 py-1 rounded transition-colors"
+                                onClick={async () => {
+                                  try {
+                                    await navigator.clipboard.writeText(message.content)
+                                    console.log('Copied to clipboard:', message.content.substring(0, 50) + '...')
+                                    const messageId = message.timestamp || `msg-${i}`
+                                    setCopiedMessageId(messageId)
+                                    setTimeout(() => setCopiedMessageId(null), 2000)
+                                  } catch (err) {
+                                    console.error("Failed to copy:", err)
+                                  }
+                                }}
+                              >
+                                {copiedMessageId === (message.timestamp || `msg-${i}`) ? 'Copied!' : 'Copy to Clipboard'}
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="w-full rounded bg-[#2a2a2a] px-3 py-2 text-xs leading-relaxed text-[#cccccc]">
+                            {message.content}
                           </div>
                         )}
                         
-                        {/* Apply to Editor button - COMMENTED OUT but functionality preserved */}
-                        {/* {onApplyAiResponseToEditor && (
-                          <button
-                            className="mt-2 text-xs bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] px-2 py-1 rounded transition-colors"
-                            disabled={applyingMessageId === (message.timestamp || `msg-${i}`)}
-                            onClick={async (e: React.MouseEvent<HTMLButtonElement>) => {
-                              e.preventDefault()
-                              const currentMessageId = message.timestamp || `msg-${i}`
-                              setApplyingMessageId(currentMessageId)
-                              
-                              // Find the preceding user message with selections
-                              let precedingUserMessageSelections: SelectionObject[] | undefined = undefined
-                              if (i > 0) {
-                                for (let j = i - 1; j >= 0; j--) {
-                                  if (messages[j].role === 'user') {
-                                    precedingUserMessageSelections = messages[j].selections
-                                    break
-                                  }
-                                }
-                              }
-                              
-                              console.log("Apply to Editor button clicked", { 
-                                messageId: currentMessageId,
-                                contentLength: message.content.length,
-                                hasCallback: !!onApplyAiResponseToEditor,
-                                hasPrecedingSelections: !!precedingUserMessageSelections,
-                                selectionCount: precedingUserMessageSelections?.length || 0
-                              })
-                              
-                              try {
-                                if (onApplyAiResponseToEditor) {
-                                  await onApplyAiResponseToEditor(message.content, precedingUserMessageSelections)
-                                }
-                              } catch (err) {
-                                console.error("Error applying AI response:", err)
-                              } finally {
-                                setApplyingMessageId(null)
-                              }
-                            }}
-                          >
-                            {applyingMessageId === (message.timestamp || `msg-${i}`) ? (
-                              <>
-                                <span className="inline-block w-3 h-3 mr-1.5 animate-spin rounded-full border-2 border-[#969696] border-t-transparent" />
-                                Applying...
-                              </>
-                            ) : (
-                              'Apply to Editor'
-                            )}
-                          </button>
-                        )} */}
-                        
-                        {/* Copy to Clipboard button */}
-                        <button
-                          className="mt-2 text-xs bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] px-2 py-1 rounded transition-colors"
-                          onClick={async () => {
-                            try {
-                              await navigator.clipboard.writeText(message.content)
-                              console.log('Copied to clipboard:', message.content.substring(0, 50) + '...')
-                              const messageId = message.timestamp || `msg-${i}`
-                              setCopiedMessageId(messageId)
-                              setTimeout(() => setCopiedMessageId(null), 2000)
-                            } catch (err) {
-                              console.error("Failed to copy:", err)
-                            }
-                          }}
-                        >
-                          {copiedMessageId === (message.timestamp || `msg-${i}`) ? 'Copied!' : 'Copy to Clipboard'}
-                        </button>
+                        {/* Optional timestamp display */}
+                        {message.timestamp && (
+                          <div className="text-[10px] text-[#969696] text-right">
+                            {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="w-full rounded bg-[#2a2a2a] px-3 py-2 text-xs leading-relaxed text-[#cccccc]">
-                        {message.content}
-                      </div>
-                    )}
-                    
-                    {/* Optional timestamp display */}
-                    {message.timestamp && (
-                      <div className="text-[10px] text-[#969696] text-right">
-                        {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                    )}
-                  </div>
-                  ))}
+                    )
+                  })}
                 </>
               )}
               {/* Loading indicator */} 
