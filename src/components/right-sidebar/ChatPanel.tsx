@@ -402,8 +402,19 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
         content: msg.content
       }))
 
-      // Use simplified brainstorming to get thought context
-      const thoughtContext = createThoughtContext(allPages, currentPage, editor)
+      // Find the timestamp of the last AI message for context awareness
+      const lastAiMessage = messages
+        .filter(msg => msg.role === 'assistant')
+        .sort((a, b) => {
+          const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0
+          const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0
+          return timeB - timeA
+        })[0]
+      
+      const lastAiMessageTimestamp = lastAiMessage?.timestamp || undefined
+
+      // Use simplified brainstorming to get thought context with timing information
+      const thoughtContext = createThoughtContext(allPages, currentPage, editor, lastAiMessageTimestamp)
 
       console.log('Sending messages to LLM API', { 
         hasSelections: selections.length > 0,
@@ -435,8 +446,8 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
       let assistantMessageContent = ''
       let relevantDocuments: RelevantDocument[] = []
       
-      // Assistant message is already added above, just get its index
-      const assistantMessageIndex = messages.length + 1 // +1 because we added user message above
+      // Assistant message is the last one we just added
+      const assistantMessageIndex = messages.length + 1
 
       // Read the streaming response
       const reader = apiResponse.body?.getReader()
@@ -922,10 +933,9 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={activeConversation ? "Type a message..." : "Create a conversation first"}
-            className="min-h-[36px] resize-none rounded bg-[#2a2a2a] border border-[#404040] text-[16px] md:text-xs px-3 py-2 text-[#cccccc] placeholder-[#969696] focus:outline-none focus:border-[#007acc] transition-colors flex-1"
+            className="min-h-[36px] resize-none rounded bg-[#2a2a2a] border border-[#404040] text-xs px-3 py-2 text-[#cccccc] placeholder-[#969696] focus:outline-none focus:border-[#007acc] transition-colors flex-1"
             rows={1}
             disabled={isLoading || !activeConversation}
-            style={{ fontSize: '16px' }}
           />
           <button
             onClick={(e) => handleSubmit(e)}

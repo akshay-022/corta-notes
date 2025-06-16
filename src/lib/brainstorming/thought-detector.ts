@@ -60,20 +60,25 @@ export function detectLastThought(editor: any): string {
     if (!editor) return ''
 
     // Get all content blocks with their metadata
-    const contentBlocks: Array<{content: string, timestamp: Date}> = []
+    const contentBlocks: Array<{content: string, timestamp: Date, index: number}> = []
     
-    editor.state.doc.content.content.forEach((node: { type: { name: string }, textContent: string, attrs: { lastUpdated?: string } }) => {
+    editor.state.doc.content.content.forEach((node: { type: { name: string }, textContent: string, attrs: { lastUpdated?: string } }, index: number) => {
       // Get content from any node that has text
       const content = node.textContent.trim()
       if (content && node.attrs.lastUpdated) {
         const timestamp = new Date(node.attrs.lastUpdated)
-        contentBlocks.push({ content, timestamp })
+        contentBlocks.push({ content, timestamp, index })
       }
     })
 
-    // Sort by timestamp (most recent first) and take last 5
+    // Sort by timestamp (most recent first), then by reverse index for same timestamps
     const recentContent = contentBlocks
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .sort((a, b) => {
+        const timeDiff = b.timestamp.getTime() - a.timestamp.getTime()
+        if (timeDiff !== 0) return timeDiff
+        // If timestamps are the same, sort by reverse index (later positions first)
+        return b.index - a.index
+      })
       .slice(0, 5)
       .map(p => p.content)
       .join('\n\n')
@@ -92,14 +97,79 @@ export function detectLastThought(editor: any): string {
 export function createThoughtContext(
   allPages: Page[],
   currentPage?: Page,
-  editor?: any
+  editor?: any,
+  lastAiMessageTimestamp?: string
 ): string {
   let context =''
   
-  // Get last thought from editor history
+  // Get timestamps for context awareness
+  let lastEditorUpdateTimestamp: Date | null = null
+  
+  // Get last thought from editor history and extract the most recent timestamp
   const lastThought = detectLastThought(editor)
   if (lastThought) {
     context += `MOST RECENT THOUGHT (This is EXTREMELY IMPORTANT, if the user has not given enough context, this line of thinking is the ONLY one you must complete) :\n${lastThought}\n\n\n\n`
+    
+    // Extract the most recent editor timestamp
+    try {
+      if (editor) {
+        const contentBlocks: Array<{content: string, timestamp: Date, index: number}> = []
+        
+        editor.state.doc.content.content.forEach((node: { type: { name: string }, textContent: string, attrs: { lastUpdated?: string } }, index: number) => {
+          const content = node.textContent.trim()
+          // Only include nodes with actual content AND a timestamp
+          if (content && content.length > 0 && node.attrs.lastUpdated) {
+            const timestamp = new Date(node.attrs.lastUpdated)
+            contentBlocks.push({ content, timestamp, index })
+          }
+        })
+
+        // Get the most recent timestamp from non-empty paragraphs (with reverse index ordering for ties)
+        if (contentBlocks.length > 0) {
+          lastEditorUpdateTimestamp = contentBlocks
+            .sort((a, b) => {
+              const timeDiff = b.timestamp.getTime() - a.timestamp.getTime()
+              if (timeDiff !== 0) return timeDiff
+              // If timestamps are the same, sort by reverse index (later positions first)
+              return b.index - a.index
+            })[0].timestamp
+        }
+      }
+    } catch (error) {
+      console.error('Error extracting editor timestamp:', error)
+    }
+  }
+  
+  // Add timestamp context for AI awareness
+  const timestampContext = []
+  
+  if (lastEditorUpdateTimestamp) {
+    timestampContext.push(`LAST EDITOR UPDATE: ${lastEditorUpdateTimestamp.toISOString()}`)
+  }
+  
+  if (lastAiMessageTimestamp) {
+    const aiTimestamp = new Date(lastAiMessageTimestamp)
+    timestampContext.push(`LAST AI MESSAGE: ${aiTimestamp.toISOString()}`)
+  }
+  
+  if (timestampContext.length > 0) {
+    context += `TIMING CONTEXT:\n${timestampContext.join('\n')}\n\n`
+    
+    // Add interpretation guidance
+    if (lastEditorUpdateTimestamp && lastAiMessageTimestamp) {
+      const editorTime = lastEditorUpdateTimestamp.getTime()
+      const aiTime = new Date(lastAiMessageTimestamp).getTime()
+      
+      if (editorTime > aiTime) {
+        context += `CONTEXT INTERPRETATION: User wrote in editor AFTER last AI message - likely referring to recent editor content.\n\n`
+        context += `IMPORTANT: Since the editor update is most recent, you should probably reply in regard to what the user just wrote in the editor, not the previous chat messages.\n\n`
+      } else {
+        context += `CONTEXT INTERPRETATION: User's last AI message is more recent than editor updates - likely continuing current conversation.\n\n`
+        context += `IMPORTANT: Since the chat conversation is more recent than editor updates, you should probably reply in regard to the previous messages in this chat conversation.\n\n`
+      }
+    }
+    
+    context += '\n\n'
   }
   
   // Get organized brain state categories as a clean JSON
@@ -132,6 +202,7 @@ Some general guidelines for you again:
 
 - Be helpful and concise
 - If the user is asking something in line with their most recent thought, ONLY FOCUS ON THE MOST RECENT THOUGHT, and the question they asked. Do NOT add irrelevant things, or another summary of everything to them. BE SUPER considerte about what information you give. You MUST not overwhelm. 
+- Use the timing context to understand if the user is referring to their recent editor writing or continuing the current AI conversation.
 
 `
   
