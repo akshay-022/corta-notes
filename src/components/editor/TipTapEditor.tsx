@@ -10,8 +10,8 @@ import { Page, PageUpdate } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/supabase-client'
 import { Calendar, Minus } from 'lucide-react'
 import ChatPanel, { ChatPanelHandle } from '../right-sidebar/ChatPanel'
-import { setupThoughtTracking } from '@/lib/thought-tracking/editor-integration'
-import { ThoughtParagraph } from '@/lib/thought-tracking/paragraph-extension'
+import { setupThoughtTracking } from '@/thought-tracking/integration/editor-integration'
+import { ThoughtParagraph } from '@/thought-tracking/extensions/paragraph-extension'
 
 interface TipTapEditorProps {
   page: Page

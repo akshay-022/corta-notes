@@ -458,45 +458,45 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
 
           const processEvent = (raw: string) => {
             if (!raw.startsWith('data: ')) return
-            try {
+                try {
               const data = JSON.parse(raw.slice(6))
-
-              if (data.type === 'token' && data.content) {
-                assistantMessageContent += data.content
-
-                // Hide "Thinking..." as soon as first token arrives
-                if (assistantMessageContent === data.content) {
-                  setIsLoading(false)
-                }
-
-                // Update the assistant message in real-time
-                setMessages(prev => {
-                  const updated = [...prev]
-                  updated[assistantMessageIndex] = {
-                    ...updated[assistantMessageIndex],
-                    content: assistantMessageContent
+                  
+                  if (data.type === 'token' && data.content) {
+                    assistantMessageContent += data.content
+                    
+                    // Hide "Thinking..." as soon as first token arrives
+                    if (assistantMessageContent === data.content) {
+                      setIsLoading(false)
+                    }
+                    
+                    // Update the assistant message in real-time
+                    setMessages(prev => {
+                      const updated = [...prev]
+                      updated[assistantMessageIndex] = {
+                        ...updated[assistantMessageIndex],
+                        content: assistantMessageContent
+                      }
+                      return updated
+                    })
+                  } else if (data.type === 'metadata') {
+                    relevantDocuments = data.relevantDocuments || []
+                    
+                    setMessages(prev => {
+                      const updated = [...prev]
+                      updated[assistantMessageIndex] = {
+                        ...updated[assistantMessageIndex],
+                        relevantDocuments: relevantDocuments.length > 0 ? relevantDocuments : undefined
+                      }
+                      return updated
+                    })
+                    
+                    console.log('LLM API streaming complete:', { 
+                      responseLength: assistantMessageContent?.length,
+                      documentsFound: relevantDocuments.length 
+                    })
+                  } else if (data.type === 'error') {
+                    throw new Error(data.error || 'Streaming error')
                   }
-                  return updated
-                })
-              } else if (data.type === 'metadata') {
-                relevantDocuments = data.relevantDocuments || []
-
-                setMessages(prev => {
-                  const updated = [...prev]
-                  updated[assistantMessageIndex] = {
-                    ...updated[assistantMessageIndex],
-                    relevantDocuments: relevantDocuments.length > 0 ? relevantDocuments : undefined
-                  }
-                  return updated
-                })
-
-                console.log('LLM API streaming complete:', {
-                  responseLength: assistantMessageContent?.length,
-                  documentsFound: relevantDocuments.length
-                })
-              } else if (data.type === 'error') {
-                throw new Error(data.error || 'Streaming error')
-              }
             } catch (_) {
               // JSON parse failed – ignore, buffer logic should avoid this
             }

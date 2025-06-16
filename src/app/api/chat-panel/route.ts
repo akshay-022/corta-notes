@@ -119,7 +119,7 @@ export async function POST(req: Request) {
 
           while (true) {
             const { done, value } = await reader.read();
-
+            
             if (done) {
               // Flush whatever is left in the buffer before closing
               if (buffer.length > 0) {
@@ -134,7 +134,7 @@ export async function POST(req: Request) {
                 type: 'metadata',
                 contextUsed: relevantDocuments.length > 0,
                 documentsFound: relevantDocuments.length,
-                relevantDocuments: relevantDocuments.map(doc => ({
+                relevantDocuments: relevantDocuments.map(doc => ({ 
                   title: doc.title,
                   pageUuid: doc.pageUuid,
                 })),
