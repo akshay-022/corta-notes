@@ -62,6 +62,7 @@ export function updateParagraphMetadata(
       targetParagraph = { node, pos }
       return false // Stop traversing immediately
     }
+    console.log('🔍 Current paragraph index:', currentParagraphIndex, 'content:', node.textContent.trim())
     currentParagraphIndex++
   })
 

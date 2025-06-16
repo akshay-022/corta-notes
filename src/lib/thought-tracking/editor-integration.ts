@@ -499,8 +499,8 @@ function updateCurrentParagraphMetadata(editor: Editor, isEnterJustPressed: bool
     let paragraphNode: any = null
     let currentParagraphNumber = 0
     
-    // Find the current node and its number (counting ALL node types)
-    editor.state.doc.descendants((node, pos) => {
+    // Find the current node and its number (counting ALL nodes)
+    editor.state.doc.nodesBetween(0, editor.state.doc.content.size, (node, pos) => {
       if (pos <= from) {
         // This node is at or before the cursor position
         if (pos === from || (from >= pos && from <= pos + node.nodeSize)) {
