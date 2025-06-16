@@ -1,6 +1,9 @@
 // Core types
 export * from './types';
 
+// Constants
+export * from './constants';
+
 // Core classes
 export { ThoughtTracker } from './core/thoughtTracker';
 export { BrainStateManager } from './core/brainState';
@@ -32,15 +35,14 @@ export {
 } from './integration/editor-integration';
 
 // Constants and defaults
-export const DEFAULT_CONFIG = {
-  maxEditsInPrimary: 30,
-  maxEditsInSecondary: 30,
-  summaryUpdateFrequency: 5,
-  organizationThreshold: 30,
-} as const;
-
-export const EVENTS = {
-  ORGANIZATION_NEEDED: 'thought-tracking:organization-needed',
-  ORGANIZATION_COMPLETE: 'thought-tracking:organization-complete',
-  ORGANIZATION_ERROR: 'thought-tracking:organization-error',
-} as const; 
+export { 
+  BRAIN_STATE_DEFAULTS as DEFAULT_CONFIG,
+  ORGANIZATION_DEFAULTS,
+  STORAGE_KEYS,
+  SUPABASE_DEFAULTS,
+  API_ENDPOINTS,
+  EVENTS,
+  SUMMARY_DEFAULTS,
+  PERFORMANCE_THRESHOLDS,
+  VALIDATION_LIMITS
+} from './constants'; 

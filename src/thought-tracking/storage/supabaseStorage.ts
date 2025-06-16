@@ -6,8 +6,9 @@ import {
   StorageManager, 
   BrainStateConfig,
   SupabaseStorageConfig,
-  DatabasePage
+  DatabasePage 
 } from '../types';
+import { SUPABASE_DEFAULTS, BRAIN_STATE_DEFAULTS } from '../constants';
 
 export class SupabaseStorageManager implements StorageManager {
   private supabase: SupabaseClient;
@@ -22,20 +23,13 @@ export class SupabaseStorageManager implements StorageManager {
     this.supabase = supabase;
     this.userId = userId;
     this.config = {
-      tableName: 'pages',
-      brainStateKey: 'thought_tracking_brain_state',
-      cacheTableName: 'thought_tracking_cache',
+      ...SUPABASE_DEFAULTS,
       ...config
     };
   }
 
   private getDefaultConfig(): BrainStateConfig {
-    return {
-      maxEditsInPrimary: 30,
-      maxEditsInSecondary: 30,
-      summaryUpdateFrequency: 5,
-      organizationThreshold: 30,
-    };
+    return BRAIN_STATE_DEFAULTS;
   }
 
   async saveBrainState(state: BrainState): Promise<void> {

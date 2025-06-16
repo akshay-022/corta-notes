@@ -1,5 +1,5 @@
 import { Editor } from '@tiptap/react'
-import { ThoughtTracker, SupabaseStorageManager } from '../index'
+import { ThoughtTracker, SupabaseStorageManager, EVENTS } from '../index'
 import { createClient } from '@/lib/supabase/supabase-client'
 import { Page } from '@/lib/supabase/types'
 
@@ -156,8 +156,8 @@ export async function setupThoughtTracking(
 
     // Add event listeners
     if (typeof window !== 'undefined') {
-      window.addEventListener('thought-tracking:organization-complete', handleOrganizationComplete)
-      window.addEventListener('thought-tracking:organization-error', handleOrganizationError)
+      window.addEventListener(EVENTS.ORGANIZATION_COMPLETE, handleOrganizationComplete)
+      window.addEventListener(EVENTS.ORGANIZATION_ERROR, handleOrganizationError)
     }
 
     console.log('🧠 Thought tracking setup complete for page:', pageUuid)
@@ -170,8 +170,8 @@ export async function setupThoughtTracking(
       editorTrackers.delete(pageUuid)
       
       if (typeof window !== 'undefined') {
-        window.removeEventListener('thought-tracking:organization-complete', handleOrganizationComplete)
-        window.removeEventListener('thought-tracking:organization-error', handleOrganizationError)
+        window.removeEventListener(EVENTS.ORGANIZATION_COMPLETE, handleOrganizationComplete)
+        window.removeEventListener(EVENTS.ORGANIZATION_ERROR, handleOrganizationError)
       }
     }
 

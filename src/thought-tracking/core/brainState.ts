@@ -7,6 +7,7 @@ import {
 } from '../types';
 import { generateId } from '../utils/helpers';
 import { SummaryGenerator } from './summaryGenerator';
+import { BRAIN_STATE_DEFAULTS, EVENTS } from '../constants';
 
 export class BrainStateManager {
   private storageManager: StorageManager;
@@ -32,12 +33,7 @@ export class BrainStateManager {
       edits: [],
       summary: '',
       lastUpdated: Date.now(),
-      config: {
-        maxEditsInPrimary: 30,
-        maxEditsInSecondary: 30,
-        summaryUpdateFrequency: 5,
-        organizationThreshold: 30,
-      },
+      config: BRAIN_STATE_DEFAULTS,
     };
   }
 
@@ -143,7 +139,7 @@ export class BrainStateManager {
     
     // You can implement custom event emission or callback mechanism here
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('thought-tracking:organization-needed', {
+      window.dispatchEvent(new CustomEvent(EVENTS.ORGANIZATION_NEEDED, {
         detail: { cacheEntries }
       }));
     }

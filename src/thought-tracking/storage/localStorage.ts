@@ -5,20 +5,16 @@ import {
   StorageManager, 
   BrainStateConfig 
 } from '../types';
+import { STORAGE_KEYS, BRAIN_STATE_DEFAULTS } from '../constants';
 
 export class LocalStorageManager implements StorageManager {
-  private readonly BRAIN_STATE_KEY = 'thought-tracking:brain-state';
-  private readonly CACHE_ENTRIES_KEY = 'thought-tracking:cache-entries';
-  private readonly ORGANIZED_PAGES_KEY = 'thought-tracking:organized-pages';
-  private readonly CONFIG_KEY = 'thought-tracking:config';
+  private readonly BRAIN_STATE_KEY = STORAGE_KEYS.BRAIN_STATE;
+  private readonly CACHE_ENTRIES_KEY = STORAGE_KEYS.CACHE_ENTRIES;
+  private readonly ORGANIZED_PAGES_KEY = STORAGE_KEYS.ORGANIZED_PAGES;
+  private readonly CONFIG_KEY = STORAGE_KEYS.CONFIG;
 
   private getDefaultConfig(): BrainStateConfig {
-    return {
-      maxEditsInPrimary: 30,
-      maxEditsInSecondary: 30,
-      summaryUpdateFrequency: 5,
-      organizationThreshold: 30,
-    };
+    return BRAIN_STATE_DEFAULTS;
   }
 
   async saveBrainState(state: BrainState): Promise<void> {

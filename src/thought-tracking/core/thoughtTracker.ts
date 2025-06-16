@@ -11,6 +11,7 @@ import { SummaryGenerator } from './summaryGenerator';
 import { OrganizationManager } from './organizationManager';
 import { LocalStorageManager } from '../storage/localStorage';
 import { validateParagraphEdit, debounce } from '../utils/helpers';
+import { EVENTS, PERFORMANCE_THRESHOLDS } from '../constants';
 
 export class ThoughtTracker {
   private brainStateManager: BrainStateManager;
@@ -36,7 +37,7 @@ export class ThoughtTracker {
     this.organizationManager = new OrganizationManager(this.storageManager, organizationApiEndpoint);
     
     // Setup debounced save
-    this.debouncedSave = debounce(this.saveState.bind(this), 1000);
+    this.debouncedSave = debounce(this.saveState.bind(this), PERFORMANCE_THRESHOLDS.DEBOUNCE_DELAY_MS);
     
     // Listen for organization events
     this.setupEventListeners();
@@ -81,7 +82,7 @@ export class ThoughtTracker {
 
   private setupEventListeners(): void {
     if (typeof window !== 'undefined') {
-      window.addEventListener('thought-tracking:organization-needed', 
+      window.addEventListener(EVENTS.ORGANIZATION_NEEDED, 
         this.handleOrganizationTrigger.bind(this)
       );
       
@@ -123,7 +124,7 @@ export class ThoughtTracker {
       
       // Emit completion event
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('thought-tracking:organization-complete', {
+        window.dispatchEvent(new CustomEvent(EVENTS.ORGANIZATION_COMPLETE, {
           detail: result
         }));
       }
@@ -133,7 +134,7 @@ export class ThoughtTracker {
       
       // Emit error event
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('thought-tracking:organization-error', {
+        window.dispatchEvent(new CustomEvent(EVENTS.ORGANIZATION_ERROR, {
           detail: { error: (error as Error).message }
         }));
       }
@@ -243,7 +244,7 @@ export class ThoughtTracker {
     
     // Trigger organization manually
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('thought-tracking:organization-needed', {
+      window.dispatchEvent(new CustomEvent(EVENTS.ORGANIZATION_NEEDED, {
         detail: { cacheEntries: unprocessedEntries }
       }));
     }
@@ -321,7 +322,7 @@ export class ThoughtTracker {
   // Cleanup method
   dispose(): void {
     if (typeof window !== 'undefined') {
-      window.removeEventListener('thought-tracking:organization-needed', 
+      window.removeEventListener(EVENTS.ORGANIZATION_NEEDED, 
         this.handleOrganizationTrigger.bind(this)
       );
     }

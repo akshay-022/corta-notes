@@ -7,6 +7,7 @@ import {
   StorageManager 
 } from '../types';
 import { calculateTextSimilarity, generateId } from '../utils/helpers';
+import { ORGANIZATION_DEFAULTS, API_ENDPOINTS } from '../constants';
 
 export class OrganizationManager {
   private storageManager: StorageManager;
@@ -15,16 +16,11 @@ export class OrganizationManager {
 
   constructor(
     storageManager: StorageManager, 
-    apiEndpoint: string = '/api/organize'
+    apiEndpoint: string = API_ENDPOINTS.ORGANIZATION
   ) {
     this.storageManager = storageManager;
     this.apiEndpoint = apiEndpoint;
-    this.defaultConfig = {
-      preserveAllInformation: true,
-      createNewPagesThreshold: 0.3, // Similarity threshold for creating new pages
-      maxSimilarityForMerge: 0.7, // Similarity threshold for merging with existing pages
-      contextWindowSize: 4000, // Maximum context size for LLM
-    };
+    this.defaultConfig = ORGANIZATION_DEFAULTS;
   }
 
   async organizeContent(cacheEntries: CacheEntry[]): Promise<OrganizationResult> {
@@ -117,9 +113,9 @@ You are an intelligent content organizer. Your task is to:
    - Maintain proper document structure
 
 4. PAGE MANAGEMENT:
-   - Update existing pages when content is highly related (similarity > 0.7)
-   - Create new pages when content is sufficiently different (similarity < 0.3)
-   - For medium similarity (0.3-0.7), use judgment based on content coherence
+   - Update existing pages when content is highly related (similarity > ${this.defaultConfig.maxSimilarityForMerge})
+   - Create new pages when content is sufficiently different (similarity < ${this.defaultConfig.createNewPagesThreshold})
+   - For medium similarity (${this.defaultConfig.createNewPagesThreshold}-${this.defaultConfig.maxSimilarityForMerge}), use judgment based on content coherence
 
 5. METADATA:
    - Generate appropriate tags for discoverability
@@ -193,7 +189,7 @@ You are an intelligent content organizer. Your task is to:
     for (const entry of cacheEntries) {
       const bestMatch = this.findBestPageMatch(entry, existingPages);
       
-      if (bestMatch && this.calculateSimilarity(entry, bestMatch) > 0.5) {
+      if (bestMatch && this.calculateSimilarity(entry, bestMatch) > this.defaultConfig.createNewPagesThreshold) {
         // Update existing page
         const updatedPage = this.updatePageWithCacheEntry(bestMatch, entry);
         updatedPages.push(updatedPage);

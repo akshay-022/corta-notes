@@ -7,6 +7,7 @@ import {
   CacheEntry 
 } from '../types';
 import { ThoughtTracker } from '../core/thoughtTracker';
+import { EVENTS } from '../constants';
 
 interface ThoughtTrackerHookReturn {
   // Core tracking methods
@@ -130,14 +131,14 @@ export function useThoughtTracker(
       setIsOrganizing(true);
     };
 
-    window.addEventListener('thought-tracking:organization-complete', handleOrganizationComplete);
-    window.addEventListener('thought-tracking:organization-error', handleOrganizationError);
-    window.addEventListener('thought-tracking:organization-needed', handleOrganizationNeeded);
+    window.addEventListener(EVENTS.ORGANIZATION_COMPLETE, handleOrganizationComplete);
+    window.addEventListener(EVENTS.ORGANIZATION_ERROR, handleOrganizationError);
+    window.addEventListener(EVENTS.ORGANIZATION_NEEDED, handleOrganizationNeeded);
 
     return () => {
-      window.removeEventListener('thought-tracking:organization-complete', handleOrganizationComplete);
-      window.removeEventListener('thought-tracking:organization-error', handleOrganizationError);
-      window.removeEventListener('thought-tracking:organization-needed', handleOrganizationNeeded);
+      window.removeEventListener(EVENTS.ORGANIZATION_COMPLETE, handleOrganizationComplete);
+      window.removeEventListener(EVENTS.ORGANIZATION_ERROR, handleOrganizationError);
+      window.removeEventListener(EVENTS.ORGANIZATION_NEEDED, handleOrganizationNeeded);
     };
   }, []);
 
