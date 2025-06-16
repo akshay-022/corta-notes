@@ -60,10 +60,10 @@ export class BrainStateManager {
     this.currentState!.edits.push(fullEdit);
     this.currentState!.lastUpdated = Date.now();
 
-    // Check if we need to update summary
-    if (this.shouldUpdateSummary()) {
-      await this.updateSummary();
-    }
+    // Check if we need to update summary - Let's not do this for now
+    // if (this.shouldUpdateSummary()) {
+    //   await this.updateSummary();
+    // }
 
     // Check if we need to move edits to cache
     if (this.shouldMoveToCache()) {
