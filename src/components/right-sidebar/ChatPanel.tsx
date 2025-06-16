@@ -449,73 +449,79 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
       // Assistant message is the last one we just added
       const assistantMessageIndex = messages.length + 1
 
-      // Read the streaming response
-      const reader = apiResponse.body?.getReader()
-      const decoder = new TextDecoder()
+      const textDecoder = new TextDecoder()
 
-      if (reader) {
+      if (apiResponse.body) {
+        const reader = apiResponse.body.getReader()
         try {
+          let buffer = ''
+
+          const processEvent = (raw: string) => {
+            if (!raw.startsWith('data: ')) return
+            try {
+              const data = JSON.parse(raw.slice(6))
+
+              if (data.type === 'token' && data.content) {
+                assistantMessageContent += data.content
+
+                // Hide "Thinking..." as soon as first token arrives
+                if (assistantMessageContent === data.content) {
+                  setIsLoading(false)
+                }
+
+                // Update the assistant message in real-time
+                setMessages(prev => {
+                  const updated = [...prev]
+                  updated[assistantMessageIndex] = {
+                    ...updated[assistantMessageIndex],
+                    content: assistantMessageContent
+                  }
+                  return updated
+                })
+              } else if (data.type === 'metadata') {
+                relevantDocuments = data.relevantDocuments || []
+
+                setMessages(prev => {
+                  const updated = [...prev]
+                  updated[assistantMessageIndex] = {
+                    ...updated[assistantMessageIndex],
+                    relevantDocuments: relevantDocuments.length > 0 ? relevantDocuments : undefined
+                  }
+                  return updated
+                })
+
+                console.log('LLM API streaming complete:', {
+                  responseLength: assistantMessageContent?.length,
+                  documentsFound: relevantDocuments.length
+                })
+              } else if (data.type === 'error') {
+                throw new Error(data.error || 'Streaming error')
+              }
+            } catch (_) {
+              // JSON parse failed – ignore, buffer logic should avoid this
+            }
+          }
+
           while (true) {
             const { done, value } = await reader.read()
-            
-            if (done) break
-            
-            const chunk = decoder.decode(value)
-            const lines = chunk.split('\n')
-            
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                try {
-                  const data = JSON.parse(line.slice(6))
-                  
-                  if (data.type === 'token' && data.content) {
-                    assistantMessageContent += data.content
-                    
-                    // Hide "Thinking..." as soon as first token arrives
-                    if (assistantMessageContent === data.content) {
-                      setIsLoading(false)
-                    }
-                    
-                    // Update the assistant message in real-time
-                    setMessages(prev => {
-                      const updated = [...prev]
-                      updated[assistantMessageIndex] = {
-                        ...updated[assistantMessageIndex],
-                        content: assistantMessageContent
-                      }
-                      return updated
-                    })
-                    
-                    // NO auto-scrolling during streaming to prevent jitter
-                    
-                  } else if (data.type === 'metadata') {
-                    relevantDocuments = data.relevantDocuments || []
-                    
-                    // Update the final message with relevant documents
-                    setMessages(prev => {
-                      const updated = [...prev]
-                      updated[assistantMessageIndex] = {
-                        ...updated[assistantMessageIndex],
-                        relevantDocuments: relevantDocuments.length > 0 ? relevantDocuments : undefined
-                      }
-                      return updated
-                    })
-                    
-                    console.log('LLM API streaming complete:', { 
-                      responseLength: assistantMessageContent?.length,
-                      documentsFound: relevantDocuments.length 
-                    })
-                    
-                    // NO scrolling after streaming - user controls scroll position
-                    
-                  } else if (data.type === 'error') {
-                    throw new Error(data.error || 'Streaming error')
-                  }
-                } catch (parseError) {
-                  // Skip invalid JSON lines
-                  continue
-                }
+
+            if (done) {
+              // Flush any remaining buffered content
+              if (buffer.length > 0) {
+                buffer += textDecoder.decode()
+                const trailing = buffer.split('\n\n')
+                trailing.forEach(processEvent)
               }
+              break
+            }
+
+            buffer += textDecoder.decode(value, { stream: true })
+
+            let boundaryIndex: number
+            while ((boundaryIndex = buffer.indexOf('\n\n')) !== -1) {
+              const rawEvent = buffer.slice(0, boundaryIndex).trim()
+              buffer = buffer.slice(boundaryIndex + 2)
+              if (rawEvent) processEvent(rawEvent)
             }
           }
         } finally {

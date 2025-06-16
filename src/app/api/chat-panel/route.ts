@@ -95,49 +95,65 @@ export async function POST(req: Request) {
             throw new Error('No reader available');
           }
 
+          // Robust SSE parsing: accumulate into a buffer until we see a double new-line (\n\n)
+          const textDecoder = new TextDecoder();
+          let buffer = '';
+
+          const emitEvent = (rawLine: string) => {
+            // Ignore non-data lines and the special [DONE] message
+            if (!rawLine.startsWith('data: ') || rawLine === 'data: [DONE]') return;
+
+            try {
+              const data = JSON.parse(rawLine.slice(6)); // remove the leading "data: "
+              const delta = data.choices?.[0]?.delta?.content;
+
+              if (delta) {
+                responseText += delta;
+                const tokenData = { type: 'token', content: delta };
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(tokenData)}\n\n`));
+              }
+            } catch (_) {
+              // Invalid JSON – should not happen with the buffer strategy, but swallow just in case
+            }
+          };
+
           while (true) {
             const { done, value } = await reader.read();
-            
+
             if (done) {
+              // Flush whatever is left in the buffer before closing
+              if (buffer.length > 0) {
+                // There might be multiple events still queued without trailing delimiter
+                buffer += textDecoder.decode();
+                const trailingEvents = buffer.split('\n\n');
+                trailingEvents.forEach(emitEvent);
+              }
+
               // Send final metadata when stream is complete
               const finalData = {
                 type: 'metadata',
                 contextUsed: relevantDocuments.length > 0,
                 documentsFound: relevantDocuments.length,
-                relevantDocuments: relevantDocuments.map(doc => ({ 
+                relevantDocuments: relevantDocuments.map(doc => ({
                   title: doc.title,
-                  pageUuid: doc.pageUuid
-                }))
+                  pageUuid: doc.pageUuid,
+                })),
               };
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(finalData)}\n\n`));
               controller.close();
               break;
             }
 
-            // Parse the streaming response
-            const chunk = new TextDecoder().decode(value);
-            const lines = chunk.split('\n');
-            
-            for (const line of lines) {
-              if (line.startsWith('data: ') && line !== 'data: [DONE]') {
-                try {
-                  const data = JSON.parse(line.slice(6));
-                  const delta = data.choices?.[0]?.delta?.content;
-                  
-                  if (delta) {
-                    responseText += delta;
-                    // Send each token as it arrives
-                    const tokenData = {
-                      type: 'token',
-                      content: delta
-                    };
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(tokenData)}\n\n`));
-                  }
-                } catch (e) {
-                  // Skip invalid JSON lines
-                  continue;
-                }
-              }
+            // Append the latest chunk to our buffer, keeping the stream flag so we don't lose partial UTF-8 sequences
+            buffer += textDecoder.decode(value, { stream: true });
+
+            // Process any complete SSE events in the buffer
+            let boundaryIndex;
+            while ((boundaryIndex = buffer.indexOf('\n\n')) !== -1) {
+              const rawEvent = buffer.slice(0, boundaryIndex).trim();
+              buffer = buffer.slice(boundaryIndex + 2); // skip past the delimiter
+
+              if (rawEvent) emitEvent(rawEvent);
             }
           }
         } catch (error) {
