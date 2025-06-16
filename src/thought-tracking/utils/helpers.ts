@@ -100,7 +100,7 @@ export function validateParagraphEdit(edit: Partial<ParagraphEdit>): boolean {
   return !!(
     edit.paragraphId &&
     edit.pageId &&
-    edit.content &&
+    edit.content !== undefined && // Allow empty string for delete
     edit.editType &&
     ['create', 'update', 'delete'].includes(edit.editType)
   );

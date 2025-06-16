@@ -43,40 +43,72 @@ export const trackTipTapEdit = async (
   newContent: any,
   previousContent: any
 ) => {
-  // Extract text content for comparison
-  const newText = extractTextFromTipTap(newContent);
-  const previousText = extractTextFromTipTap(previousContent);
+  // Extract paragraphs from both versions
+  const newParagraphs = extractParagraphsFromTipTap(newContent);
+  const previousParagraphs = extractParagraphsFromTipTap(previousContent);
 
-  if (newText !== previousText) {
-    await tracker.trackEdit({
-      paragraphId: `${pageUuid}-content`, // Or use more granular IDs
-      pageId: pageUuid,
-      content: newText,
-      editType: 'update',
-      previousContent: previousText,
-      metadata: {
-        wordCount: newText.split(/\s+/).length,
-        charCount: newText.length
+  // Compare paragraphs and track changes
+  const maxLength = Math.max(newParagraphs.length, previousParagraphs.length);
+  
+  for (let i = 0; i < maxLength; i++) {
+    const newParagraph = newParagraphs[i] || '';
+    const previousParagraph = previousParagraphs[i] || '';
+    
+    if (newParagraph !== previousParagraph) {
+      let editType: 'create' | 'update' | 'delete';
+      let content: string;
+      
+      if (previousParagraph === '' && newParagraph !== '') {
+        editType = 'create';
+        content = newParagraph; // Just this paragraph
+      } else if (newParagraph === '') {
+        editType = 'delete';
+        content = ''; // Empty string for delete
+      } else {
+        editType = 'update';
+        content = newParagraph; // Just this paragraph
       }
-    });
+
+      await tracker.trackEdit({
+        paragraphId: `${pageUuid}-para-${i}`, // Unique paragraph ID
+        pageId: pageUuid,
+        content, // Only the individual paragraph content
+        editType,
+        metadata: {
+          wordCount: content.split(/\s+/).filter(word => word.length > 0).length,
+          charCount: content.length
+        }
+      });
+    }
   }
 };
 
-// Helper function to extract text from TipTap content
-const extractTextFromTipTap = (content: any): string => {
-  if (!content || !content.content) return '';
+// Helper function to extract paragraphs from TipTap content
+const extractParagraphsFromTipTap = (content: any): string[] => {
+  if (!content || !content.content) return [];
   
-  return content.content
-    .map((node: any) => {
-      if (node.type === 'paragraph' && node.content) {
-        return node.content
-          .map((inline: any) => inline.text || '')
-          .join('');
-      }
-      return '';
-    })
-    .join('\n')
-    .trim();
+  const paragraphs: string[] = [];
+  
+  content.content.forEach((node: any) => {
+    if (node.type === 'paragraph' && node.content) {
+      const paragraphText = node.content
+        .map((inline: any) => inline.text || '')
+        .join('');
+      paragraphs.push(paragraphText.trim());
+    } else if (node.type === 'heading' && node.content) {
+      const headingText = node.content
+        .map((inline: any) => inline.text || '')
+        .join('');
+      paragraphs.push(headingText.trim());
+    }
+  });
+  
+  return paragraphs;
+};
+
+// Helper function to extract text from TipTap content (kept for backward compatibility)
+const extractTextFromTipTap = (content: any): string => {
+  return extractParagraphsFromTipTap(content).join('\n');
 };
 
 // 5. Example: Manual organization trigger

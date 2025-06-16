@@ -35,55 +35,104 @@ export async function setupThoughtTracking(
     // Store tracker for this editor
     editorTrackers.set(pageUuid, tracker)
 
-    // Set up content change tracking
-    let lastContent = editor.getJSON()
-    let lastTextContent = editor.getText()
+    // Content tracking with stable snapshots
+    let stableContent = editor.getJSON()
+    let lastUpdateTime = Date.now()
 
-    const trackChanges = async () => {
+    const trackContentChanges = async () => {
       const currentContent = editor.getJSON()
-      const currentTextContent = editor.getText()
 
-      // Check if content actually changed
-      if (JSON.stringify(currentContent) !== JSON.stringify(lastContent)) {
+      // Find which specific paragraph changed
+      const changedParagraph = findChangedParagraph(stableContent, currentContent)
+      
+      if (changedParagraph) {
         try {
-          // Extract paragraph-level changes
-          const paragraphChanges = extractParagraphChanges(
-            lastContent,
-            currentContent,
-            lastTextContent,
-            currentTextContent
-          )
+          await tracker.trackEdit({
+            paragraphId: `${pageUuid}-para-${changedParagraph.index}`,
+            pageId: pageUuid,
+            content: changedParagraph.content, // Only this paragraph's content  
+            editType: changedParagraph.editType,
+            metadata: {
+              wordCount: changedParagraph.content.split(/\s+/).filter(word => word.length > 0).length,
+              charCount: changedParagraph.content.length
+            }
+          })
 
-          // Track each paragraph change
-          for (const change of paragraphChanges) {
-            await tracker.trackEdit({
-              paragraphId: change.paragraphId,
-              pageId: pageUuid,
-              content: change.content,
-              editType: change.editType,
-              previousContent: change.previousContent,
-              metadata: {
-                wordCount: change.content.split(/\s+/).length,
-                charCount: change.content.length
-              }
-            })
-          }
-
-          // Update last content
-          lastContent = currentContent
-          lastTextContent = currentTextContent
+          console.log(`🧠 Tracked ${changedParagraph.editType} for paragraph ${changedParagraph.index}:`, changedParagraph.content.substring(0, 50))
 
         } catch (error) {
           console.error('Error tracking thought changes:', error)
         }
       }
+
+      // Update stable content snapshot
+      stableContent = currentContent
+      lastUpdateTime = Date.now()
+    }
+
+    // Helper function to find which specific paragraph changed
+    const findChangedParagraph = (oldContent: any, newContent: any) => {
+      const oldParagraphs = extractParagraphs(oldContent)
+      const newParagraphs = extractParagraphs(newContent)
+      
+      const maxLength = Math.max(oldParagraphs.length, newParagraphs.length)
+      
+      // Find first changed paragraph
+      for (let i = 0; i < maxLength; i++) {
+        const oldPara = oldParagraphs[i] || ''
+        const newPara = newParagraphs[i] || ''
+        
+        if (oldPara !== newPara) {
+          let editType: 'create' | 'update' | 'delete'
+          
+          if (oldPara === '' && newPara !== '') {
+            editType = 'create'
+          } else if (newPara === '') {
+            editType = 'delete'
+          } else {
+            editType = 'update'
+          }
+          
+          return {
+            index: i,
+            content: newPara, // Empty string for delete
+            editType
+          }
+        }
+      }
+      
+      return null // No changes found
+    }
+
+    // Helper function to extract paragraphs
+    const extractParagraphs = (content: any): string[] => {
+      if (!content?.content) return []
+      
+      return content.content.map((node: any) => {
+        if (node.type === 'paragraph' || node.type === 'heading') {
+          return node.content?.map((textNode: any) => textNode.text || '').join('').trim() || ''
+        }
+        return ''
+      }).filter((para: string, index: number, arr: string[]) => 
+        // Keep all paragraphs including empty ones to maintain position indexing
+        index < arr.length
+      )
     }
 
     // Set up debounced change tracking
     let changeTimeout: NodeJS.Timeout
+    let quickChangeTimeout: NodeJS.Timeout
+    
     const debouncedTrackChanges = () => {
+      // Clear any existing timeouts
       clearTimeout(changeTimeout)
-      changeTimeout = setTimeout(trackChanges, 2000) // Track changes after 2 seconds of inactivity
+      clearTimeout(quickChangeTimeout)
+      
+      // Quick check for rapid changes (don't track these)
+      quickChangeTimeout = setTimeout(() => {
+        // Only set the main timeout if user is still editing
+        changeTimeout = setTimeout(trackContentChanges, 2000) // 2 seconds for content changes
+      }, 500) // 500ms quick debounce to avoid tracking rapid keystrokes
     }
 
     // Listen to editor updates
@@ -116,6 +165,7 @@ export async function setupThoughtTracking(
     // Return cleanup function
     return () => {
       clearTimeout(changeTimeout)
+      clearTimeout(quickChangeTimeout)
       editor.off('update', debouncedTrackChanges)
       editorTrackers.delete(pageUuid)
       
@@ -128,55 +178,6 @@ export async function setupThoughtTracking(
   } catch (error) {
     console.error('Failed to setup thought tracking:', error)
   }
-}
-
-// Extract paragraph-level changes from TipTap content
-function extractParagraphChanges(
-  oldContent: any,
-  newContent: any,
-  oldText: string,
-  newText: string
-) {
-  const changes: Array<{
-    paragraphId: string
-    content: string
-    editType: 'create' | 'update' | 'delete'
-    previousContent?: string
-  }> = []
-
-  // Simple text-based change detection
-  if (oldText !== newText) {
-    // For now, treat the entire content as one paragraph change
-    // You could make this more sophisticated by comparing individual paragraphs
-    const paragraphId = `content-main-${Date.now()}`
-    
-    if (oldText === '' && newText !== '') {
-      // New content created
-      changes.push({
-        paragraphId,
-        content: newText,
-        editType: 'create'
-      })
-    } else if (oldText !== '' && newText === '') {
-      // Content deleted
-      changes.push({
-        paragraphId,
-        content: '',
-        editType: 'delete',
-        previousContent: oldText
-      })
-    } else {
-      // Content updated
-      changes.push({
-        paragraphId,
-        content: newText,
-        editType: 'update',
-        previousContent: oldText
-      })
-    }
-  }
-
-  return changes
 }
 
 // Get tracker for a specific page

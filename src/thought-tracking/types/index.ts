@@ -2,16 +2,14 @@
 
 export interface ParagraphEdit {
   id: string;
-  paragraphId: string;
+  paragraphId: string; // Unique identifier for the paragraph/line
   pageId: string; // This will be the page UUID from Supabase
-  content: string;
+  content: string; // Latest content state - empty string "" for delete
   timestamp: number;
   editType: 'create' | 'update' | 'delete';
-  previousContent?: string;
   metadata?: {
     wordCount: number;
     charCount: number;
-    lineNumber?: number;
   };
 }
 
