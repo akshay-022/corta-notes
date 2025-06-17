@@ -2,7 +2,6 @@ import {
   BrainState, 
   ParagraphEdit, 
   BrainStateConfig, 
-  CacheEntry, 
   StorageManager 
 } from '../types';
 import { generateId } from '../utils/helpers';
@@ -13,7 +12,7 @@ export class BrainStateManager {
   private storageManager: StorageManager;
   private summaryGenerator: SummaryGenerator;
   private currentState: BrainState | null = null;
-  private isMovingToCache: boolean = false;
+  private isOrganizing: boolean = false;
 
   constructor(storageManager: StorageManager, summaryGenerator: SummaryGenerator) {
     this.storageManager = storageManager;
@@ -47,6 +46,7 @@ export class BrainStateManager {
       ...edit,
       id: generateId(),
       timestamp: Date.now(),
+      organized: false,
       metadata: {
         wordCount: edit.content.split(/\s+/).length,
         charCount: edit.content.length,
@@ -57,102 +57,59 @@ export class BrainStateManager {
     this.currentState!.edits.push(fullEdit);
     this.currentState!.lastUpdated = Date.now();
 
-    // Check if we need to update summary - Let's not do this for now
-    // if (this.shouldUpdateSummary()) {
-    //   await this.updateSummary();
-    // }
-
-    // Check if we need to move edits to cache
-    if (this.shouldMoveToCache() && !this.isMovingToCache) {
-      await this.moveEditsToCache();
-    }
+    // Check if we need to trigger organization
+    await this.checkOrganizationTrigger();
 
     await this.storageManager.saveBrainState(this.currentState!);
   }
 
-  private shouldUpdateSummary(): boolean {
-    if (!this.currentState) return false;
-    
-    const { summaryUpdateFrequency } = this.currentState.config;
-    return this.currentState.edits.length % summaryUpdateFrequency === 0;
-  }
-
-  private shouldMoveToCache(): boolean {
-    if (!this.currentState) return false;
-    
-    return this.currentState.edits.length >= this.currentState.config.maxEditsInPrimary;
-  }
-
-  private async updateSummary(): Promise<void> {
-    if (!this.currentState) return;
-
-    try {
-      const newSummary = await this.summaryGenerator.generateSummary(
-        this.currentState.edits,
-        this.currentState.summary
-      );
-      
-      this.currentState.summary = newSummary;
-    } catch (error) {
-      console.error('Error updating summary:', error);
-    }
-  }
-
-  private async moveEditsToCache(): Promise<void> {
-    if (!this.currentState || this.isMovingToCache) return;
-
-    // Set flag to prevent concurrent cache moves
-    this.isMovingToCache = true;
-
-    try {
-      const cacheEntry: CacheEntry = {
-        id: generateId(),
-        edits: [...this.currentState.edits],
-        summary: this.currentState.summary,
-        contextSummary: "",
-        // contextSummary: await this.generateContextSummary(this.currentState.edits),
-        timestamp: Date.now(),
-        processed: false,
-      };
-
-      await this.storageManager.saveCacheEntry(cacheEntry);
-      
-      // Clear primary edits
-      this.currentState.edits = [];
-      
-      // Check if we should trigger organization
-      await this.checkOrganizationTrigger();
-    } finally {
-      // Always reset the flag
-      this.isMovingToCache = false;
-    }
-  }
-
-  private async generateContextSummary(edits: ParagraphEdit[]): Promise<string> {
-    return this.summaryGenerator.generateContextSummary(edits);
-  }
-
   private async checkOrganizationTrigger(): Promise<void> {
-    const cacheEntries = await this.storageManager.loadCacheEntries();
-    const unprocessedEntries = cacheEntries.filter(entry => !entry.processed);
+    if (!this.currentState || this.isOrganizing) return;
+
+    const unorganizedEdits = this.currentState.edits.filter(edit => !edit.organized);
     
-    if (unprocessedEntries.length >= this.currentState?.config.organizationThreshold!) {
-      // Trigger organization process
-      await this.triggerOrganization(unprocessedEntries);
+    if (unorganizedEdits.length > this.currentState.config.maxEditsBeforeOrganization) {
+      await this.triggerOrganization();
     }
   }
 
-  private async triggerOrganization(cacheEntries: CacheEntry[]): Promise<void> {
-    // This will be handled by the OrganizationManager
-    // For now, we'll emit an event or call a callback
-    console.log('Organization trigger activated with', cacheEntries.length, 'cache entries');
+  private async triggerOrganization(): Promise<void> {
+    if (!this.currentState || this.isOrganizing) return;
+
+    this.isOrganizing = true;
     
-    // You can implement custom event emission or callback mechanism here
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent(EVENTS.ORGANIZATION_NEEDED, {
-        detail: { cacheEntries }
-      }));
+    try {
+      // Get oldest unorganized edits
+      const unorganizedEdits = this.currentState.edits
+        .filter(edit => !edit.organized)
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .slice(0, this.currentState.config.editsToOrganizeCount);
+
+      console.log('Triggering organization for', unorganizedEdits.length, 'edits');
+      
+      // Emit organization event
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent(EVENTS.ORGANIZATION_NEEDED, {
+          detail: { edits: unorganizedEdits }
+        }));
+      }
+    } finally {
+      this.isOrganizing = false;
     }
+  }
+
+  async markEditsAsOrganized(editIds: string[]): Promise<void> {
+    if (!this.currentState) {
+      await this.initialize();
+    }
+
+    const editIdSet = new Set(editIds);
+    this.currentState!.edits = this.currentState!.edits.map(edit => 
+      editIdSet.has(edit.id) ? { ...edit, organized: true } : edit
+    );
+
+    this.currentState!.lastUpdated = Date.now();
+    await this.storageManager.saveBrainState(this.currentState!);
   }
 
   async getCurrentState(): Promise<BrainState | null> {
@@ -197,6 +154,14 @@ export class BrainStateManager {
       .slice(0, limit);
   }
 
+  async getUnorganizedEdits(): Promise<ParagraphEdit[]> {
+    if (!this.currentState) {
+      await this.initialize();
+    }
+
+    return this.currentState!.edits.filter(edit => !edit.organized);
+  }
+
   async clearBrainState(): Promise<void> {
     this.currentState = this.createDefaultBrainState();
     await this.storageManager.saveBrainState(this.currentState);
@@ -204,7 +169,8 @@ export class BrainStateManager {
 
   async getStats(): Promise<{
     totalEdits: number;
-    totalCacheEntries: number;
+    organizedEdits: number;
+    unorganizedEdits: number;
     lastUpdate: number;
     averageEditSize: number;
     editTypes: Record<string, number>;
@@ -213,8 +179,9 @@ export class BrainStateManager {
       await this.initialize();
     }
 
-    const cacheEntries = await this.storageManager.loadCacheEntries();
     const allEdits = this.currentState!.edits;
+    const organizedEdits = allEdits.filter(edit => edit.organized);
+    const unorganizedEdits = allEdits.filter(edit => !edit.organized);
     
     const editTypes = allEdits.reduce((acc, edit) => {
       acc[edit.editType] = (acc[edit.editType] || 0) + 1;
@@ -227,7 +194,8 @@ export class BrainStateManager {
 
     return {
       totalEdits: allEdits.length,
-      totalCacheEntries: cacheEntries.length,
+      organizedEdits: organizedEdits.length,
+      unorganizedEdits: unorganizedEdits.length,
       lastUpdate: this.currentState!.lastUpdated,
       averageEditSize,
       editTypes,

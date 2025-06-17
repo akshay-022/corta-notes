@@ -6,25 +6,36 @@
 import { BrainStateConfig, OrganizationConfig, SupabaseStorageConfig } from './types';
 
 // =============================================================================
-// BRAIN STATE CONFIGURATION
+// BRAIN STATE DEFAULTS
 // =============================================================================
 
-export const BRAIN_STATE_DEFAULTS: BrainStateConfig = {
-  maxEditsInPrimary: 1,
-  maxEditsInSecondary: 3,
-  summaryUpdateFrequency: 5,
-  organizationThreshold: 3,
+export const BRAIN_STATE_DEFAULTS = {
+  maxEditsBeforeOrganization: 2, // Trigger organization when > 20 edits
+  editsToOrganizeCount: 1, // Organize oldest 10 edits at a time
+  summaryUpdateFrequency: 1, // Update summary every 10 edits (optional)
 } as const;
 
 // =============================================================================
-// ORGANIZATION CONFIGURATION
+// ORGANIZATION DEFAULTS
 // =============================================================================
 
-export const ORGANIZATION_DEFAULTS: OrganizationConfig = {
+export const ORGANIZATION_DEFAULTS = {
   preserveAllInformation: true,
-  createNewPagesThreshold: 0.3, // Similarity threshold for creating new pages
-  maxSimilarityForMerge: 0.7, // Similarity threshold for merging with existing pages
-  contextWindowSize: 4000, // Maximum context size for LLM
+  createNewPagesThreshold: 0.3, // 30% similarity threshold for new pages
+  maxSimilarityForMerge: 0.7, // 70% similarity threshold for merging
+  contextWindowSize: 4000, // Max context for LLM
+} as const;
+
+// =============================================================================
+// EVENTS
+// =============================================================================
+
+export const EVENTS = {
+  EDIT_ADDED: 'thought-tracking:edit-added',
+  BRAIN_STATE_UPDATED: 'thought-tracking:brain-state-updated',
+  ORGANIZATION_NEEDED: 'thought-tracking:organization-needed',
+  ORGANIZATION_COMPLETE: 'thought-tracking:organization-complete',
+  ORGANIZATION_ERROR: 'thought-tracking:organization-error',
 } as const;
 
 // =============================================================================
@@ -33,19 +44,17 @@ export const ORGANIZATION_DEFAULTS: OrganizationConfig = {
 
 export const STORAGE_KEYS = {
   BRAIN_STATE: 'thought-tracking:brain-state',
-  CACHE_ENTRIES: 'thought-tracking:cache-entries',
   ORGANIZED_PAGES: 'thought-tracking:organized-pages',
   CONFIG: 'thought-tracking:config',
 } as const;
 
 // =============================================================================
-// SUPABASE CONFIGURATION
+// SUPABASE DEFAULTS
 // =============================================================================
 
-export const SUPABASE_DEFAULTS: Required<SupabaseStorageConfig> = {
+export const SUPABASE_DEFAULTS = {
   tableName: 'pages',
   brainStateKey: 'thought_tracking_brain_state',
-  cacheTableName: 'thought_tracking_cache',
 } as const;
 
 // =============================================================================
@@ -53,20 +62,18 @@ export const SUPABASE_DEFAULTS: Required<SupabaseStorageConfig> = {
 // =============================================================================
 
 export const API_ENDPOINTS = {
-  ORGANIZATION: '/api/organize',
-  SUMMARY_GENERATION: '/api/summarize',
+  SUMMARY: '/api/thought-tracking/summarize',
+  ORGANIZATION: '/api/thought-tracking/organize',
 } as const;
 
 // =============================================================================
-// EVENTS
+// PERFORMANCE THRESHOLDS
 // =============================================================================
 
-export const EVENTS = {
-  ORGANIZATION_NEEDED: 'thought-tracking:organization-needed',
-  ORGANIZATION_COMPLETE: 'thought-tracking:organization-complete',
-  ORGANIZATION_ERROR: 'thought-tracking:organization-error',
-  SUMMARY_UPDATED: 'thought-tracking:summary-updated',
-  BRAIN_STATE_UPDATED: 'thought-tracking:brain-state-updated',
+export const PERFORMANCE_THRESHOLDS = {
+  MAX_STORAGE_SIZE_MB: 10, // Maximum storage size in MB
+  CLEANUP_INTERVAL_MS: 5 * 60 * 1000, // 5 minutes
+  DEBOUNCE_DELAY_MS: 300, // Debounce delay for edit tracking
 } as const;
 
 // =============================================================================
@@ -77,17 +84,6 @@ export const SUMMARY_DEFAULTS = {
   MAX_SUMMARY_LENGTH: 500,
   MIN_EDITS_FOR_SUMMARY: 3,
   CONTEXT_WINDOW_SIZE: 2000,
-} as const;
-
-// =============================================================================
-// PERFORMANCE THRESHOLDS
-// =============================================================================
-
-export const PERFORMANCE_THRESHOLDS = {
-  MAX_CACHE_SIZE: 100, // Maximum number of cache entries before cleanup
-  MAX_STORAGE_SIZE_MB: 10, // Maximum storage size in MB
-  CLEANUP_INTERVAL_MS: 5 * 60 * 1000, // 5 minutes
-  DEBOUNCE_DELAY_MS: 300, // Debounce delay for edit tracking
 } as const;
 
 // =============================================================================

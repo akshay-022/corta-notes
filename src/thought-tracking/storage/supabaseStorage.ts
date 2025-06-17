@@ -1,7 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
   BrainState, 
-  CacheEntry, 
   OrganizedPage, 
   StorageManager, 
   BrainStateConfig,
@@ -66,55 +65,6 @@ export class SupabaseStorageManager implements StorageManager {
     } catch (error) {
       console.error('Error loading brain state:', error);
       return null;
-    }
-  }
-
-  async saveCacheEntry(entry: CacheEntry): Promise<void> {
-    try {
-      // For cache entries, we can use the pages table metadata field
-      // or create a dedicated cache table. For now, using localStorage with backup to metadata
-      if (typeof window !== 'undefined') {
-        const existingEntries = await this.loadCacheEntries();
-        const updatedEntries = [...existingEntries, entry];
-        localStorage.setItem(
-          `${this.config.cacheTableName}_${this.userId}`, 
-          JSON.stringify(updatedEntries)
-        );
-      }
-    } catch (error) {
-      console.error('Error saving cache entry:', error);
-      throw new Error('Failed to save cache entry to Supabase');
-    }
-  }
-
-  async loadCacheEntries(): Promise<CacheEntry[]> {
-    try {
-      if (typeof window === 'undefined') return [];
-      
-      const stored = localStorage.getItem(`${this.config.cacheTableName}_${this.userId}`);
-      if (!stored) return [];
-      
-      return JSON.parse(stored) as CacheEntry[];
-    } catch (error) {
-      console.error('Error loading cache entries:', error);
-      return [];
-    }
-  }
-
-  async clearProcessedCache(ids: string[]): Promise<void> {
-    try {
-      const entries = await this.loadCacheEntries();
-      const filteredEntries = entries.filter(entry => !ids.includes(entry.id));
-      
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(
-          `${this.config.cacheTableName}_${this.userId}`, 
-          JSON.stringify(filteredEntries)
-        );
-      }
-    } catch (error) {
-      console.error('Error clearing processed cache:', error);
-      throw new Error('Failed to clear processed cache from Supabase');
     }
   }
 

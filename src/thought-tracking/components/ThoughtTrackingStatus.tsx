@@ -15,6 +15,7 @@ export function ThoughtTrackingStatus({
     brainState,
     organizedPages,
     recentEdits,
+    unorganizedEdits,
     stats,
     isLoading,
     error,
@@ -42,9 +43,11 @@ export function ThoughtTrackingStatus({
     );
   }
 
-  const editCount = brainState?.edits.length || 0;
+  const totalEdits = brainState?.edits.length || 0;
+  const unorganizedCount = unorganizedEdits.length;
   const organizedCount = organizedPages.length;
   const recentCount = recentEdits.length;
+  const maxEdits = brainState?.config.maxEditsBeforeOrganization || 20;
 
   return (
     <div className={`space-y-2 ${className}`}>
@@ -55,9 +58,9 @@ export function ThoughtTrackingStatus({
       >
         <Brain className={`w-4 h-4 ${isOrganizing ? 'animate-pulse text-blue-400' : 'text-gray-400'}`} />
         <span className="text-sm text-gray-300">
-          {isOrganizing ? 'Organizing...' : `${editCount} edits tracked`}
+          {isOrganizing ? 'Organizing...' : `${unorganizedCount} unorganized edits`}
         </span>
-        {editCount >= (brainState?.config.maxEditsInPrimary || 30) && (
+        {unorganizedCount > maxEdits && (
           <Zap className="w-3 h-3 text-yellow-400" />
         )}
       </div>
@@ -66,8 +69,13 @@ export function ThoughtTrackingStatus({
       {showDetails && (
         <div className="bg-gray-800/30 rounded-lg p-3 space-y-2 text-xs">
           <div className="flex items-center justify-between">
-            <span className="text-gray-400">Brain State Edits</span>
-            <span className="text-white">{editCount}</span>
+            <span className="text-gray-400">Total Edits</span>
+            <span className="text-white">{totalEdits}</span>
+          </div>
+          
+          <div className="flex items-center justify-between">
+            <span className="text-gray-400">Unorganized Edits</span>
+            <span className="text-white">{unorganizedCount}</span>
           </div>
           
           <div className="flex items-center justify-between">
@@ -80,28 +88,19 @@ export function ThoughtTrackingStatus({
             <span className="text-white">{recentCount} edits</span>
           </div>
 
-          {stats && (
-            <>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-400">Cache Entries</span>
-                <span className="text-white">{stats.organization.unprocessedCacheEntries}</span>
-              </div>
-              
-              {stats.organization.lastOrganization && (
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-400">Last Organized</span>
-                  <span className="text-white">
-                    {new Date(stats.organization.lastOrganization).toLocaleDateString()}
-                  </span>
-                </div>
-              )}
-            </>
+          {stats?.organization?.lastOrganization && (
+            <div className="flex items-center justify-between">
+              <span className="text-gray-400">Last Organized</span>
+              <span className="text-white">
+                {new Date(stats.organization.lastOrganization).toLocaleDateString()}
+              </span>
+            </div>
           )}
 
           <div className="pt-2 border-t border-gray-700">
             <button
               onClick={triggerOrganization}
-              disabled={isOrganizing}
+              disabled={isOrganizing || unorganizedCount === 0}
               className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:opacity-50 text-white text-xs py-2 px-3 rounded transition-colors"
             >
               {isOrganizing ? (
@@ -112,7 +111,7 @@ export function ThoughtTrackingStatus({
               ) : (
                 <>
                   <Zap className="w-3 h-3" />
-                  Organize Now
+                  {unorganizedCount === 0 ? 'No Edits to Organize' : 'Organize Now'}
                 </>
               )}
             </button>
@@ -125,25 +124,26 @@ export function ThoughtTrackingStatus({
 
 // Mini version for toolbar/status bar
 export function ThoughtTrackingMini({ className = '' }: { className?: string }) {
-  const { brainState, isOrganizing, triggerOrganization } = useThoughtTracker();
+  const { brainState, unorganizedEdits, isOrganizing, triggerOrganization } = useThoughtTracker();
   
-  const editCount = brainState?.edits.length || 0;
-  const isReady = editCount >= (brainState?.config.maxEditsInPrimary || 30);
+  const unorganizedCount = unorganizedEdits.length;
+  const maxEdits = brainState?.config.maxEditsBeforeOrganization || 20;
+  const isReady = unorganizedCount > maxEdits;
 
   return (
     <div className={`flex items-center gap-1 ${className}`}>
       <button
         onClick={triggerOrganization}
-        disabled={isOrganizing}
+        disabled={isOrganizing || unorganizedCount === 0}
         className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
           isReady 
             ? 'bg-yellow-600/20 text-yellow-400 hover:bg-yellow-600/30' 
             : 'bg-gray-700/50 text-gray-400 hover:bg-gray-700'
         }`}
-        title={`${editCount} edits tracked${isReady ? ' - ready for organization' : ''}`}
+        title={`${unorganizedCount} unorganized edits${isReady ? ' - ready for organization' : ''}`}
       >
         <Brain className={`w-3 h-3 ${isOrganizing ? 'animate-pulse' : ''}`} />
-        <span>{editCount}</span>
+        <span>{unorganizedCount}</span>
         {isReady && <Zap className="w-2 h-2" />}
       </button>
     </div>

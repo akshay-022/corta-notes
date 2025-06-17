@@ -1,225 +1,82 @@
 # Thought Tracking System
 
-A comprehensive, modular system for tracking, summarizing, and organizing text edits with AI-powered content organization.
+A lightweight, intelligent system for tracking and organizing paragraph-level edits in real-time. The system automatically organizes your thoughts into structured pages when you reach a certain threshold of edits.
 
-## Overview
+## How It Works
 
-The Thought Tracking System implements a sophisticated workflow for managing raw text edits:
-
-1. **Raw Page Edits** → Track line-by-line changes with paragraph IDs
-2. **Brain State** → Stack edits in localStorage with auto-summarization
-3. **Cache System** → Move batches of edits to secondary cache with context summaries
-4. **AI Organization** → Intelligently organize cached content into structured pages
-5. **Organized Pages** → Final structured content with proper categorization
-
-## Architecture
+1. **Edit Tracking** → Track every paragraph edit with metadata
+2. **Brain State** → Store recent edits in memory
+3. **AI Organization** → When you have >20 edits, organize the oldest 10 into pages
 
 ```
-Raw Pages (organized=false)
-    ↓ [Line edits tracked]
-Brain State (localStorage)
-    ↓ [After N edits]
-Cache Store (with summaries)
-    ↓ [After N cache entries]
-Organization API
-    ↓ [AI processing]
-Organized Pages (organized=true)
+User edits → Brain State (max 20+ edits) → AI Organization (oldest 10) → Organized Pages
 ```
 
 ## Core Components
 
-### 1. ThoughtTracker (Main Orchestrator)
-The central class that coordinates all components.
+### BrainStateManager
+Manages the current state of tracked edits and triggers organization when needed.
+
+### OrganizationManager
+Handles AI-powered organization of edits into structured pages.
+
+### StorageManager
+Provides persistence layer (localStorage, Supabase, etc.)
+
+## Quick Start
 
 ```typescript
 import { ThoughtTracker } from '@/thought-tracking';
 
-const tracker = new ThoughtTracker(
-  undefined, // storage manager (optional)
-  '/api/summarize', // summary API endpoint
-  '/api/organize' // organization API endpoint
-);
-
-await tracker.initialize();
-```
-
-### 2. BrainStateManager
-Manages the primary edit queue and auto-summarization.
-
-```typescript
-// Track an edit
-await tracker.trackEdit({
-  paragraphId: 'para-123',
-  pageId: 'page-456',
-  content: 'Updated content...',
-  editType: 'update',
-  previousContent: 'Original content...'
-});
-```
-
-### 3. OrganizationManager
-Handles AI-powered organization of cached content.
-
-```typescript
-// Trigger manual organization
-await tracker.triggerManualOrganization();
-```
-
-### 4. Storage System
-LocalStorage-based persistence with configurable thresholds, plus Supabase integration for production use.
-
-## Supabase Integration
-
-### Using with your existing Supabase database
-
-```typescript
-import { createClient } from '@supabase/supabase-js';
-import { SupabaseStorageManager, ThoughtTracker } from '@/thought-tracking';
-
-// Initialize with your Supabase client and user ID
-const supabase = createClient(url, key);
-const userId = 'your-user-id';
-
-const storageManager = new SupabaseStorageManager(supabase, userId);
-const tracker = new ThoughtTracker(storageManager);
-
+// Initialize
+const tracker = new ThoughtTracker();
 await tracker.initialize();
 
-// Track edits on existing pages
+// Track edits
 await tracker.trackEdit({
-  paragraphId: 'para-123',
-  pageId: 'your-page-uuid', // Use your page UUID
-  content: 'Updated content...',
+  paragraphId: 'intro-paragraph',
+  pageId: 'my-notes',
+  content: 'This is my updated introduction...',
   editType: 'update'
 });
 
-// The system will automatically:
-// 1. Store brain state in localStorage (frequent updates)
-// 2. Use your pages table for organized content
-// 3. Set organized=true when content is organized
-// 4. Store additional metadata in the metadata JSONB field
-```
-
-### Database Integration
-
-The system integrates seamlessly with your existing `pages` table:
-
-- **Raw pages**: `organized = false` (default)
-- **Organized pages**: `organized = true` (after AI processing)
-- **Content**: Uses both `content` (JSONB) and `content_text` fields
-- **Metadata**: Stores thought tracking data in the `metadata` field
-- **Full text search**: Leverages your existing search indexes
-
-## React Integration
-
-### Using the Hook
-
-```typescript
-import { useThoughtTracker } from '@/thought-tracking';
-
-function MyComponent() {
-  const {
-    trackEdit,
-    brainState,
-    organizedPages,
-    recentEdits,
-    isLoading,
-    error,
-    isOrganizing,
-    triggerOrganization,
-    searchPages
-  } = useThoughtTracker();
-
-  const handleEdit = async (content: string, paragraphId: string) => {
-    await trackEdit({
-      paragraphId,
-      pageId: 'current-page',
-      content,
-      editType: 'update'
-    });
-  };
-
-  return (
-    <div>
-      {isLoading && <div>Loading...</div>}
-      {error && <div>Error: {error}</div>}
-      {isOrganizing && <div>Organizing content...</div>}
-      
-      <button onClick={triggerOrganization}>
-        Organize Now
-      </button>
-      
-      <div>Recent Edits: {recentEdits.length}</div>
-      <div>Organized Pages: {organizedPages.length}</div>
-    </div>
-  );
-}
-```
-
-### Event Handling
-
-```typescript
-import { EVENTS } from '@/thought-tracking';
-
-// Listen for organization events
-const { onOrganizationComplete, onOrganizationError } = useThoughtTracker();
-
-useEffect(() => {
-  const unsubscribeComplete = onOrganizationComplete((result) => {
-    console.log('Organization completed:', result);
-  });
-  
-  const unsubscribeError = onOrganizationError((error) => {
-    console.error('Organization failed:', error);
-  });
-  
-  return () => {
-    unsubscribeComplete();
-    unsubscribeError();
-  };
-}, []);
+// System automatically organizes when >20 edits
 ```
 
 ## Configuration
 
-### Brain State Configuration
+### Brain State Config
 
 ```typescript
-await tracker.updateConfig({
-  maxEditsInPrimary: 50, // Max edits before moving to cache
-  maxEditsInSecondary: 30, // Max cache entries before organization
-  summaryUpdateFrequency: 10, // Update summary every N edits
-  organizationThreshold: 25 // Trigger organization after N cache entries
-});
-```
-
-### Organization Configuration
-
-The system uses intelligent thresholds for content organization:
-
-- **createNewPagesThreshold**: 0.3 (similarity threshold for new pages)
-- **maxSimilarityForMerge**: 0.7 (similarity threshold for merging)
-- **preserveAllInformation**: true (never lose information)
-- **contextWindowSize**: 4000 (max context for LLM)
-
-## API Endpoints
-
-### Summary API (`/api/summarize`)
-
-```typescript
-// POST /api/summarize
-{
-  "type": "brain_state_summary" | "context_summary",
-  "context": {
-    "editCount": number,
-    "timeSpan": { "start": number, "end": number },
-    "keywords": string[],
-    "editTypes": Record<string, number>
-  },
-  "previousSummary": string,
-  "maxLength": number
+interface BrainStateConfig {
+  maxEditsBeforeOrganization: number; // Default: 20
+  editsToOrganizeCount: number; // Default: 10  
+  summaryUpdateFrequency: number; // Default: 10
 }
 ```
+
+### Organization Config
+
+```typescript
+interface OrganizationConfig {
+  preserveAllInformation: boolean; // Default: true
+  createNewPagesThreshold: number; // Default: 0.3
+  maxSimilarityForMerge: number; // Default: 0.7
+  contextWindowSize: number; // Default: 4000
+}
+```
+
+### Default Settings
+
+```typescript
+const config = {
+  maxEditsBeforeOrganization: 20, // Trigger when >20 edits
+  editsToOrganizeCount: 10, // Organize oldest 10 edits
+  summaryUpdateFrequency: 10, // Update summary every 10 edits
+};
+```
+
+## API Endpoints
 
 ### Organization API (`/api/organize`)
 
@@ -228,7 +85,7 @@ The system uses intelligent thresholds for content organization:
 {
   "type": "organize_content",
   "request": {
-    "cacheEntries": CacheEntry[],
+    "edits": ParagraphEdit[],
     "currentSummary": string,
     "existingPages": OrganizedPage[],
     "config": OrganizationConfig
@@ -249,11 +106,10 @@ interface ParagraphEdit {
   content: string;
   timestamp: number;
   editType: 'create' | 'update' | 'delete';
-  previousContent?: string;
+  organized?: boolean; // Marks if edit has been organized
   metadata?: {
     wordCount: number;
     charCount: number;
-    lineNumber?: number;
   };
 }
 ```
@@ -262,14 +118,14 @@ interface ParagraphEdit {
 
 ```typescript
 interface OrganizedPage {
-  id: string;
+  uuid: string;
   title: string;
-  content: string;
+  content: any; // TipTap JSON
+  content_text: string; // Plain text
   organized: boolean;
-  lastModified: number;
-  tags: string[];
+  tags?: string[];
   category?: string;
-  relatedPages?: string[];
+  // ... other Supabase fields
 }
 ```
 
@@ -287,15 +143,13 @@ await tracker.trackEdit({
   paragraphId: 'intro-paragraph',
   pageId: 'my-notes',
   content: 'This is my updated introduction...',
-  editType: 'update',
-  previousContent: 'This is my introduction...'
+  editType: 'update'
 });
 
 // System automatically:
 // 1. Stores edit in brain state
-// 2. Updates summary every 5 edits
-// 3. Moves to cache after 30 edits
-// 4. Triggers organization after 30 cache entries
+// 2. When >20 edits, organizes oldest 10
+// 3. Marks organized edits as processed
 ```
 
 ### Manual Organization
@@ -303,119 +157,108 @@ await tracker.trackEdit({
 ```typescript
 // Check current state
 const stats = await tracker.getStats();
-console.log('Unprocessed entries:', stats.organization.unprocessedCacheEntries);
+console.log('Unorganized edits:', stats.brain.unorganizedEdits);
 
-// Trigger organization manually
+// Trigger manual organization
 await tracker.triggerManualOrganization();
+```
 
-// Listen for completion
+### React Hook Usage
+
+```typescript
+import { useThoughtTracker } from '@/thought-tracking/hooks/useThoughtTracker';
+
+function MyComponent() {
+  const {
+    trackEdit,
+    brainState,
+    unorganizedEdits,
+    organizedPages,
+    isOrganizing,
+    triggerOrganization
+  } = useThoughtTracker();
+
+  const handleEdit = async (content: string) => {
+    await trackEdit({
+      paragraphId: 'p1',
+      pageId: 'page1',
+      content,
+      editType: 'update'
+    });
+  };
+
+  return (
+    <div>
+      <p>Unorganized edits: {unorganizedEdits.length}</p>
+      <p>Organized pages: {organizedPages.length}</p>
+      <button onClick={triggerOrganization} disabled={isOrganizing}>
+        {isOrganizing ? 'Organizing...' : 'Organize Now'}
+      </button>
+    </div>
+  );
+}
+```
+
+## Storage Options
+
+### localStorage (Default)
+```typescript
+import { LocalStorageManager } from '@/thought-tracking/storage/localStorage';
+const tracker = new ThoughtTracker(new LocalStorageManager());
+```
+
+### Supabase
+```typescript
+import { SupabaseStorageManager } from '@/thought-tracking/storage/supabaseStorage';
+const storage = new SupabaseStorageManager(supabase, userId);
+const tracker = new ThoughtTracker(storage);
+```
+
+## Events
+
+The system emits events for integration:
+
+```typescript
+// Listen for organization events
 window.addEventListener('thought-tracking:organization-complete', (event) => {
-  const result = event.detail;
-  console.log(`Updated ${result.updatedPages.length} pages`);
-  console.log(`Created ${result.newPages.length} new pages`);
+  console.log('Organization completed:', event.detail);
+});
+
+window.addEventListener('thought-tracking:organization-needed', (event) => {
+  console.log('Organization triggered for:', event.detail.edits.length, 'edits');
 });
 ```
 
-### Search and Retrieval
+## Performance
 
-```typescript
-// Search organized pages
-const pages = await tracker.searchOrganizedPages('machine learning');
-
-// Get specific page
-const page = await tracker.getOrganizedPage('page-id');
-
-// Get edits for a specific page
-const edits = await tracker.getEditsByPage('page-id');
-
-// Get recent activity
-const recentEdits = await tracker.getRecentEdits(20);
-```
-
-### Data Management
-
-```typescript
-// Export all data
-const backup = await tracker.exportData();
-
-// Import data
-await tracker.importData(backup);
-
-// Clear all data
-await tracker.clearAllData();
-```
-
-## Performance Considerations
-
-- **Debounced saves**: Edits are saved with 1-second debouncing
-- **localStorage limits**: Monitor storage size with `getStorageSize()`
-- **Batch processing**: Organization happens in configurable batches
-- **Event-driven**: Uses custom events for loose coupling
-
-## Error Handling
-
-The system includes comprehensive error handling:
-
-- **Fallback summaries**: When API fails, generates local summaries
-- **Fallback organization**: Basic organization when AI fails
-- **Graceful degradation**: System continues working even with component failures
-- **Data validation**: Validates all edit data before processing
-
-## Extending the System
-
-### Custom Storage Manager
-
-```typescript
-import { StorageManager } from '@/thought-tracking';
-
-class DatabaseStorageManager implements StorageManager {
-  async saveBrainState(state: BrainState): Promise<void> {
-    // Custom implementation
-  }
-  // ... implement other methods
-}
-
-const tracker = new ThoughtTracker(new DatabaseStorageManager());
-```
-
-### Custom Summary Generator
-
-```typescript
-import { SummaryGenerator } from '@/thought-tracking';
-
-class CustomSummaryGenerator extends SummaryGenerator {
-  async generateSummary(edits: ParagraphEdit[]): Promise<string> {
-    // Custom summarization logic
-    return 'Custom summary';
-  }
-}
-```
+- **Lightweight**: No complex caching system
+- **Efficient**: Only organizes when threshold is reached
+- **Debounced**: Edit tracking is debounced to prevent excessive calls
+- **Simple**: Direct organization of oldest edits
 
 ## Best Practices
 
-1. **Configure thresholds** based on your content volume
-2. **Monitor storage usage** regularly
-3. **Handle events** for better UX feedback
-4. **Validate edit data** before tracking
-5. **Test organization APIs** thoroughly
-6. **Backup data** regularly using export functionality
+1. **Set appropriate thresholds**: Adjust `maxEditsBeforeOrganization` based on your usage
+2. **Monitor organization**: Use the status component to see when organization is needed
+3. **Regular cleanup**: Organized edits are marked but kept for reference
+4. **API optimization**: Ensure your organization API can handle batches of 10 edits efficiently
 
 ## Troubleshooting
 
 ### High Memory Usage
-- Reduce `maxEditsInPrimary` and `maxEditsInSecondary`
-- Clear processed cache more frequently
-- Export and clear old data
+- Check `maxEditsBeforeOrganization` setting
+- Ensure organization API is working properly
+- Monitor unorganized edit count
 
-### Slow Organization
-- Reduce `contextWindowSize`
-- Optimize API endpoints
-- Use fallback organization for testing
+### Organization Not Triggering
+- Verify API endpoints are configured
+- Check browser console for errors
+- Ensure edit threshold is being reached
 
-### Missing Edits
-- Check edit validation
-- Verify paragraph IDs are unique
-- Monitor browser console for errors
+### Performance Issues
+- Reduce `maxEditsBeforeOrganization` for more frequent organization
+- Optimize organization API response time
+- Check for excessive edit tracking calls
 
 ## License
 

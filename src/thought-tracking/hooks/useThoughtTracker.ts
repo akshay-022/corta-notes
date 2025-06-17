@@ -3,8 +3,7 @@ import {
   ParagraphEdit, 
   BrainState, 
   OrganizedPage, 
-  BrainStateConfig,
-  CacheEntry 
+  BrainStateConfig
 } from '../types';
 import { ThoughtTracker } from '../core/thoughtTracker';
 import { EVENTS } from '../constants';
@@ -17,7 +16,7 @@ interface ThoughtTrackerHookReturn {
   brainState: BrainState | null;
   organizedPages: OrganizedPage[];
   recentEdits: ParagraphEdit[];
-  cacheEntries: CacheEntry[];
+  unorganizedEdits: ParagraphEdit[];
   
   // Search and filter methods
   searchPages: (query: string) => Promise<OrganizedPage[]>;
@@ -55,7 +54,7 @@ export function useThoughtTracker(
   const [brainState, setBrainState] = useState<BrainState | null>(null);
   const [organizedPages, setOrganizedPages] = useState<OrganizedPage[]>([]);
   const [recentEdits, setRecentEdits] = useState<ParagraphEdit[]>([]);
-  const [cacheEntries, setCacheEntries] = useState<CacheEntry[]>([]);
+  const [unorganizedEdits, setUnorganizedEdits] = useState<ParagraphEdit[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -150,59 +149,45 @@ export function useThoughtTracker(
         brainStateData,
         organizedPagesData,
         recentEditsData,
-        cacheEntriesData,
-        statsData
+        unorganizedEditsData,
+        statsData,
       ] = await Promise.all([
-        trackerRef.current.getCurrentBrainState(),
+        trackerRef.current.getBrainState(),
         trackerRef.current.getOrganizedPages(),
-        trackerRef.current.getRecentEdits(20),
-        trackerRef.current.getCacheEntries(),
-        trackerRef.current.getStats()
+        trackerRef.current.getRecentEdits(),
+        trackerRef.current.getUnorganizedEdits(),
+        trackerRef.current.getStats(),
       ]);
 
       setBrainState(brainStateData);
       setOrganizedPages(organizedPagesData);
       setRecentEdits(recentEditsData);
-      setCacheEntries(cacheEntriesData);
+      setUnorganizedEdits(unorganizedEditsData);
       setStats(statsData);
+      
     } catch (err) {
-      console.error('Failed to refresh data:', err);
-      setError('Failed to load data');
+      console.error('Error refreshing data:', err);
+      setError('Failed to refresh data');
     }
   }, []);
 
-  // Core tracking method
+  // Core methods
   const trackEdit = useCallback(async (edit: Omit<ParagraphEdit, 'id' | 'timestamp'>) => {
-    if (!trackerRef.current) {
-      throw new Error('ThoughtTracker not initialized');
-    }
+    if (!trackerRef.current) return;
 
     try {
-      setError(null);
       await trackerRef.current.trackEdit(edit);
-      
-      // Refresh relevant data
-      const [newBrainState, newRecentEdits, newStats] = await Promise.all([
-        trackerRef.current.getCurrentBrainState(),
-        trackerRef.current.getRecentEdits(20),
-        trackerRef.current.getStats()
-      ]);
-      
-      setBrainState(newBrainState);
-      setRecentEdits(newRecentEdits);
-      setStats(newStats);
-      
+      await refreshData();
     } catch (err) {
-      console.error('Failed to track edit:', err);
+      console.error('Error tracking edit:', err);
       setError('Failed to track edit');
       throw err;
     }
-  }, []);
+  }, [refreshData]);
 
-  // Search and access methods
   const searchPages = useCallback(async (query: string): Promise<OrganizedPage[]> => {
     if (!trackerRef.current) return [];
-    return trackerRef.current.searchOrganizedPages(query);
+    return trackerRef.current.searchPages(query);
   }, []);
 
   const getEditsByPage = useCallback(async (pageId: string): Promise<ParagraphEdit[]> => {
@@ -220,35 +205,17 @@ export function useThoughtTracker(
     return trackerRef.current.getOrganizedPage(pageId);
   }, []);
 
-  // Control methods
   const triggerOrganization = useCallback(async () => {
     if (!trackerRef.current) return;
-    
-    try {
-      setError(null);
-      await trackerRef.current.triggerManualOrganization();
-    } catch (err) {
-      console.error('Failed to trigger organization:', err);
-      setError('Failed to trigger organization');
-      throw err;
-    }
+    await trackerRef.current.triggerManualOrganization();
   }, []);
 
   const updateConfig = useCallback(async (config: Partial<BrainStateConfig>) => {
     if (!trackerRef.current) return;
-    
-    try {
-      setError(null);
-      await trackerRef.current.updateConfig(config);
-      await refreshData();
-    } catch (err) {
-      console.error('Failed to update config:', err);
-      setError('Failed to update configuration');
-      throw err;
-    }
+    await trackerRef.current.updateConfig(config);
+    await refreshData();
   }, [refreshData]);
 
-  // Data management methods
   const exportData = useCallback(async () => {
     if (!trackerRef.current) return null;
     return trackerRef.current.exportData();
@@ -256,36 +223,19 @@ export function useThoughtTracker(
 
   const importData = useCallback(async (data: any) => {
     if (!trackerRef.current) return;
-    
-    try {
-      setError(null);
-      await trackerRef.current.importData(data);
-      await refreshData();
-    } catch (err) {
-      console.error('Failed to import data:', err);
-      setError('Failed to import data');
-      throw err;
-    }
+    await trackerRef.current.importData(data);
+    await refreshData();
   }, [refreshData]);
 
   const clearAllData = useCallback(async () => {
     if (!trackerRef.current) return;
-    
-    try {
-      setError(null);
-      await trackerRef.current.clearAllData();
-      await refreshData();
-    } catch (err) {
-      console.error('Failed to clear data:', err);
-      setError('Failed to clear data');
-      throw err;
-    }
+    await trackerRef.current.clearAllData();
+    await refreshData();
   }, [refreshData]);
 
-  // Event handler registration
+  // Event handlers
   const onOrganizationComplete = useCallback((callback: (result: any) => void) => {
     organizationCompleteCallbacks.current.add(callback);
-    
     return () => {
       organizationCompleteCallbacks.current.delete(callback);
     };
@@ -293,29 +243,28 @@ export function useThoughtTracker(
 
   const onOrganizationError = useCallback((callback: (error: string) => void) => {
     organizationErrorCallbacks.current.add(callback);
-    
     return () => {
       organizationErrorCallbacks.current.delete(callback);
     };
   }, []);
 
   return {
-    // Core tracking
+    // Core tracking methods
     trackEdit,
     
-    // Data access
+    // Data access methods
     brainState,
     organizedPages,
     recentEdits,
-    cacheEntries,
+    unorganizedEdits,
     
-    // Search and filter
+    // Search and filter methods
     searchPages,
     getEditsByPage,
     getEditsByParagraph,
     getOrganizedPage,
     
-    // Control
+    // Control methods
     triggerOrganization,
     updateConfig,
     
@@ -324,13 +273,13 @@ export function useThoughtTracker(
     importData,
     clearAllData,
     
-    // State
+    // State and stats
     stats,
     isLoading,
     error,
     isOrganizing,
     
-    // Events
+    // Event handlers
     onOrganizationComplete,
     onOrganizationError,
   };

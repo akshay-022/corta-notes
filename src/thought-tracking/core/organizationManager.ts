@@ -1,5 +1,5 @@
 import { 
-  CacheEntry, 
+  ParagraphEdit,
   OrganizedPage, 
   OrganizationRequest, 
   OrganizationResult, 
@@ -23,15 +23,13 @@ export class OrganizationManager {
     this.defaultConfig = ORGANIZATION_DEFAULTS;
   }
 
-  async organizeContent(cacheEntries: CacheEntry[]): Promise<OrganizationResult> {
-    const unprocessedEntries = cacheEntries.filter(entry => !entry.processed);
-    
-    if (unprocessedEntries.length === 0) {
+  async organizeContent(edits: ParagraphEdit[]): Promise<OrganizationResult> {
+    if (edits.length === 0) {
       return {
         updatedPages: [],
         newPages: [],
-        summary: 'No unprocessed entries to organize',
-        processedCacheIds: [],
+        summary: 'No edits to organize',
+        processedEditIds: [],
       };
     }
 
@@ -40,35 +38,35 @@ export class OrganizationManager {
       const existingPages = await this.storageManager.loadOrganizedPages();
       
       // Prepare organization request
-      const request = this.prepareOrganizationRequest(unprocessedEntries, existingPages);
+      const request = this.prepareOrganizationRequest(edits, existingPages);
       
       // Call organization API
       const result = await this.callOrganizationAPI(request);
       
       // Process and save results
-      await this.processOrganizationResult(result, unprocessedEntries);
+      await this.processOrganizationResult(result);
       
       return result;
     } catch (error) {
       console.error('Error organizing content:', error);
       
       // Fallback organization
-      return this.performFallbackOrganization(unprocessedEntries);
+      return this.performFallbackOrganization(edits);
     }
   }
 
   private prepareOrganizationRequest(
-    cacheEntries: CacheEntry[], 
+    edits: ParagraphEdit[], 
     existingPages: OrganizedPage[]
   ): OrganizationRequest {
-    // Combine all cache summaries for context
-    const combinedSummary = cacheEntries
-      .map(entry => entry.contextSummary)
+    // Generate a summary from the edits
+    const combinedContent = edits
+      .map(edit => edit.content)
       .join('\n\n');
 
     return {
-      cacheEntries,
-      currentSummary: combinedSummary,
+      edits,
+      currentSummary: combinedContent,
       existingPages,
       config: this.defaultConfig,
     };
@@ -98,7 +96,7 @@ export class OrganizationManager {
     return `
 You are an intelligent content organizer. Your task is to:
 
-1. PRESERVE ALL INFORMATION: Never lose any information from the cache entries. Every piece of content must be preserved.
+1. PRESERVE ALL INFORMATION: Never lose any information from the edits. Every piece of content must be preserved.
 
 2. SMART ORGANIZATION: 
    - Analyze the content themes and topics
@@ -124,25 +122,19 @@ You are an intelligent content organizer. Your task is to:
    - Update titles to reflect content accurately
 
 6. QUALITY ASSURANCE:
-   - Ensure all information from cache is incorporated
+   - Ensure all information from edits is incorporated
    - Maintain readability and flow
    - Check for redundancy and consolidate when appropriate
    - Preserve important timestamps and context
 `;
   }
 
-  private async processOrganizationResult(
-    result: OrganizationResult, 
-    processedEntries: CacheEntry[]
-  ): Promise<void> {
+  private async processOrganizationResult(result: OrganizationResult): Promise<void> {
     // Save updated and new pages
     const existingPages = await this.storageManager.loadOrganizedPages();
     const allPages = this.mergePages(existingPages, result.updatedPages, result.newPages);
     
     await this.storageManager.saveOrganizedPages(allPages);
-    
-    // Mark cache entries as processed
-    await this.markCacheEntriesAsProcessed(processedEntries);
   }
 
   private mergePages(
@@ -168,34 +160,21 @@ You are an intelligent content organizer. Your task is to:
     return result;
   }
 
-  private async markCacheEntriesAsProcessed(entries: CacheEntry[]): Promise<void> {
-    const allEntries = await this.storageManager.loadCacheEntries();
-    const processedIds = new Set(entries.map(entry => entry.id));
-    
-    const updatedEntries = allEntries.map(entry => 
-      processedIds.has(entry.id) ? { ...entry, processed: true } : entry
-    );
-    
-    // Here we would need to update individual cache entries
-    // For now, we'll clear the processed ones
-    await this.storageManager.clearProcessedCache(entries.map(e => e.id));
-  }
-
-  private async performFallbackOrganization(cacheEntries: CacheEntry[]): Promise<OrganizationResult> {
+  private async performFallbackOrganization(edits: ParagraphEdit[]): Promise<OrganizationResult> {
     const existingPages = await this.storageManager.loadOrganizedPages();
     const newPages: OrganizedPage[] = [];
     const updatedPages: OrganizedPage[] = [];
 
-    for (const entry of cacheEntries) {
-      const bestMatch = this.findBestPageMatch(entry, existingPages);
+    for (const edit of edits) {
+      const bestMatch = this.findBestPageMatch(edit, existingPages);
       
-      if (bestMatch && this.calculateSimilarity(entry, bestMatch) > this.defaultConfig.createNewPagesThreshold) {
+      if (bestMatch && this.calculateSimilarity(edit, bestMatch) > this.defaultConfig.createNewPagesThreshold) {
         // Update existing page
-        const updatedPage = this.updatePageWithCacheEntry(bestMatch, entry);
+        const updatedPage = this.updatePageWithEdit(bestMatch, edit);
         updatedPages.push(updatedPage);
       } else {
         // Create new page
-        const newPage = this.createPageFromCacheEntry(entry);
+        const newPage = this.createPageFromEdit(edit);
         newPages.push(newPage);
       }
     }
@@ -204,56 +183,51 @@ You are an intelligent content organizer. Your task is to:
       updatedPages,
       newPages,
       summary: `Fallback organization: ${updatedPages.length} pages updated, ${newPages.length} pages created`,
-      processedCacheIds: cacheEntries.map(e => e.id),
+      processedEditIds: edits.map(e => e.id),
     };
   }
 
-  private findBestPageMatch(entry: CacheEntry, pages: OrganizedPage[]): OrganizedPage | null {
+  private findBestPageMatch(edit: ParagraphEdit, pages: OrganizedPage[]): OrganizedPage | null {
     if (pages.length === 0) return null;
 
     let bestMatch: OrganizedPage | null = null;
-    let bestSimilarity = 0;
+    let highestSimilarity = 0;
 
     for (const page of pages) {
-      const similarity = this.calculateSimilarity(entry, page);
-      if (similarity > bestSimilarity) {
-        bestSimilarity = similarity;
+      const similarity = this.calculateSimilarity(edit, page);
+      if (similarity > highestSimilarity) {
+        highestSimilarity = similarity;
         bestMatch = page;
       }
     }
 
-    return bestSimilarity > this.defaultConfig.createNewPagesThreshold ? bestMatch : null;
+    return bestMatch;
   }
 
-  private calculateSimilarity(entry: CacheEntry, page: OrganizedPage): number {
-    const entryText = entry.contextSummary + ' ' + entry.edits.map(e => e.content).join(' ');
-    const pageText = page.title + ' ' + page.content;
-    
-    return calculateTextSimilarity(entryText, pageText);
+  private calculateSimilarity(edit: ParagraphEdit, page: OrganizedPage): number {
+    return calculateTextSimilarity(edit.content, page.content_text);
   }
 
-  private updatePageWithCacheEntry(page: OrganizedPage, entry: CacheEntry): OrganizedPage {
-    const additionalContent = entry.edits
-      .map(edit => edit.content)
-      .join('\n\n');
+  private updatePageWithEdit(page: OrganizedPage, edit: ParagraphEdit): OrganizedPage {
+    const additionalContent = edit.content;
 
     // Update both content structures
     const updatedContentText = page.content_text + '\n\n' + additionalContent;
     
-    // Add new paragraphs to TipTap content
-    const newParagraphs = additionalContent.split('\n\n').map(paragraph => ({
+    // Add new paragraph to TipTap content
+    const newParagraph = {
       type: "paragraph",
       content: [
         {
           type: "text",
-          text: paragraph
+          text: additionalContent
         }
       ]
-    }));
+    };
 
     const updatedContent = {
       ...page.content,
-      content: [...(page.content?.content || []), ...newParagraphs]
+      content: [...(page.content?.content || []), newParagraph]
     };
 
     return {
@@ -265,34 +239,32 @@ You are an intelligent content organizer. Your task is to:
         ...page.metadata,
         thoughtTracking: {
           ...page.metadata?.thoughtTracking,
-          lastCacheUpdate: entry.timestamp,
-          cacheUpdates: (page.metadata?.thoughtTracking?.cacheUpdates || 0) + 1
+          lastEditUpdate: edit.timestamp,
+          editUpdates: (page.metadata?.thoughtTracking?.editUpdates || 0) + 1
         }
       }
     };
   }
 
-  private createPageFromCacheEntry(entry: CacheEntry): OrganizedPage {
-    const content_text = entry.edits
-      .map(edit => edit.content)
-      .join('\n\n');
+  private createPageFromEdit(edit: ParagraphEdit): OrganizedPage {
+    const content_text = edit.content;
 
-    // Extract potential title from content or use summary
+    // Extract potential title from content
     const title = this.extractTitleFromContent(content_text) || 
-                  `Notes from ${new Date(entry.timestamp).toLocaleDateString()}`;
+                  `Notes from ${new Date(edit.timestamp).toLocaleDateString()}`;
 
     // Create TipTap-compatible content structure
     const content = {
       type: "doc",
-      content: content_text.split('\n\n').map(paragraph => ({
+      content: [{
         type: "paragraph",
         content: [
           {
             type: "text",
-            text: paragraph
+            text: content_text
           }
         ]
-      }))
+      }]
     };
 
     return {
@@ -310,9 +282,11 @@ You are an intelligent content organizer. Your task is to:
         thoughtTracking: {
           tags: this.extractTagsFromContent(content_text),
           category: this.inferCategoryFromContent(content_text),
-          createdFromCache: true,
-          cacheEntryId: entry.id,
-          cacheTimestamp: entry.timestamp
+          createdFromEdit: true,
+          editId: edit.id,
+          editTimestamp: edit.timestamp,
+          pageId: edit.pageId,
+          paragraphId: edit.paragraphId
         }
       },
       tags: this.extractTagsFromContent(content_text),
@@ -321,78 +295,97 @@ You are an intelligent content organizer. Your task is to:
   }
 
   private extractTitleFromContent(content: string): string | null {
-    // Simple title extraction - could be more sophisticated
+    // Try to extract a title from the first line or sentence
     const lines = content.split('\n').filter(line => line.trim());
-    const firstLine = lines[0]?.trim();
+    if (lines.length === 0) return null;
+
+    const firstLine = lines[0].trim();
     
-    if (firstLine && firstLine.length < 100 && firstLine.length > 5) {
+    // If first line is short enough to be a title
+    if (firstLine.length <= 100 && firstLine.length > 0) {
       return firstLine;
     }
-    
+
+    // Try to extract first sentence
+    const sentences = content.split(/[.!?]+/);
+    if (sentences.length > 0 && sentences[0].trim().length <= 100) {
+      return sentences[0].trim();
+    }
+
     return null;
   }
 
   private extractTagsFromContent(content: string): string[] {
-    // Basic tag extraction - could use NLP for better results
-    const words = content.toLowerCase()
-      .replace(/[^\w\s]/g, '')
-      .split(/\s+/)
-      .filter(word => word.length > 3);
+    // Simple tag extraction - look for hashtags or common keywords
+    const tags: string[] = [];
     
-    const frequency: Record<string, number> = {};
-    words.forEach(word => {
-      frequency[word] = (frequency[word] || 0) + 1;
+    // Extract hashtags
+    const hashtagMatches = content.match(/#\w+/g);
+    if (hashtagMatches) {
+      tags.push(...hashtagMatches.map(tag => tag.substring(1)));
+    }
+
+    // Add some basic content-based tags
+    const lowerContent = content.toLowerCase();
+    const commonTags = [
+      'idea', 'note', 'thought', 'todo', 'meeting', 'project', 
+      'research', 'question', 'important', 'draft'
+    ];
+
+    commonTags.forEach(tag => {
+      if (lowerContent.includes(tag)) {
+        tags.push(tag);
+      }
     });
-    
-    return Object.entries(frequency)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 5)
-      .map(([word]) => word);
+
+    return [...new Set(tags)]; // Remove duplicates
   }
 
   private inferCategoryFromContent(content: string): string {
-    // Basic category inference - could be enhanced with ML
     const lowerContent = content.toLowerCase();
     
-    if (lowerContent.includes('meeting') || lowerContent.includes('discussion')) {
+    if (lowerContent.includes('meeting') || lowerContent.includes('call')) {
       return 'meetings';
-    }
-    if (lowerContent.includes('idea') || lowerContent.includes('concept')) {
-      return 'ideas';
     }
     if (lowerContent.includes('todo') || lowerContent.includes('task')) {
       return 'tasks';
     }
+    if (lowerContent.includes('idea') || lowerContent.includes('brainstorm')) {
+      return 'ideas';
+    }
     if (lowerContent.includes('research') || lowerContent.includes('study')) {
       return 'research';
+    }
+    if (lowerContent.includes('project')) {
+      return 'projects';
     }
     
     return 'general';
   }
 
-  // Public methods for configuration and monitoring
-
   async getOrganizationStats(): Promise<{
     totalOrganizedPages: number;
-    unprocessedCacheEntries: number;
     lastOrganization: number | null;
     averagePageSize: number;
   }> {
     const pages = await this.storageManager.loadOrganizedPages();
-    const cacheEntries = await this.storageManager.loadCacheEntries();
-    const unprocessedEntries = cacheEntries.filter(entry => !entry.processed);
+    const organizedPages = pages.filter(page => page.organized);
     
-    const lastOrganization = pages.length > 0 
-      ? Math.max(...pages.map(page => new Date(page.updated_at || 0).getTime()))
-      : null;
-    
-    const averagePageSize = pages.length > 0
-      ? pages.reduce((sum, page) => sum + page.content.length, 0) / pages.length
+    const averagePageSize = organizedPages.length > 0
+      ? organizedPages.reduce((sum, page) => sum + page.content_text.length, 0) / organizedPages.length
       : 0;
 
+    // Try to find the most recent organization timestamp from metadata
+    let lastOrganization: number | null = null;
+    organizedPages.forEach(page => {
+      const timestamp = page.metadata?.thoughtTracking?.editTimestamp;
+      if (timestamp && (!lastOrganization || timestamp > lastOrganization)) {
+        lastOrganization = timestamp;
+      }
+    });
+
     return {
-      totalOrganizedPages: pages.length,
-      unprocessedCacheEntries: unprocessedEntries.length,
+      totalOrganizedPages: organizedPages.length,
       lastOrganization,
       averagePageSize,
     };

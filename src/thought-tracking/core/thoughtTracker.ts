@@ -2,7 +2,6 @@ import {
   ParagraphEdit, 
   BrainState, 
   BrainStateConfig, 
-  CacheEntry, 
   OrganizedPage,
   StorageManager 
 } from '../types';
@@ -43,61 +42,59 @@ export class ThoughtTracker {
     this.setupEventListeners();
   }
 
+  private setupEventListeners(): void {
+    if (typeof window === 'undefined') return;
+
+    window.addEventListener(EVENTS.ORGANIZATION_NEEDED, this.handleOrganizationTrigger.bind(this));
+  }
+
   async initialize(): Promise<void> {
     if (this.initialized) return;
-    
+
     try {
       await this.brainStateManager.initialize();
       this.initialized = true;
+      
       console.log('ThoughtTracker initialized successfully');
     } catch (error) {
       console.error('Failed to initialize ThoughtTracker:', error);
-      throw new Error('ThoughtTracker initialization failed');
+      throw error;
     }
   }
 
-  async trackEdit(editData: Omit<ParagraphEdit, 'id' | 'timestamp'>): Promise<void> {
+  async trackEdit(edit: Omit<ParagraphEdit, 'id' | 'timestamp'>): Promise<void> {
     if (!this.initialized) {
       await this.initialize();
     }
 
-    // Validate edit data
-    if (!validateParagraphEdit(editData)) {
-      throw new Error('Invalid paragraph edit data');
-    }
-
     try {
-      await this.brainStateManager.addEdit(editData);
+      // Validate the edit
+      if (!validateParagraphEdit(edit)) {
+        throw new Error('Invalid paragraph edit provided');
+      }
+
+      // Add to brain state
+      await this.brainStateManager.addEdit(edit);
+      
+      // Debounced save
       this.debouncedSave();
+
+      // Emit edit added event
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent(EVENTS.EDIT_ADDED, {
+          detail: { edit }
+        }));
+      }
+
     } catch (error) {
       console.error('Error tracking edit:', error);
-      throw new Error('Failed to track edit');
+      throw error;
     }
   }
 
   private async saveState(): Promise<void> {
-    // This is already handled by BrainStateManager
-    // But could be used for additional persistence logic
-  }
-
-  private setupEventListeners(): void {
-    if (typeof window !== 'undefined') {
-      window.addEventListener(EVENTS.ORGANIZATION_NEEDED, 
-        this.handleOrganizationTrigger.bind(this)
-      );
-      
-      // Handle page visibility changes to save state
-      document.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
-          this.saveState();
-        }
-      });
-      
-      // Handle beforeunload to save state
-      window.addEventListener('beforeunload', () => {
-        this.saveState();
-      });
-    }
+    // This is handled automatically by BrainStateManager
+    // Placeholder for any additional save logic if needed
   }
 
   private async handleOrganizationTrigger(event: Event): Promise<void> {
@@ -111,10 +108,13 @@ export class ThoughtTracker {
     this.organizationPending = true;
     
     try {
-      const { cacheEntries } = customEvent.detail;
-      console.log('Starting organization process for', cacheEntries.length, 'cache entries');
+      const { edits } = customEvent.detail;
+      console.log('Starting organization process for', edits.length, 'edits');
       
-      const result = await this.organizationManager.organizeContent(cacheEntries);
+      const result = await this.organizationManager.organizeContent(edits);
+      
+      // Mark the organized edits as processed in brain state
+      await this.brainStateManager.markEditsAsOrganized(result.processedEditIds);
       
       console.log('Organization completed:', {
         updatedPages: result.updatedPages.length,
@@ -144,12 +144,25 @@ export class ThoughtTracker {
   }
 
   // Public API methods
-
-  async getCurrentBrainState(): Promise<BrainState | null> {
+  async getBrainState(): Promise<BrainState | null> {
     if (!this.initialized) {
       await this.initialize();
     }
     return this.brainStateManager.getCurrentState();
+  }
+
+  async getRecentEdits(limit: number = 10): Promise<ParagraphEdit[]> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+    return this.brainStateManager.getRecentEdits(limit);
+  }
+
+  async getUnorganizedEdits(): Promise<ParagraphEdit[]> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+    return this.brainStateManager.getUnorganizedEdits();
   }
 
   async getEditsByPage(pageId: string): Promise<ParagraphEdit[]> {
@@ -166,13 +179,6 @@ export class ThoughtTracker {
     return this.brainStateManager.getEditsByParagraph(paragraphId);
   }
 
-  async getRecentEdits(limit: number = 10): Promise<ParagraphEdit[]> {
-    if (!this.initialized) {
-      await this.initialize();
-    }
-    return this.brainStateManager.getRecentEdits(limit);
-  }
-
   async getOrganizedPages(): Promise<OrganizedPage[]> {
     if (!this.initialized) {
       await this.initialize();
@@ -180,53 +186,21 @@ export class ThoughtTracker {
     return this.storageManager.loadOrganizedPages();
   }
 
-  async getOrganizedPage(pageId: string): Promise<OrganizedPage | null> {
-    const pages = await this.getOrganizedPages();
-    return pages.find(page => page.uuid === pageId) || null;
-  }
-
-  async searchOrganizedPages(query: string): Promise<OrganizedPage[]> {
+  async searchPages(query: string): Promise<OrganizedPage[]> {
     const pages = await this.getOrganizedPages();
     const lowerQuery = query.toLowerCase();
     
     return pages.filter(page => 
       page.title.toLowerCase().includes(lowerQuery) ||
-      page.content.toLowerCase().includes(lowerQuery) ||
-      page.tags?.some((tag: string) => tag.toLowerCase().includes(lowerQuery))
+      page.content_text.toLowerCase().includes(lowerQuery) ||
+      page.tags?.some(tag => tag.toLowerCase().includes(lowerQuery)) ||
+      page.category?.toLowerCase().includes(lowerQuery)
     );
   }
 
-  async updateConfig(config: Partial<BrainStateConfig>): Promise<void> {
-    if (!this.initialized) {
-      await this.initialize();
-    }
-    await this.brainStateManager.updateConfig(config);
-  }
-
-  async getStats(): Promise<{
-    brainState: any;
-    organization: any;
-  }> {
-    if (!this.initialized) {
-      await this.initialize();
-    }
-    
-    const [brainStateStats, organizationStats] = await Promise.all([
-      this.brainStateManager.getStats(),
-      this.organizationManager.getOrganizationStats()
-    ]);
-    
-    return {
-      brainState: brainStateStats,
-      organization: organizationStats,
-    };
-  }
-
-  async getCacheEntries(): Promise<CacheEntry[]> {
-    if (!this.initialized) {
-      await this.initialize();
-    }
-    return this.storageManager.loadCacheEntries();
+  async getOrganizedPage(pageId: string): Promise<OrganizedPage | null> {
+    const pages = await this.getOrganizedPages();
+    return pages.find(page => page.uuid === pageId) || null;
   }
 
   async triggerManualOrganization(): Promise<void> {
@@ -234,20 +208,27 @@ export class ThoughtTracker {
       await this.initialize();
     }
     
-    const cacheEntries = await this.storageManager.loadCacheEntries();
-    const unprocessedEntries = cacheEntries.filter(entry => !entry.processed);
+    const unorganizedEdits = await this.brainStateManager.getUnorganizedEdits();
     
-    if (unprocessedEntries.length === 0) {
-      console.log('No unprocessed cache entries to organize');
+    if (unorganizedEdits.length === 0) {
+      console.log('No unorganized edits to organize');
       return;
     }
     
     // Trigger organization manually
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent(EVENTS.ORGANIZATION_NEEDED, {
-        detail: { cacheEntries: unprocessedEntries }
+        detail: { edits: unorganizedEdits }
       }));
     }
+  }
+
+  async updateConfig(newConfig: Partial<BrainStateConfig>): Promise<void> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+    
+    await this.brainStateManager.updateConfig(newConfig);
   }
 
   async clearAllData(): Promise<void> {
@@ -266,7 +247,6 @@ export class ThoughtTracker {
 
   async exportData(): Promise<{
     brainState: BrainState | null;
-    cacheEntries: CacheEntry[];
     organizedPages: OrganizedPage[];
     exportDate: number;
   }> {
@@ -274,15 +254,13 @@ export class ThoughtTracker {
       await this.initialize();
     }
     
-    const [brainState, cacheEntries, organizedPages] = await Promise.all([
+    const [brainState, organizedPages] = await Promise.all([
       this.brainStateManager.getCurrentState(),
-      this.storageManager.loadCacheEntries(),
-      this.storageManager.loadOrganizedPages()
+      this.storageManager.loadOrganizedPages(),
     ]);
     
     return {
       brainState,
-      cacheEntries,
       organizedPages,
       exportDate: Date.now(),
     };
@@ -290,7 +268,6 @@ export class ThoughtTracker {
 
   async importData(data: {
     brainState?: BrainState;
-    cacheEntries?: CacheEntry[];
     organizedPages?: OrganizedPage[];
   }): Promise<void> {
     if (!this.initialized) {
@@ -302,12 +279,6 @@ export class ThoughtTracker {
         await this.storageManager.saveBrainState(data.brainState);
       }
       
-      if (data.cacheEntries) {
-        for (const entry of data.cacheEntries) {
-          await this.storageManager.saveCacheEntry(entry);
-        }
-      }
-      
       if (data.organizedPages) {
         await this.storageManager.saveOrganizedPages(data.organizedPages);
       }
@@ -315,19 +286,29 @@ export class ThoughtTracker {
       console.log('Data imported successfully');
     } catch (error) {
       console.error('Error importing data:', error);
-      throw new Error('Failed to import data');
+      throw error;
     }
   }
 
-  // Cleanup method
-  dispose(): void {
-    if (typeof window !== 'undefined') {
-      window.removeEventListener(EVENTS.ORGANIZATION_NEEDED, 
-        this.handleOrganizationTrigger.bind(this)
-      );
+  async getStats(): Promise<any> {
+    if (!this.initialized) {
+      await this.initialize();
     }
     
-    this.initialized = false;
-    console.log('ThoughtTracker disposed');
+    const [brainStats, organizationStats] = await Promise.all([
+      this.brainStateManager.getStats(),
+      this.organizationManager.getOrganizationStats(),
+    ]);
+    
+    return {
+      brain: brainStats,
+      organization: organizationStats,
+    };
+  }
+
+  dispose(): void {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener(EVENTS.ORGANIZATION_NEEDED, this.handleOrganizationTrigger.bind(this));
+    }
   }
 } 
