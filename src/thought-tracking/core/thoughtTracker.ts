@@ -73,6 +73,24 @@ export class ThoughtTracker {
         throw new Error('Invalid paragraph edit provided');
       }
 
+      // Check if the page has organized = false before tracking
+      // Only track edits for pages that are not organized (organized = false)
+      const page = await this.storageManager.getPageByUuid(edit.pageId);
+      
+      if (page && page.organized === true) {
+        return;
+      }
+      
+      if (!page) {
+        console.warn('🧠 Page not found, but continuing with edit tracking:', edit.pageId);
+      } else {
+        console.log('🧠 Page organized status check passed:', {
+          pageId: edit.pageId,
+          organized: page.organized,
+          willTrack: page.organized === false
+        });
+      }
+
       // Add to brain state
       await this.brainStateManager.addEdit(edit);
       

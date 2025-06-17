@@ -64,6 +64,16 @@ export class LocalStorageManager implements StorageManager {
     }
   }
 
+  async getPageByUuid(uuid: string): Promise<OrganizedPage | null> {
+    try {
+      const pages = await this.loadOrganizedPages();
+      return pages.find(page => page.uuid === uuid) || null;
+    } catch (error) {
+      console.error('Error getting page by UUID:', error);
+      return null;
+    }
+  }
+
   async saveConfig(config: BrainStateConfig): Promise<void> {
     try {
       localStorage.setItem(this.CONFIG_KEY, JSON.stringify(config));

@@ -117,6 +117,11 @@ async function mapEditsToFilePaths(edits: ParagraphEdit[], organizedPages: Organ
   // Create a clean file tree structure for the AI
   const fileTree = createFileTreeStructure(organizedPages)
   
+  // Get only existing files (not folders) for mapping
+  const existingFiles = organizedPages.filter(page => page.type === 'file' && page.organized === true)
+  
+  // Note: General file will be created during execution if needed
+  
   // Prepare edits for AI analysis
   const editsContent = edits.map((edit, index) => 
     `${index + 1}. ID: ${edit.id}
@@ -125,6 +130,9 @@ async function mapEditsToFilePaths(edits: ParagraphEdit[], organizedPages: Organ
    Type: ${edit.editType}
    Timestamp: ${new Date(edit.timestamp).toLocaleDateString()}`
   ).join('\n\n')
+  
+  // Prepare list of existing files for the AI
+  const existingFilePaths = existingFiles.map(file => getFullPath(file, organizedPages))
   
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -138,28 +146,32 @@ async function mapEditsToFilePaths(edits: ParagraphEdit[], organizedPages: Organ
         messages: [
           {
             role: 'system',
-            content: `You are an intelligent content organizer. Your job is to map each edit to the most appropriate file path based on the organized file tree.
+            content: `You are an intelligent content organizer. Your job is to map each edit to the most appropriate EXISTING file path from the provided list.
+
+CRITICAL CONSTRAINTS:
+- You can ONLY use existing file paths from the provided list
+- DO NOT create new file paths or suggest new files
+- If content doesn't clearly fit an existing file, use "/General" as the fallback
+- Use "/General" sparingly - only when content truly doesn't match any existing file
 
 IMPORTANT: Respond with ONLY a valid JSON array in this exact format:
 [
   {
     "content": "the edit content (keep original)",
-    "path": "/full/path/to/file.md",
+    "path": "/full/path/to/existing/file",
     "editId": "edit-id-from-input",
     "reasoning": "brief reason for this location"
   }
 ]
 
 Rules:
-1. Each edit gets mapped to exactly ONE file path
-2. Use EXISTING organized files when the content is related
-3. Create NEW file paths only when content doesn't fit existing files
-4. Path format: "/folder/subfolder/filename" (use "/" separator)
-5. Keep original edit content intact - just map to location
-6. Consider content similarity, topic, and existing file structure
-7. Group related edits into the same file when appropriate
-8. Use descriptive filenames for new files
-9. Respond with ONLY the JSON array, no markdown or extra text`
+1. Each edit gets mapped to exactly ONE existing file path
+2. Only use paths from the EXISTING FILES list provided
+3. Prioritize content similarity and relevance to existing files
+4. Use "/General" only as last resort when no other file fits
+5. Keep original edit content intact - just map to existing location
+6. Group related edits into the same existing file when appropriate
+7. Respond with ONLY the JSON array, no markdown or extra text`
           },
           {
             role: 'user',
@@ -167,17 +179,19 @@ Rules:
 
 ${editsContent}
 
-Current organized file tree:
+EXISTING FILES (you can ONLY use these paths):
+${existingFilePaths.map(path => `- ${path}`).join('\n')}
+
+Current organized file tree structure:
 ${JSON.stringify(fileTree, null, 2)}
 
-Please map each edit to the most appropriate file path. Focus on:
-1. Content relevance and similarity
-2. Using existing organized files when possible
-3. Creating logical new paths when needed
-4. Keeping edits grouped by topic/theme`
+Please map each edit to the most appropriate EXISTING file path. Focus on:
+1. Content relevance and similarity to existing files
+2. Using the best matching existing file
+3. Only use "/General" when content doesn't fit any existing file`
           }
         ],
-        temperature: 0.2,
+        temperature: 0.1,
         max_tokens: 2000
       })
     })
@@ -199,8 +213,11 @@ Please map each edit to the most appropriate file path. Focus on:
     const cleanedJson = cleanGPTJsonResponse(gptResponse)
     const mappings = JSON.parse(cleanedJson) as EditMapping[]
 
-    console.log('Parsed edit mappings:', mappings)
-    return mappings
+    // Validate that all mappings use existing files only
+    const validatedMappings = validateMappings(mappings, existingFilePaths, edits)
+
+    console.log('Validated edit mappings:', validatedMappings)
+    return validatedMappings
 
   } catch (error) {
     console.error('Error calling GPT-4o for edit mapping:', error)
@@ -284,14 +301,28 @@ function cleanGPTJsonResponse(response: string): string {
 }
 
 function createFallbackMappings(edits: ParagraphEdit[], organizedPages: OrganizedPage[]): EditMapping[] {
-  // Simple fallback: group edits by content similarity and create basic mappings
+  // Get existing files only
+  const existingFiles = organizedPages.filter(page => page.type === 'file' && page.organized === true)
+  
+  // Find or use General file as default
+  const generalFile = existingFiles.find(page => page.title.toLowerCase() === 'general')
+  const generalPath = generalFile ? getFullPath(generalFile, organizedPages) : '/General'
+  
   return edits.map(edit => {
     // Try to find an existing file that might be related
-    const relatedFile = organizedPages.find(page => 
-      page.type === 'file' && 
-      (page.content_text?.toLowerCase().includes(edit.content.toLowerCase().split(' ')[0]) ||
-       page.title.toLowerCase().includes(edit.content.toLowerCase().split(' ')[0]))
-    )
+    const relatedFile = existingFiles.find(page => {
+      const contentWords = edit.content.toLowerCase().split(' ')
+      const titleWords = page.title.toLowerCase().split(' ')
+      const contentText = page.content_text?.toLowerCase() || ''
+      
+      // Check for keyword matches in title or content
+      return contentWords.some(word => 
+        word.length > 3 && (
+          titleWords.some(titleWord => titleWord.includes(word)) ||
+          contentText.includes(word)
+        )
+      )
+    })
     
     if (relatedFile) {
       return {
@@ -301,15 +332,12 @@ function createFallbackMappings(edits: ParagraphEdit[], organizedPages: Organize
         reasoning: 'Fallback: Content similarity detected'
       }
     } else {
-      // Create a new file path based on content
-      const firstWords = edit.content.split(' ').slice(0, 3).join(' ')
-      const filename = firstWords.replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '-')
-      
+      // Default to General file
       return {
         content: edit.content,
-        path: `/Organized Notes/${filename || 'New Note'}`,
+        path: generalPath,
         editId: edit.id,
-        reasoning: 'Fallback: New file created'
+        reasoning: 'Fallback: Added to General file'
       }
     }
   })
@@ -326,6 +354,12 @@ async function executeEditMappings(
   const updatedPages: OrganizedPage[] = []
   const newPages: OrganizedPage[] = []
   
+  // Ensure General file exists if any mappings use it
+  const needsGeneralFile = mappings.some(mapping => mapping.path === '/General')
+  if (needsGeneralFile) {
+    await ensureGeneralFileExistsInDB(supabase, userId, organizedPages)
+  }
+  
   // Group mappings by path to batch updates
   const mappingsByPath = mappings.reduce((acc, mapping) => {
     if (!acc[mapping.path]) {
@@ -337,7 +371,16 @@ async function executeEditMappings(
   
   for (const [path, pathMappings] of Object.entries(mappingsByPath)) {
     // Find existing page with this path
-    const existingPage = organizedPages.find(page => getFullPath(page, organizedPages) === path)
+    let existingPage = organizedPages.find(page => getFullPath(page, organizedPages) === path)
+    
+    // If it's the General file and doesn't exist, find it by title
+    if (!existingPage && path === '/General') {
+      existingPage = organizedPages.find(page => 
+        page.type === 'file' && 
+        page.title.toLowerCase() === 'general' &&
+        page.organized === true
+      )
+    }
     
     // Combine all content for this path
     const combinedContent = pathMappings.map(m => m.content).join('\n\n')
@@ -379,59 +422,10 @@ async function executeEditMappings(
         })
       }
     } else {
-      // Create new page
-      const pathParts = path.split('/').filter(Boolean)
-      const filename = pathParts[pathParts.length - 1]
-      const folderPath = pathParts.slice(0, -1)
-      
-      // Find or create parent folder
-      let parentUuid: string | null = null
-      if (folderPath.length > 0) {
-        parentUuid = await findOrCreateFolderPath(supabase, userId, folderPath, organizedPages)
-      }
-      
-      // Create TipTap content
-      const content = {
-        type: "doc",
-        content: pathMappings.map(mapping => ({
-          type: "paragraph",
-          content: [{ type: "text", text: mapping.content }]
-        }))
-      }
-      
-      const { data: newPage, error } = await supabase
-        .from('pages')
-        .insert({
-          title: filename,
-          user_id: userId,
-          content: content,
-          content_text: combinedContent,
-          parent_uuid: parentUuid,
-          type: 'file',
-          organized: true,
-          visible: true,
-          metadata: {
-            createdFromThoughtTracking: true,
-            organizedAt: new Date().toISOString(),
-            editMappings: pathMappings.map(m => ({ editId: m.editId, reasoning: m.reasoning }))
-          }
-        })
-        .select()
-        .single()
-      
-      if (error) {
-        console.error('Error creating page:', error)
-      } else {
-        newPages.push({
-          uuid: newPage.uuid,
-          title: newPage.title,
-          content: newPage.content,
-          content_text: newPage.content_text,
-          organized: true,
-          type: 'file',
-          parent_uuid: newPage.parent_uuid
-        })
-      }
+      // This should not happen since we only map to existing files
+      // But if it does, skip this mapping and log an error
+      console.error(`Attempted to create new file: ${path}. This should not happen with the new constraints.`)
+      console.error(`Skipping ${pathMappings.length} edits that were mapped to non-existent file.`)
     }
   }
   
@@ -439,65 +433,91 @@ async function executeEditMappings(
   return { updatedPages, newPages }
 }
 
-async function findOrCreateFolderPath(
+async function ensureGeneralFileExistsInDB(
   supabase: any, 
   userId: string, 
-  folderPath: string[], 
   organizedPages: OrganizedPage[]
-): Promise<string | null> {
-  let currentParentId: string | null = null
+): Promise<void> {
+  // Check if General file already exists
+  const generalFile = organizedPages.find(page => 
+    page.type === 'file' && 
+    page.title.toLowerCase() === 'general' && 
+    page.organized === true
+  )
   
-  for (const folderName of folderPath) {
-    // Look for existing folder
-    let existingFolder = organizedPages.find(page => 
-      page.type === 'folder' && 
-      page.title === folderName && 
-      page.parent_uuid === currentParentId &&
-      page.organized === true
-    )
+  if (!generalFile) {
+    console.log('Creating General file as it does not exist...')
     
-    if (!existingFolder) {
-      // Create new folder
-      const { data: newFolder, error }: { data: any, error: any } = await supabase
-        .from('pages')
-        .insert({
-          title: folderName,
-          user_id: userId,
-          content: { type: 'doc', content: [] },
-          content_text: '',
-          parent_uuid: currentParentId,
-          type: 'folder',
-          organized: true,
-          visible: true,
-          metadata: {
-            createdFromThoughtTracking: true,
-            isFolder: true
-          }
-        })
-        .select()
-        .single()
-      
-      if (error) {
-        console.error('Error creating folder:', error)
-        return null
-      }
-      
-      existingFolder = {
-        uuid: newFolder.uuid,
-        title: newFolder.title,
-        content: newFolder.content,
-        content_text: newFolder.content_text,
+    // Create the General file
+    const { data: newGeneralFile, error } = await supabase
+      .from('pages')
+      .insert({
+        title: 'General',
+        user_id: userId,
+        content: { type: 'doc', content: [] },
+        content_text: '',
+        parent_uuid: null,
+        type: 'file',
         organized: true,
-        type: 'folder',
-        parent_uuid: newFolder.parent_uuid
-      }
-      
-      // Add to organizedPages for subsequent lookups
-      organizedPages.push(existingFolder)
-    }
+        visible: true,
+        metadata: {
+          createdFromThoughtTracking: true,
+          isDefaultGeneralFile: true,
+          createdAt: new Date().toISOString()
+        }
+      })
+      .select()
+      .single()
     
-    currentParentId = existingFolder.uuid
+    if (error) {
+      console.error('Error creating General file:', error)
+    } else {
+      // Add to organizedPages for subsequent lookups
+      organizedPages.push({
+        uuid: newGeneralFile.uuid,
+        title: newGeneralFile.title,
+        content: newGeneralFile.content,
+        content_text: newGeneralFile.content_text,
+        organized: true,
+        type: 'file',
+        parent_uuid: newGeneralFile.parent_uuid
+      })
+      console.log('General file created successfully')
+    }
+  }
+}
+
+function validateMappings(mappings: EditMapping[], existingFilePaths: string[], edits: ParagraphEdit[]): EditMapping[] {
+  const validatedMappings: EditMapping[] = []
+  
+  for (const mapping of mappings) {
+    // Check if the path exists in our existing files list
+    if (existingFilePaths.includes(mapping.path) || mapping.path === '/General') {
+      validatedMappings.push(mapping)
+    } else {
+      // Invalid path - redirect to General file
+      console.warn(`Invalid path detected: ${mapping.path}, redirecting to General`)
+      validatedMappings.push({
+        ...mapping,
+        path: '/General',
+        reasoning: 'Redirected to General: Invalid path suggested by AI'
+      })
+    }
   }
   
-  return currentParentId
+  // Ensure all edits are mapped
+  const mappedEditIds = new Set(validatedMappings.map(m => m.editId))
+  for (const edit of edits) {
+    if (!mappedEditIds.has(edit.id)) {
+      // Add missing edit to General file
+      validatedMappings.push({
+        content: edit.content,
+        path: '/General',
+        editId: edit.id,
+        reasoning: 'Added to General: Missing from AI response'
+      })
+    }
+  }
+  
+  return validatedMappings
 } 

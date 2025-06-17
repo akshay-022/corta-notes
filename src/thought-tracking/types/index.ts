@@ -79,6 +79,7 @@ export interface StorageManager {
   loadBrainState(): Promise<BrainState | null>;
   saveOrganizedPages(pages: OrganizedPage[]): Promise<void>;
   loadOrganizedPages(): Promise<OrganizedPage[]>;
+  getPageByUuid(uuid: string): Promise<OrganizedPage | null>;
 }
 
 // Supabase-specific types
