@@ -45,7 +45,10 @@ interface EditMapping {
   content: string;
   path: string;
   editId: string;
+  action: 'update_existing' | 'create_file' | 'create_folder';
+  parentPath?: string; // For new files/folders
   reasoning?: string;
+  integrationStrategy?: 'append' | 'integrate' | 'new_section';
 }
 
 export async function POST(request: NextRequest) {
@@ -146,31 +149,38 @@ async function mapEditsToFilePaths(edits: ParagraphEdit[], organizedPages: Organ
         messages: [
           {
             role: 'system',
-            content: `You are an intelligent content organizer. Your job is to map each edit to the most appropriate EXISTING file path from the provided list.
+            content: `You are an intelligent content organizer. Your job is to organize edits into the most appropriate locations, preferring existing files but creating new ones when necessary.
 
-CRITICAL CONSTRAINTS:
-- You can ONLY use existing file paths from the provided list
-- DO NOT create new file paths or suggest new files
-- If content doesn't clearly fit an existing file, use "/General" as the fallback
-- Use "/General" sparingly - only when content truly doesn't match any existing file
+ORGANIZATION STRATEGY:
+- PREFER EXISTING FILES: Try to fit content into existing relevant files first
+- CREATE SPARINGLY: Only create new files/folders when content doesn't fit well
+- MAINTAIN COHERENCE: Keep related content together
 
 IMPORTANT: Respond with ONLY a valid JSON array in this exact format:
 [
   {
     "content": "the edit content (keep original)",
-    "path": "/full/path/to/existing/file",
+    "path": "/full/path/to/file",
     "editId": "edit-id-from-input",
-    "reasoning": "brief reason for this location"
+    "action": "update_existing|create_file|create_folder",
+    "parentPath": "/parent/path (for new files/folders)",
+    "reasoning": "brief reason for this decision",
+    "integrationStrategy": "append|integrate|new_section"
   }
 ]
 
-Rules:
-1. Each edit gets mapped to exactly ONE existing file path
-2. Only use paths from the EXISTING FILES list provided
-3. Prioritize content similarity and relevance to existing files
-4. Use "/General" only as last resort when no other file fits
-5. Keep original edit content intact - just map to existing location
-6. Group related edits into the same existing file when appropriate
+ACTION TYPES:
+- "update_existing": Add to an existing file from the provided list
+- "create_file": Create a new file (use sparingly)
+- "create_folder": Create a new folder (very rare, only for major new topics)
+
+RULES:
+1. For update_existing: Use paths from EXISTING FILES list
+2. For create_file: Suggest appropriate new file name and parent folder
+3. For create_folder: Only when content represents major new topic area
+4. Prioritize content relevance and similarity
+5. Use "/General" as fallback for update_existing only
+6. Keep original edit content intact
 7. Respond with ONLY the JSON array, no markdown or extra text`
           },
           {
@@ -185,10 +195,15 @@ ${existingFilePaths.map(path => `- ${path}`).join('\n')}
 Current organized file tree structure:
 ${JSON.stringify(fileTree, null, 2)}
 
-Please map each edit to the most appropriate EXISTING file path. Focus on:
+Please organize each edit optimally. Focus on:
 1. Content relevance and similarity to existing files
-2. Using the best matching existing file
-3. Only use "/General" when content doesn't fit any existing file`
+2. Prefer updating existing files when content fits well
+3. Create new files only when content represents distinct topics
+4. Create folders very rarely, only for major new topic areas
+5. Use "/General" as fallback for update_existing only
+6. Provide clear reasoning for each decision
+
+Consider the existing file structure and content when making decisions.`
           }
         ],
         temperature: 0.1,
@@ -329,7 +344,9 @@ function createFallbackMappings(edits: ParagraphEdit[], organizedPages: Organize
         content: edit.content,
         path: getFullPath(relatedFile, organizedPages),
         editId: edit.id,
-        reasoning: 'Fallback: Content similarity detected'
+        action: 'update_existing' as const,
+        reasoning: 'Fallback: Content similarity detected',
+        integrationStrategy: 'append' as const
       }
     } else {
       // Default to General file
@@ -337,7 +354,9 @@ function createFallbackMappings(edits: ParagraphEdit[], organizedPages: Organize
         content: edit.content,
         path: generalPath,
         editId: edit.id,
-        reasoning: 'Fallback: Added to General file'
+        action: 'update_existing' as const,
+        reasoning: 'Fallback: Added to General file',
+        integrationStrategy: 'append' as const
       }
     }
   })
@@ -360,8 +379,28 @@ async function executeEditMappings(
     await ensureGeneralFileExistsInDB(supabase, userId, organizedPages)
   }
   
-  // Group mappings by path to batch updates
-  const mappingsByPath = mappings.reduce((acc, mapping) => {
+  // Separate mappings by action type
+  const updateMappings = mappings.filter(m => m.action === 'update_existing')
+  const createFileMappings = mappings.filter(m => m.action === 'create_file')
+  const createFolderMappings = mappings.filter(m => m.action === 'create_folder')
+  
+  // First, create any new folders
+  for (const folderMapping of createFolderMappings) {
+    await createNewFolder(supabase, userId, folderMapping, organizedPages)
+  }
+  
+  // Then, create any new files
+  for (const fileMapping of createFileMappings) {
+    const newPage = await createNewFile(supabase, userId, fileMapping, organizedPages)
+    if (newPage) {
+      newPages.push(newPage)
+      organizedPages.push(newPage) // Add to the list for subsequent operations
+    }
+  }
+  
+  // Finally, handle updates to existing files
+  // Group update mappings by path to batch updates
+  const updateMappingsByPath = updateMappings.reduce((acc, mapping) => {
     if (!acc[mapping.path]) {
       acc[mapping.path] = []
     }
@@ -369,7 +408,7 @@ async function executeEditMappings(
     return acc
   }, {} as Record<string, EditMapping[]>)
   
-  for (const [path, pathMappings] of Object.entries(mappingsByPath)) {
+  for (const [path, pathMappings] of Object.entries(updateMappingsByPath)) {
     // Find existing page with this path
     let existingPage = organizedPages.find(page => getFullPath(page, organizedPages) === path)
     
@@ -386,18 +425,28 @@ async function executeEditMappings(
     const combinedContent = pathMappings.map(m => m.content).join('\n\n')
     
     if (existingPage) {
-      // Update existing page by appending content
-      const updatedContentText = existingPage.content_text + '\n\n' + combinedContent
+      // Determine integration strategy - use the most sophisticated strategy from the mappings
+      const integrationStrategy = pathMappings.some(m => m.integrationStrategy === 'integrate') 
+        ? 'integrate' 
+        : pathMappings.some(m => m.integrationStrategy === 'new_section') 
+        ? 'new_section' 
+        : 'append'
       
-      // Create new TipTap content with appended paragraphs
-      const newParagraphs = pathMappings.map(mapping => ({
-        type: "paragraph",
-        content: [{ type: "text", text: mapping.content }]
-      }))
+      let updatedContentText: string
+      let updatedContent: any
       
-      const updatedContent = {
-        ...existingPage.content,
-        content: [...(existingPage.content?.content || []), ...newParagraphs]
+      if (integrationStrategy === 'integrate') {
+        // Smart integration - try to merge content intelligently
+        updatedContentText = integrateContentIntelligently(existingPage.content_text, combinedContent)
+        updatedContent = createIntegratedTipTapContent(existingPage.content, pathMappings)
+      } else if (integrationStrategy === 'new_section') {
+        // Add as new section with heading
+        updatedContentText = existingPage.content_text + '\n\n## New Updates\n\n' + combinedContent
+        updatedContent = createNewSectionTipTapContent(existingPage.content, pathMappings)
+      } else {
+        // Simple append (default)
+        updatedContentText = existingPage.content_text + '\n\n' + combinedContent
+        updatedContent = createAppendedTipTapContent(existingPage.content, pathMappings)
       }
       
       const { data: updated, error } = await supabase
@@ -491,16 +540,45 @@ function validateMappings(mappings: EditMapping[], existingFilePaths: string[], 
   const validatedMappings: EditMapping[] = []
   
   for (const mapping of mappings) {
-    // Check if the path exists in our existing files list
-    if (existingFilePaths.includes(mapping.path) || mapping.path === '/General') {
-      validatedMappings.push(mapping)
+    if (mapping.action === 'update_existing') {
+      // Check if the path exists in our existing files list
+      if (existingFilePaths.includes(mapping.path) || mapping.path === '/General') {
+        validatedMappings.push(mapping)
+      } else {
+        // Invalid path - redirect to General file
+        console.warn(`Invalid path detected: ${mapping.path}, redirecting to General`)
+        validatedMappings.push({
+          ...mapping,
+          path: '/General',
+          action: 'update_existing' as const,
+          reasoning: 'Redirected to General: Invalid path suggested by AI',
+          integrationStrategy: mapping.integrationStrategy || 'append' as const
+        })
+      }
+    } else if (mapping.action === 'create_file' || mapping.action === 'create_folder') {
+      // Validate new file/folder creation
+      if (mapping.path && mapping.path.trim()) {
+        validatedMappings.push(mapping)
+      } else {
+        // Invalid new path - redirect to General file
+        console.warn(`Invalid new path detected: ${mapping.path}, redirecting to General`)
+        validatedMappings.push({
+          ...mapping,
+          path: '/General',
+          action: 'update_existing' as const,
+          reasoning: 'Redirected to General: Invalid new path suggested by AI',
+          integrationStrategy: mapping.integrationStrategy || 'append' as const
+        })
+      }
     } else {
-      // Invalid path - redirect to General file
-      console.warn(`Invalid path detected: ${mapping.path}, redirecting to General`)
+      // Unknown action - redirect to General file
+      console.warn(`Unknown action detected: ${mapping.action}, redirecting to General`)
       validatedMappings.push({
         ...mapping,
         path: '/General',
-        reasoning: 'Redirected to General: Invalid path suggested by AI'
+        action: 'update_existing' as const,
+        reasoning: 'Redirected to General: Unknown action type',
+        integrationStrategy: mapping.integrationStrategy || 'append' as const
       })
     }
   }
@@ -514,10 +592,196 @@ function validateMappings(mappings: EditMapping[], existingFilePaths: string[], 
         content: edit.content,
         path: '/General',
         editId: edit.id,
-        reasoning: 'Added to General: Missing from AI response'
+        action: 'update_existing' as const,
+        reasoning: 'Added to General: Missing from AI response',
+        integrationStrategy: 'append' as const
       })
     }
   }
   
   return validatedMappings
+}
+
+async function createNewFolder(
+  supabase: any,
+  userId: string,
+  folderMapping: EditMapping,
+  organizedPages: OrganizedPage[]
+): Promise<OrganizedPage | null> {
+  console.log(`Creating new folder: ${folderMapping.path}`)
+  
+  // Extract folder name from path
+  const pathParts = folderMapping.path.split('/').filter(p => p)
+  const folderName = pathParts[pathParts.length - 1]
+  
+  // Find parent folder if specified
+  let parentUuid = null
+  if (folderMapping.parentPath && folderMapping.parentPath !== '/') {
+    const parentPage = organizedPages.find(page => 
+      getFullPath(page, organizedPages) === folderMapping.parentPath
+    )
+    parentUuid = parentPage?.uuid || null
+  }
+  
+  try {
+    const { data: newFolder, error } = await supabase
+      .from('pages')
+      .insert({
+        title: folderName,
+        user_id: userId,
+        content: { type: 'doc', content: [] },
+        content_text: folderMapping.content,
+        parent_uuid: parentUuid,
+        type: 'folder',
+        organized: true,
+        visible: true,
+        metadata: {
+          createdFromThoughtTracking: true,
+          createdFromEdit: folderMapping.editId,
+          createdAt: new Date().toISOString()
+        }
+      })
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('Error creating folder:', error)
+      return null
+    }
+    
+    const newPage: OrganizedPage = {
+      uuid: newFolder.uuid,
+      title: newFolder.title,
+      content: newFolder.content,
+      content_text: newFolder.content_text,
+      organized: true,
+      type: 'folder',
+      parent_uuid: newFolder.parent_uuid
+    }
+    
+    organizedPages.push(newPage)
+    return newPage
+  } catch (error) {
+    console.error('Error creating new folder:', error)
+    return null
+  }
+}
+
+async function createNewFile(
+  supabase: any,
+  userId: string,
+  fileMapping: EditMapping,
+  organizedPages: OrganizedPage[]
+): Promise<OrganizedPage | null> {
+  console.log(`Creating new file: ${fileMapping.path}`)
+  
+  // Extract file name from path
+  const pathParts = fileMapping.path.split('/').filter(p => p)
+  const fileName = pathParts[pathParts.length - 1]
+  
+  // Find parent folder if specified
+  let parentUuid = null
+  if (fileMapping.parentPath && fileMapping.parentPath !== '/') {
+    const parentPage = organizedPages.find(page => 
+      getFullPath(page, organizedPages) === fileMapping.parentPath
+    )
+    parentUuid = parentPage?.uuid || null
+  }
+  
+  // Create TipTap-compatible content structure
+  const content = {
+    type: "doc",
+    content: [{
+      type: "paragraph",
+      content: [
+        {
+          type: "text",
+          text: fileMapping.content
+        }
+      ]
+    }]
+  }
+  
+  try {
+    const { data: newFile, error } = await supabase
+      .from('pages')
+      .insert({
+        title: fileName,
+        user_id: userId,
+        content: content,
+        content_text: fileMapping.content,
+        parent_uuid: parentUuid,
+        type: 'file',
+        organized: true,
+        visible: true,
+        metadata: {
+          createdFromThoughtTracking: true,
+          createdFromEdit: fileMapping.editId,
+          integrationStrategy: fileMapping.integrationStrategy,
+          createdAt: new Date().toISOString()
+        }
+      })
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('Error creating file:', error)
+      return null
+    }
+    
+    return {
+      uuid: newFile.uuid,
+      title: newFile.title,
+      content: newFile.content,
+      content_text: newFile.content_text,
+      organized: true,
+      type: 'file',
+      parent_uuid: newFile.parent_uuid
+    }
+  } catch (error) {
+    console.error('Error creating new file:', error)
+    return null
+  }
+}
+
+function integrateContentIntelligently(existingContent: string, newContent: string): string {
+  // Simple intelligent integration - could be enhanced with more sophisticated logic
+  // For now, we'll append but with better formatting
+  return existingContent + '\n\n' + newContent
+}
+
+function createIntegratedTipTapContent(existingContent: any, mappings: EditMapping[]): any {
+  // For now, use the same logic as append but could be enhanced for true integration
+  return createAppendedTipTapContent(existingContent, mappings)
+}
+
+function createNewSectionTipTapContent(existingContent: any, mappings: EditMapping[]): any {
+  const newParagraphs = [
+    {
+      type: "heading",
+      attrs: { level: 2 },
+      content: [{ type: "text", text: "New Updates" }]
+    },
+    ...mappings.map(mapping => ({
+      type: "paragraph",
+      content: [{ type: "text", text: mapping.content }]
+    }))
+  ]
+  
+  return {
+    ...existingContent,
+    content: [...(existingContent?.content || []), ...newParagraphs]
+  }
+}
+
+function createAppendedTipTapContent(existingContent: any, mappings: EditMapping[]): any {
+  const newParagraphs = mappings.map(mapping => ({
+    type: "paragraph",
+    content: [{ type: "text", text: mapping.content }]
+  }))
+  
+  return {
+    ...existingContent,
+    content: [...(existingContent?.content || []), ...newParagraphs]
+  }
 } 
