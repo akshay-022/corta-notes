@@ -40,7 +40,7 @@ export const ThoughtParagraph = Node.create<ThoughtParagraphOptions>({
 
   renderHTML({ node, HTMLAttributes }) {
     const attrs = mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
-      'data-paragraph-id': node.attrs.id || `para-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      'data-paragraph-id': node.attrs.id || undefined, // Let thought tracking handle ID creation
       'data-thought-metadata': node.attrs.metadata ? JSON.stringify(node.attrs.metadata) : undefined,
     })
 
@@ -98,36 +98,37 @@ export const ThoughtParagraph = Node.create<ThoughtParagraphOptions>({
     }
   },
 
-  addProseMirrorPlugins() {
-    return [
-      new Plugin({
-        key: new PluginKey('thoughtParagraphAutoId'),
-        appendTransaction: (transactions, oldState, newState) => {
-          const tr = newState.tr
-          let modified = false
+  // Disabled auto-ID generation - let thought tracking handle ID creation
+  // addProseMirrorPlugins() {
+  //   return [
+  //     new Plugin({
+  //       key: new PluginKey('thoughtParagraphAutoId'),
+  //       appendTransaction: (transactions, oldState, newState) => {
+  //         const tr = newState.tr
+  //         let modified = false
 
-          // Auto-assign IDs to paragraphs that don't have them
-          newState.doc.descendants((node, pos) => {
-            if (node.type.name === 'paragraph' && !node.attrs.id) {
-              const id = `para-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-              const metadata: ParagraphMetadata = {
-                id,
-                lastUpdated: new Date().toISOString(),
-                organizationStatus: 'no',
-                isOrganized: false
-              }
-              tr.setNodeMarkup(pos, undefined, { 
-                ...node.attrs, 
-                id,
-                metadata 
-              })
-              modified = true
-            }
-          })
+  //         // Auto-assign IDs to paragraphs that don't have them
+  //         newState.doc.descendants((node, pos) => {
+  //           if (node.type.name === 'paragraph' && !node.attrs.id) {
+  //             const id = `para-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+  //             const metadata: ParagraphMetadata = {
+  //               id,
+  //               lastUpdated: new Date().toISOString(),
+  //               organizationStatus: 'no',
+  //               isOrganized: false
+  //             }
+  //             tr.setNodeMarkup(pos, undefined, { 
+  //               ...node.attrs, 
+  //               id,
+  //               metadata 
+  //             })
+  //             modified = true
+  //           }
+  //         })
 
-          return modified ? tr : null
-        },
-      }),
-    ]
-  },
+  //         return modified ? tr : null
+  //       },
+  //     }),
+  //   ]
+  // },
 }) 

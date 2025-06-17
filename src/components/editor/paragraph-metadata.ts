@@ -135,10 +135,6 @@ export function setParagraphMetadata(
     lastUpdated: new Date().toISOString() // Always update timestamp
     }
     
-    // Preserve existing ID if it exists
-    if (currentMetadata.id) {
-      newMetadata.id = currentMetadata.id
-    }
     
     editor.chain()
     .focus()
@@ -297,15 +293,12 @@ export function getAllUnorganizedParagraphs(editor: Editor): Array<{
 
 /**
  * Add a unique ID to the current paragraph if it doesn't have one
+ * Note: This function is deprecated - let thought tracking handle ID creation with pageUuid prefix
  */
 export function ensureCurrentParagraphId(editor: Editor): string | null {
   const currentMetadata = getCurrentParagraphMetadata(editor) || {}
   
-  if (!currentMetadata.id) {
-    const id = `para-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    updateCurrentParagraphMetadata(editor, { id })
-    return id
-  }
-  
-  return currentMetadata.id
+  // Return existing ID if present, but don't create new ones
+  // Let thought tracking create proper pageUuid-para-timestamp-random IDs
+  return currentMetadata.id || null
 } 
