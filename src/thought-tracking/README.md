@@ -50,7 +50,7 @@ await tracker.trackEdit({
 ```typescript
 interface BrainStateConfig {
   maxEditsBeforeOrganization: number; // Default: 20
-  editsToOrganizeCount: number; // Default: 10  
+  numEditsToOrganize: number; // Default: 5  
   summaryUpdateFrequency: number; // Default: 10
 }
 ```
@@ -70,8 +70,8 @@ interface OrganizationConfig {
 
 ```typescript
 const config = {
-  maxEditsBeforeOrganization: 20, // Trigger when >20 edits
-  editsToOrganizeCount: 10, // Organize oldest 10 edits
+  maxEditsBeforeOrganization: 20, // Trigger when >=25 edits (20 + 5)
+  numEditsToOrganize: 5, // Organize oldest 5 edits at once
   summaryUpdateFrequency: 10, // Update summary every 10 edits
 };
 ```
@@ -148,7 +148,7 @@ await tracker.trackEdit({
 
 // System automatically:
 // 1. Stores edit in brain state
-// 2. When >20 edits, organizes oldest 10
+// 2. When >=25 edits (20 + 5), organizes oldest 5
 // 3. Marks organized edits as processed
 ```
 
@@ -241,7 +241,7 @@ window.addEventListener('thought-tracking:organization-needed', (event) => {
 1. **Set appropriate thresholds**: Adjust `maxEditsBeforeOrganization` based on your usage
 2. **Monitor organization**: Use the status component to see when organization is needed
 3. **Regular cleanup**: Organized edits are marked but kept for reference
-4. **API optimization**: Ensure your organization API can handle batches of 10 edits efficiently
+4. **API optimization**: Ensure your organization API can handle batches of 5 edits efficiently
 
 ## Troubleshooting
 

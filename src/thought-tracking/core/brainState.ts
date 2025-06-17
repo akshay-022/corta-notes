@@ -98,7 +98,7 @@ export class BrainStateManager {
 
     const unorganizedEdits = this.currentState.edits.filter(edit => !edit.organized);
     
-    if (unorganizedEdits.length > this.currentState.config.maxEditsBeforeOrganization) {
+    if (unorganizedEdits.length >= this.currentState.config.maxEditsBeforeOrganization + this.currentState.config.numEditsToOrganize) {
       await this.triggerOrganization();
     }
   }
@@ -113,7 +113,7 @@ export class BrainStateManager {
       const unorganizedEdits = this.currentState.edits
         .filter(edit => !edit.organized)
         .sort((a, b) => a.timestamp - b.timestamp)
-        .slice(0, this.currentState.config.editsToOrganizeCount);
+        .slice(0, this.currentState.config.numEditsToOrganize);
 
       console.log('Triggering organization for', unorganizedEdits.length, 'edits');
       

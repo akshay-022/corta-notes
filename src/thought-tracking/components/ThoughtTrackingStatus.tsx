@@ -60,7 +60,7 @@ export function ThoughtTrackingStatus({
         <span className="text-sm text-gray-300">
           {isOrganizing ? 'Organizing...' : `${unorganizedCount} unorganized edits`}
         </span>
-        {unorganizedCount > maxEdits && (
+        {unorganizedCount >= maxEdits + (brainState?.config.numEditsToOrganize || 5) && (
           <Zap className="w-3 h-3 text-yellow-400" />
         )}
       </div>
@@ -128,7 +128,8 @@ export function ThoughtTrackingMini({ className = '' }: { className?: string }) 
   
   const unorganizedCount = unorganizedEdits.length;
   const maxEdits = brainState?.config.maxEditsBeforeOrganization || 20;
-  const isReady = unorganizedCount > maxEdits;
+  const numEditsToOrganize = brainState?.config.numEditsToOrganize || 5;
+  const isReady = unorganizedCount >= maxEdits + numEditsToOrganize;
 
   return (
     <div className={`flex items-center gap-1 ${className}`}>

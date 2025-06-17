@@ -23,7 +23,7 @@ export interface BrainState {
 
 export interface BrainStateConfig {
   maxEditsBeforeOrganization: number; // Default 20 - trigger organization when exceeded
-  editsToOrganizeCount: number; // Default 10 - how many oldest edits to organize
+  numEditsToOrganize: number; // Default 5 - how many edits to organize at once
   summaryUpdateFrequency: number; // How often to update summary (optional)
 }
 

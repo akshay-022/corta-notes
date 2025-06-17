@@ -10,9 +10,9 @@ import { BrainStateConfig, OrganizationConfig, SupabaseStorageConfig } from './t
 // =============================================================================
 
 export const BRAIN_STATE_DEFAULTS = {
-  maxEditsBeforeOrganization: 2, // Trigger organization when > 20 edits
-  editsToOrganizeCount: 1, // Organize oldest 10 edits at a time
-  summaryUpdateFrequency: 1, // Update summary every 10 edits (optional)
+  maxEditsBeforeOrganization: 2, // Trigger organization when > 2 edits
+  numEditsToOrganize: 3, // Organize 3 edits at a time
+  summaryUpdateFrequency: 1, // Update summary every 10 edits (optional, not in use at the moment)
 } as const;
 
 // =============================================================================
