@@ -89,43 +89,68 @@ export class OrganizationManager {
       throw new Error(`Organization API failed: ${response.statusText}`);
     }
 
-    return await response.json();
+    const result = await response.json();
+    
+    // Post notification message to window if organization was successful
+    if (result.notification && typeof window !== 'undefined') {
+      window.postMessage({
+        type: 'ORGANIZATION_NOTIFICATION',
+        data: result.notification
+      }, '*');
+    }
+
+    return result;
   }
 
   private getOrganizationInstructions(): string {
     return `
-You are an intelligent content organizer. Your task is to:
+You are an intelligent content organizer. Your task is to organize edits into a coherent file structure.
 
+CORE PRINCIPLES:
 1. PRESERVE ALL INFORMATION: Never lose any information from the edits. Every piece of content must be preserved.
 
-2. SMART ORGANIZATION: 
-   - Analyze the content themes and topics
-   - Group related content together
-   - Identify the best existing pages to update or determine if new pages are needed
-   - Maintain coherent narrative flow
+2. SMART ORGANIZATION STRATEGY:
+   - PREFER EXISTING FILES: Always try to add content to existing relevant files first
+   - CREATE SPARINGLY: Only create new files/folders when content doesn't fit well into existing structure
+   - MAINTAIN COHERENCE: Keep related content together and maintain logical flow
 
-3. EDITING STRATEGY:
-   - Don't just append content - intelligently integrate it
+3. DECISION MATRIX FOR ORGANIZATION:
+   a) HIGH SIMILARITY (>${this.defaultConfig.maxSimilarityForMerge}): Update existing file
+   b) MEDIUM SIMILARITY (${this.defaultConfig.createNewPagesThreshold}-${this.defaultConfig.maxSimilarityForMerge}): 
+      - If content enhances existing file: Update existing
+      - If content is distinct but related: Consider new file in same folder
+   c) LOW SIMILARITY (<${this.defaultConfig.createNewPagesThreshold}): Create new file/folder
+
+4. FILE/FOLDER CREATION GUIDELINES:
+   - Create new FOLDERS when content represents a new major topic/project
+   - Create new FILES when content is distinct but doesn't warrant a folder
+   - Use descriptive, consistent naming conventions
+   - Consider hierarchical organization (folders > files)
+
+5. CONTENT INTEGRATION:
+   - Don't just append - intelligently integrate content
    - Update existing sections where content fits naturally
    - Create new sections when needed
-   - Maintain proper document structure
+   - Maintain proper document structure and flow
 
-4. PAGE MANAGEMENT:
-   - Update existing pages when content is highly related (similarity > ${this.defaultConfig.maxSimilarityForMerge})
-   - Create new pages when content is sufficiently different (similarity < ${this.defaultConfig.createNewPagesThreshold})
-   - For medium similarity (${this.defaultConfig.createNewPagesThreshold}-${this.defaultConfig.maxSimilarityForMerge}), use judgment based on content coherence
-
-5. METADATA:
+6. METADATA AND RELATIONSHIPS:
    - Generate appropriate tags for discoverability
    - Set relevant categories
-   - Establish relationships between pages
-   - Update titles to reflect content accurately
+   - Establish parent-child relationships for folders
+   - Update titles to accurately reflect content
 
-6. QUALITY ASSURANCE:
-   - Ensure all information from edits is incorporated
-   - Maintain readability and flow
-   - Check for redundancy and consolidate when appropriate
-   - Preserve important timestamps and context
+7. QUALITY ASSURANCE:
+   - Ensure all edits are incorporated somewhere
+   - Maintain readability and coherent narrative
+   - Avoid redundancy but preserve important context
+   - Keep related information accessible
+
+RESPONSE FORMAT:
+Return a structured response indicating for each edit:
+- Whether to update an existing file or create new file/folder
+- The target location (path)
+- How to integrate the content
+- Reasoning for the decision
 `;
   }
 
@@ -167,22 +192,60 @@ You are an intelligent content organizer. Your task is to:
 
     for (const edit of edits) {
       const bestMatch = this.findBestPageMatch(edit, existingPages);
+      const similarity = bestMatch ? this.calculateSimilarity(edit, bestMatch) : 0;
       
-      if (bestMatch && this.calculateSimilarity(edit, bestMatch) > this.defaultConfig.createNewPagesThreshold) {
-        // Update existing page
+      if (bestMatch && similarity > this.defaultConfig.maxSimilarityForMerge) {
+        // High similarity - update existing page
         const updatedPage = this.updatePageWithEdit(bestMatch, edit);
         updatedPages.push(updatedPage);
+      } else if (bestMatch && similarity > this.defaultConfig.createNewPagesThreshold) {
+        // Medium similarity - still update existing but note the decision
+        const updatedPage = this.updatePageWithEdit(bestMatch, edit);
+        updatedPage.metadata = {
+          ...updatedPage.metadata,
+          thoughtTracking: {
+            ...updatedPage.metadata?.thoughtTracking,
+            fallbackDecision: 'medium_similarity_update',
+            similarityScore: similarity
+          }
+        };
+        updatedPages.push(updatedPage);
       } else {
-        // Create new page
-        const newPage = this.createPageFromEdit(edit);
-        newPages.push(newPage);
+        // Low similarity or no match - create new page only if content is substantial
+        if (edit.content.length > 50) { // Only create new page for substantial content
+          const newPage = this.createPageFromEdit(edit);
+          newPage.metadata = {
+            ...newPage.metadata,
+            thoughtTracking: {
+              ...newPage.metadata?.thoughtTracking,
+              fallbackDecision: 'new_page_created',
+              similarityScore: similarity
+            }
+          };
+          newPages.push(newPage);
+        } else {
+          // Short content - add to general or best match anyway
+          const targetPage = bestMatch || this.findOrCreateGeneralPage(existingPages);
+          if (targetPage) {
+            const updatedPage = this.updatePageWithEdit(targetPage, edit);
+            updatedPage.metadata = {
+              ...updatedPage.metadata,
+              thoughtTracking: {
+                ...updatedPage.metadata?.thoughtTracking,
+                fallbackDecision: 'short_content_merged',
+                similarityScore: similarity
+              }
+            };
+            updatedPages.push(updatedPage);
+          }
+        }
       }
     }
 
     return {
       updatedPages,
       newPages,
-      summary: `Fallback organization: ${updatedPages.length} pages updated, ${newPages.length} pages created`,
+      summary: `Fallback organization: ${updatedPages.length} pages updated, ${newPages.length} pages created (prioritized existing files)`,
       processedEditIds: edits.map(e => e.id),
     };
   }
@@ -202,6 +265,23 @@ You are an intelligent content organizer. Your task is to:
     }
 
     return bestMatch;
+  }
+
+  private findOrCreateGeneralPage(pages: OrganizedPage[]): OrganizedPage | null {
+    // Try to find existing general page
+    const generalPage = pages.find(page => 
+      page.type === 'file' && 
+      page.title.toLowerCase() === 'general' &&
+      page.organized === true
+    );
+
+    if (generalPage) {
+      return generalPage;
+    }
+
+    // If no general page exists, return null - it will be handled by the API
+    // The API has logic to create the general page when needed
+    return null;
   }
 
   private calculateSimilarity(edit: ParagraphEdit, page: OrganizedPage): number {

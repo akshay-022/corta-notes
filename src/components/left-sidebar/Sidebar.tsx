@@ -81,6 +81,7 @@ export default function Sidebar({
   const [searchResults, setSearchResults] = useState<SuperMemoryDocument[]>([])
   const [isSearchActive, setIsSearchActive] = useState(false)
   const [viewMode, setViewMode] = useState<'normal' | 'chronological'>('normal')
+  const [notification, setNotification] = useState<string | null>(null)
 
   const router = useRouter();
 
@@ -97,6 +98,22 @@ export default function Sidebar({
       }
     }
   }, [newlyCreatedItem, onClearNewlyCreatedItem])
+
+  // Listen for organization notifications
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data.type === 'ORGANIZATION_NOTIFICATION' && event.data.data) {
+        setNotification(event.data.data.message)
+        // Clear notification after 2 seconds
+        setTimeout(() => {
+          setNotification(null)
+        }, 2000)
+      }
+    }
+
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [])
 
   const startRename = (item: Page) => {
     setRenamingItem(item)
@@ -717,6 +734,13 @@ export default function Sidebar({
 
           {/* Fixed Footer Section - See All Button and Logout */}
           <div className="flex-shrink-0 p-4">
+            {/* Organization Notification */}
+            {notification && (
+              <div className="mb-2 p-2 bg-[#2a2a2a] border border-[#65a30d] rounded text-[#cccccc] text-xs">
+                {notification}
+              </div>
+            )}
+            
             <div className="flex justify-between items-center">
               <button
                 onClick={logout}

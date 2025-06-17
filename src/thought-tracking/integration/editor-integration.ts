@@ -156,7 +156,7 @@ export async function setupThoughtTracking(
       // Quick check for rapid changes (don't track these)
       quickChangeTimeout = setTimeout(() => {
         // Only set the main timeout if user is still editing
-        changeTimeout = setTimeout(trackContentChanges, 2000) // 2 seconds for content changes
+        changeTimeout = setTimeout(trackContentChanges, 500) // 2 seconds for content changes
       }, 500) // 500ms quick debounce to avoid tracking rapid keystrokes
     }
 
