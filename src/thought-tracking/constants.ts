@@ -10,10 +10,10 @@ import { BrainStateConfig, OrganizationConfig, SupabaseStorageConfig } from './t
 // =============================================================================
 
 export const BRAIN_STATE_DEFAULTS: BrainStateConfig = {
-  maxEditsInPrimary: 30,
-  maxEditsInSecondary: 30,
+  maxEditsInPrimary: 1,
+  maxEditsInSecondary: 3,
   summaryUpdateFrequency: 5,
-  organizationThreshold: 30,
+  organizationThreshold: 3,
 } as const;
 
 // =============================================================================

@@ -13,6 +13,7 @@ export class BrainStateManager {
   private storageManager: StorageManager;
   private summaryGenerator: SummaryGenerator;
   private currentState: BrainState | null = null;
+  private isMovingToCache: boolean = false;
 
   constructor(storageManager: StorageManager, summaryGenerator: SummaryGenerator) {
     this.storageManager = storageManager;
@@ -62,7 +63,7 @@ export class BrainStateManager {
     // }
 
     // Check if we need to move edits to cache
-    if (this.shouldMoveToCache()) {
+    if (this.shouldMoveToCache() && !this.isMovingToCache) {
       await this.moveEditsToCache();
     }
 
@@ -98,24 +99,33 @@ export class BrainStateManager {
   }
 
   private async moveEditsToCache(): Promise<void> {
-    if (!this.currentState) return;
+    if (!this.currentState || this.isMovingToCache) return;
 
-    const cacheEntry: CacheEntry = {
-      id: generateId(),
-      edits: [...this.currentState.edits],
-      summary: this.currentState.summary,
-      contextSummary: await this.generateContextSummary(this.currentState.edits),
-      timestamp: Date.now(),
-      processed: false,
-    };
+    // Set flag to prevent concurrent cache moves
+    this.isMovingToCache = true;
 
-    await this.storageManager.saveCacheEntry(cacheEntry);
-    
-    // Clear primary edits
-    this.currentState.edits = [];
-    
-    // Check if we should trigger organization
-    await this.checkOrganizationTrigger();
+    try {
+      const cacheEntry: CacheEntry = {
+        id: generateId(),
+        edits: [...this.currentState.edits],
+        summary: this.currentState.summary,
+        contextSummary: "",
+        // contextSummary: await this.generateContextSummary(this.currentState.edits),
+        timestamp: Date.now(),
+        processed: false,
+      };
+
+      await this.storageManager.saveCacheEntry(cacheEntry);
+      
+      // Clear primary edits
+      this.currentState.edits = [];
+      
+      // Check if we should trigger organization
+      await this.checkOrganizationTrigger();
+    } finally {
+      // Always reset the flag
+      this.isMovingToCache = false;
+    }
   }
 
   private async generateContextSummary(edits: ParagraphEdit[]): Promise<string> {
