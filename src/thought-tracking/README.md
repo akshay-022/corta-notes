@@ -78,10 +78,10 @@ const config = {
 
 ## API Endpoints
 
-### Organization API (`/api/organize`)
+### Organization API (`/api/organize-note`)
 
 ```typescript
-// POST /api/organize
+// POST /api/organize-note
 {
   "type": "organize_content",
   "request": {

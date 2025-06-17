@@ -42,10 +42,32 @@ export class BrainStateManager {
       await this.initialize();
     }
 
+    // Check for duplicate edits within the last 5 seconds for the same paragraph
+    const now = Date.now();
+    const recentEdits = this.currentState!.edits.filter(
+      existingEdit => 
+        existingEdit.paragraphId === edit.paragraphId &&
+        existingEdit.pageId === edit.pageId &&
+        (now - existingEdit.timestamp) < 5000 // 5 seconds
+    );
+
+    // If there's a very recent edit with the same content, skip this one
+    if (recentEdits.length > 0) {
+      const mostRecentEdit = recentEdits[recentEdits.length - 1];
+      if (mostRecentEdit.content === edit.content && mostRecentEdit.editType === edit.editType) {
+        console.log('🧠 Skipping duplicate edit for paragraph:', {
+          paragraphId: edit.paragraphId,
+          content: edit.content.substring(0, 30) + '...',
+          timeSinceLastEdit: now - mostRecentEdit.timestamp + 'ms'
+        });
+        return;
+      }
+    }
+
     const fullEdit: ParagraphEdit = {
       ...edit,
       id: generateId(),
-      timestamp: Date.now(),
+      timestamp: now,
       organized: false,
       metadata: {
         wordCount: edit.content.split(/\s+/).length,
@@ -55,7 +77,15 @@ export class BrainStateManager {
     };
 
     this.currentState!.edits.push(fullEdit);
-    this.currentState!.lastUpdated = Date.now();
+    this.currentState!.lastUpdated = now;
+    
+    console.log('🧠 Added edit to brain state:', {
+      id: fullEdit.id,
+      paragraphId: fullEdit.paragraphId,
+      editType: fullEdit.editType,
+      totalEdits: this.currentState!.edits.length,
+      unorganizedEdits: this.currentState!.edits.filter(e => !e.organized).length
+    });
 
     // Check if we need to trigger organization
     await this.checkOrganizationTrigger();

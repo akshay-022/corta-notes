@@ -259,11 +259,29 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
 
   // Setup thought tracking when editor is ready
   useEffect(() => {
-    if (editor) {
-      setupThoughtTracking(editor, page.uuid, allPages, pageRefreshCallback)
-      console.log('🧠 Thought tracking initialized for editor with page:', page.uuid)
+    let cleanup: (() => void) | undefined
+
+    const setupTracking = async () => {
+      if (editor) {
+        // Clean up any existing tracking first
+        if (cleanup) {
+          cleanup()
+        }
+        
+        cleanup = await setupThoughtTracking(editor, page.uuid, allPages, pageRefreshCallback)
+        console.log('🧠 Thought tracking initialized for editor with page:', page.uuid)
+      }
     }
-  }, [editor, page.uuid, pageRefreshCallback])
+
+    setupTracking()
+
+    // Return cleanup function
+    return () => {
+      if (cleanup) {
+        cleanup()
+      }
+    }
+  }, [editor, page.uuid]) // Removed pageRefreshCallback from dependencies to prevent unnecessary re-runs
 
   // Update editor content when page changes (but not when user is typing)
   useEffect(() => {

@@ -63,7 +63,7 @@ export const SUPABASE_DEFAULTS = {
 
 export const API_ENDPOINTS = {
   SUMMARY: '/api/thought-tracking/summarize',
-  ORGANIZATION: '/api/thought-tracking/organize',
+  ORGANIZATION: '/api/organize-note',
 } as const;
 
 // =============================================================================

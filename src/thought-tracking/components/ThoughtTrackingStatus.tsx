@@ -21,7 +21,7 @@ export function ThoughtTrackingStatus({
     error,
     isOrganizing,
     triggerOrganization,
-  } = useThoughtTracker('/api/summarize', '/api/organize');
+  } = useThoughtTracker('/api/summarize', '/api/organize-note');
 
   const [showDetails, setShowDetails] = useState(false);
 
