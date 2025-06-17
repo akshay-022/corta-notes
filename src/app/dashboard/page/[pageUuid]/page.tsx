@@ -21,14 +21,17 @@ export default function DashboardPageByUuid() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!notesCtx) return
-    setLoading(true)
-    if (notesCtx.pages.length > 0 && pageUuid) {
+    if (!notesCtx || !pageUuid) {
+      setLoading(false)
+      return
+    }
+    
+    if (notesCtx.pages.length > 0) {
       const found = notesCtx.pages.find(p => p.uuid === pageUuid)
       setActivePage(found || null)
       setLoading(false)
     }
-  }, [notesCtx, pageUuid])
+  }, [pageUuid, notesCtx?.pages?.length]) // Only depend on pages length, not the full array
 
   if (loading) {
     return (

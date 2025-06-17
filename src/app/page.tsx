@@ -8,7 +8,7 @@ export default function HomePage() {
 
   useEffect(() => {
     router.push('/login')
-  }, [router])
+  }, []) // Remove router dependency to prevent multiple redirects
 
   return (
     <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center">

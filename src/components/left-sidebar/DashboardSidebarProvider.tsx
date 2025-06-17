@@ -65,11 +65,11 @@ export default function DashboardSidebarProvider({ children }: { children: React
 
   // Helper to extract pageUuid from URL
   function getPageUuidFromPath() {
-    const match = pathname.match(/page\/([a-zA-Z0-9\-]+)/)
+    const match = pathname.match(/\/dashboard\/page\/([a-zA-Z0-9\-]+)/)
     return match ? match[1] : null
   }
 
-  // Single useEffect for initial data loading
+  // Initial data loading - run once
   useEffect(() => {
     let isMounted = true
 
@@ -88,12 +88,8 @@ export default function DashboardSidebarProvider({ children }: { children: React
         if (!isMounted) return
         setUser(user)
         logger.info('User authenticated:', { userId: user.id })
-
-        // 2. Get current page UUID
-        const pageUuid = getPageUuidFromPath() || 
-          (typeof window !== 'undefined' ? localStorage.getItem('lastOpenedPageUuid') : null)
         
-        // 3. Load all pages in a single query
+        // 2. Load all pages in a single query
         const { data: pagesData, error: pagesError } = await supabase
           .from('pages')
           .select('*')
@@ -108,30 +104,10 @@ export default function DashboardSidebarProvider({ children }: { children: React
 
         if (!isMounted) return
 
-        // 4. Update state with all data at once
+        // 3. Update state with pages data
         if (pagesData) {
           logger.info('Pages loaded successfully', { count: pagesData.length })
           setPages(pagesData)
-
-          // Set active page if we have a pageUuid
-          if (pageUuid) {
-            const currentPage = pagesData.find(p => p.uuid === pageUuid)
-            if (currentPage) {
-              logger.info('Setting active page:', { pageId: currentPage.uuid })
-              setActivePage(currentPage)
-              // Save to localStorage
-              if (typeof window !== 'undefined') {
-                localStorage.setItem('lastOpenedPageUuid', pageUuid)
-              }
-            }
-          } else if (pagesData.length > 0) {
-            // Find first file (not folder) if no pageUuid
-            const firstFile = pagesData.find(p => p.type === 'file')
-            if (firstFile) {
-              logger.info('Setting first file as active:', { pageId: firstFile.uuid })
-              setActivePage(firstFile)
-            }
-          }
         }
 
         setLoading(false)
@@ -147,7 +123,25 @@ export default function DashboardSidebarProvider({ children }: { children: React
     return () => {
       isMounted = false
     }
-  }, []) // Empty dependency array since this should only run once
+  }, []) // Empty dependency array - run only once
+
+  // Separate useEffect to handle active page changes when URL changes
+  useEffect(() => {
+    if (pages.length > 0) {
+      const pageUuid = getPageUuidFromPath()
+      if (pageUuid) {
+        const currentPage = pages.find(p => p.uuid === pageUuid)
+        if (currentPage && currentPage.uuid !== activePage?.uuid) {
+          logger.info('Setting active page from URL:', { pageId: currentPage.uuid })
+          setActivePage(currentPage)
+          // Save to localStorage
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('lastOpenedPageUuid', pageUuid)
+          }
+        }
+      }
+    }
+  }, [pathname, pages.length]) // Only react to pathname and pages.length, not the full pages array
 
   useEffect(() => {
     const handleClickOutside = () => setContextMenu(null)

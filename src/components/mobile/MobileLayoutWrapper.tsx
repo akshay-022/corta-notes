@@ -35,9 +35,9 @@ export default function MobileLayoutWrapper({
       // If chat is closed and we're currently on chat view, switch to editor
       setActiveView('editor')
     }
-  }, [isChatOpen, activeView])
+  }, [isChatOpen]) // Remove activeView dependency to prevent loops
 
-  // Remember last active view
+  // Remember last active view - run only once
   useEffect(() => {
     const savedView = localStorage.getItem('mobile-active-view')
     if (savedView && ['sidebar', 'editor', 'chat'].includes(savedView)) {
@@ -45,8 +45,12 @@ export default function MobileLayoutWrapper({
     }
   }, [])
 
+  // Save active view - but debounce to prevent excessive localStorage writes
   useEffect(() => {
-    localStorage.setItem('mobile-active-view', activeView)
+    const timeoutId = setTimeout(() => {
+      localStorage.setItem('mobile-active-view', activeView)
+    }, 100)
+    return () => clearTimeout(timeoutId)
   }, [activeView])
 
   const handleViewChange = (view: 'sidebar' | 'editor' | 'chat') => {

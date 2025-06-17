@@ -33,6 +33,7 @@ export default function SignupPage() {
     if (error) {
       setError(error.message)
     } else {
+      // For new users, always go to dashboard to let them create their first page
       router.push('/dashboard')
     }
     setLoading(false)

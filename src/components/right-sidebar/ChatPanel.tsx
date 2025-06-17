@@ -101,7 +101,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   useEffect(() => {
     logger.info('ChatPanel mounted, loading conversations in background...')
     loadConversations()
-  }, [])
+  }, []) // Keep empty dependency array to run only once
 
   // Scroll to bottom when panel opens
   useEffect(() => {
@@ -117,7 +117,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
         scrollToBottom()
       }
     }
-  }, [isOpen, scrollToBottom, messages.length])
+  }, [isOpen]) // Remove scrollToBottom and messages.length dependencies to prevent multiple calls
 
   const loadMessages = useCallback(async (conversationId: string, offset = 0, append = false): Promise<void> => {
     if (offset === 0) {
@@ -195,7 +195,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     } else {
       setMessages([])
     }
-  }, [activeConversation, loadMessages, scrollToBottom])
+  }, [activeConversation]) // Remove loadMessages and scrollToBottom dependencies to prevent multiple calls
 
   // Load older messages function
   const handleLoadOlder = useCallback(() => {
@@ -224,7 +224,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
         }
       }, 100)
     })
-  }, [activeConversation, currentOffset, isLoadingOlder, loadMessages, MESSAGES_PER_PAGE])
+  }, [activeConversation?.id, currentOffset, isLoadingOlder]) // Remove loadMessages and MESSAGES_PER_PAGE dependencies
 
   const loadConversations = async () => {
     try {

@@ -107,7 +107,7 @@ export default function DocumentSearch({ onSelectDocument, onSearchResults, clas
     }, 300)
 
     return () => clearTimeout(timeoutId)
-  }, [searchQuery, performSearch])
+  }, [searchQuery]) // Remove performSearch dependency to prevent multiple calls
 
   // Notify parent component of search results
   useEffect(() => {

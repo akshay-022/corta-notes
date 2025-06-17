@@ -225,7 +225,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [captureCurrentSelection])
+  }, []) // Remove captureCurrentSelection dependency to prevent multiple event listeners
 
 
   // Apply AI response to editor
@@ -263,7 +263,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       setupThoughtTracking(editor, page.uuid, allPages, pageRefreshCallback)
       console.log('🧠 Thought tracking initialized for editor with page:', page.uuid)
     }
-  }, [editor, page.uuid, pageRefreshCallback])
+  }, [editor, page.uuid]) // Remove pageRefreshCallback dependency to prevent multiple calls
 
   // Update editor content when page changes (but not when user is typing)
   useEffect(() => {
@@ -283,7 +283,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       // (regardless of whether they're typing in the editor content)
       setTitle(page.title)
     }
-  }, [page, editor, isUserEditingTitle]) // Changed dependency from isUserTyping to isUserEditingTitle
+  }, [page.uuid, page.title, page.content, editor]) // More specific dependencies to prevent unnecessary re-runs
 
   if (!editor) {
     return (

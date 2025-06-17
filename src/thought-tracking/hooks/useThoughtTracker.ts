@@ -101,7 +101,7 @@ export function useThoughtTracker(
         trackerRef.current.dispose();
       }
     };
-  }, [summaryApiEndpoint, organizationApiEndpoint]);
+  }, []); // Remove dependencies to run only once on mount
 
   const setupEventListeners = useCallback(() => {
     if (typeof window === 'undefined') return;

@@ -5,7 +5,17 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  webpack: (config, { isServer }) => {
+  
+  // Development optimizations
+  ...(process.env.NODE_ENV === 'development' && {
+    // Reduce hot reload sensitivity
+    onDemandEntries: {
+      maxInactiveAge: 60 * 1000, // Keep pages longer
+      pagesBufferLength: 5, // Keep more pages in memory
+    },
+  }),
+  
+  webpack: (config, { isServer, dev }) => {
     // Suppress webpack warnings
     config.ignoreWarnings = [
       /Critical dependency: the request of a dependency is an expression/,
@@ -21,15 +31,17 @@ const nextConfig: NextConfig = {
       tls: false,
     };
 
+    // Development optimizations
+    if (dev) {
+      // Reduce file watching sensitivity
+      config.watchOptions = {
+        ...config.watchOptions,
+        poll: 1000, // Check for changes every second instead of continuously
+        aggregateTimeout: 300, // Delay before rebuilding
+      };
+    }
+
     return config;
-  },
-  
-  // Suppress other warnings and logs
-  onDemandEntries: {
-    // period (in ms) where the server will keep pages in the buffer
-    maxInactiveAge: 25 * 1000,
-    // number of pages that should be kept simultaneously without being disposed
-    pagesBufferLength: 2,
   },
   
   // Disable logging during development

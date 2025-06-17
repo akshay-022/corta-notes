@@ -27,7 +27,13 @@ export default function LoginPage() {
     if (error) {
       setError(error.message)
     } else {
-      router.push('/dashboard')
+      // Redirect directly to last opened page or dashboard
+      const lastOpened = typeof window !== 'undefined' ? localStorage.getItem('lastOpenedPageUuid') : null
+      if (lastOpened) {
+        router.push(`/dashboard/page/${lastOpened}`)
+      } else {
+        router.push('/dashboard')
+      }
     }
     setLoading(false)
   }
