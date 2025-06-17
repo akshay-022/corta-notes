@@ -13,6 +13,14 @@ export async function setupThoughtTracking(
   pageRefreshCallback?: () => Promise<void>
 ) {
   try {
+    // Check if tracker already exists for this page and clean it up
+    const existingTracker = editorTrackers.get(pageUuid)
+    if (existingTracker) {
+      console.log('🧠 Cleaning up existing tracker for page:', pageUuid)
+      existingTracker.dispose()
+      editorTrackers.delete(pageUuid)
+    }
+
     // Get current user ID
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -27,7 +35,7 @@ export async function setupThoughtTracking(
     const tracker = new ThoughtTracker(
       storageManager,
       '/api/summarize',
-      '/api/organize'
+      '/api/organize-note'
     )
 
     await tracker.initialize()
@@ -38,36 +46,54 @@ export async function setupThoughtTracking(
     // Content tracking with stable snapshots
     let stableContent = editor.getJSON()
     let lastUpdateTime = Date.now()
+    let isTracking = false // Add flag to prevent concurrent tracking
 
     const trackContentChanges = async () => {
-      const currentContent = editor.getJSON()
-
-      // Find which specific paragraph changed
-      const changedParagraph = findChangedParagraph(stableContent, currentContent)
-      
-      if (changedParagraph) {
-        try {
-          await tracker.trackEdit({
-            paragraphId: `${pageUuid}-para-${changedParagraph.index}`,
-            pageId: pageUuid,
-            content: changedParagraph.content, // Only this paragraph's content  
-            editType: changedParagraph.editType,
-            metadata: {
-              wordCount: changedParagraph.content.split(/\s+/).filter(word => word.length > 0).length,
-              charCount: changedParagraph.content.length
-            }
-          })
-
-          console.log(`🧠 Tracked ${changedParagraph.editType} for paragraph ${changedParagraph.index}:`, changedParagraph.content.substring(0, 50))
-
-        } catch (error) {
-          console.error('Error tracking thought changes:', error)
-        }
+      // Prevent concurrent tracking
+      if (isTracking) {
+        console.log('🧠 Tracking already in progress, skipping...')
+        return
       }
 
-      // Update stable content snapshot
-      stableContent = currentContent
-      lastUpdateTime = Date.now()
+      isTracking = true
+      
+      try {
+        const currentContent = editor.getJSON()
+
+        // Find which specific paragraph changed
+        const changedParagraph = findChangedParagraph(stableContent, currentContent)
+        
+        if (changedParagraph) {
+          try {
+            await tracker.trackEdit({
+              paragraphId: `${pageUuid}-para-${changedParagraph.index}`,
+              pageId: pageUuid,
+              content: changedParagraph.content, // Only this paragraph's content  
+              editType: changedParagraph.editType,
+              metadata: {
+                wordCount: changedParagraph.content.split(/\s+/).filter(word => word.length > 0).length,
+                charCount: changedParagraph.content.length
+              }
+            })
+
+            console.log(`🧠 Tracked ${changedParagraph.editType} for paragraph ${changedParagraph.index}:`, {
+              content: changedParagraph.content.substring(0, 50) + (changedParagraph.content.length > 50 ? '...' : ''),
+              pageUuid,
+              paragraphId: `${pageUuid}-para-${changedParagraph.index}`,
+              timestamp: new Date().toISOString()
+            })
+
+          } catch (error) {
+            console.error('Error tracking thought changes:', error)
+          }
+        }
+
+        // Update stable content snapshot
+        stableContent = currentContent
+        lastUpdateTime = Date.now()
+      } finally {
+        isTracking = false
+      }
     }
 
     // Helper function to find which specific paragraph changed
@@ -113,10 +139,9 @@ export async function setupThoughtTracking(
           return node.content?.map((textNode: any) => textNode.text || '').join('').trim() || ''
         }
         return ''
-      }).filter((para: string, index: number, arr: string[]) => 
-        // Keep all paragraphs including empty ones to maintain position indexing
-        index < arr.length
-      )
+      })
+      // Note: We keep all paragraphs including empty ones to maintain position indexing
+      // This is important for tracking which specific paragraph changed
     }
 
     // Set up debounced change tracking

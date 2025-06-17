@@ -1,43 +1,51 @@
 import { createClient } from '@/lib/supabase/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
-// import supermemory from 'supermemory' // SuperMemory - commented out for mem0 migration
-// import MemoryClient from 'mem0ai' // New mem0 client - moved to service
-import { memoryService } from '@/lib/memory/memory-service-supermemory'
 
 export const runtime = 'edge';
 
-// Helper function to get the actual folder path by looking up page hierarchy
-async function getFolderPathFromPageUuid(supabase: any, pageUuid: string, allPages: any[]): Promise<string> {
-  if (!pageUuid) return 'Unknown Location'
-  
-  try {
-    // Find the page in the provided file tree first (for performance)
-    const page = allPages.find(p => p.uuid === pageUuid)
-    if (!page) return 'Unknown Location'
-    
-    // Build the folder path by following parent relationships
-    const path: string[] = []
-    let currentPage = page
-    
-    // Traverse up the parent chain
-    while (currentPage && currentPage.parent_uuid) {
-      const parentPage = allPages.find(p => p.uuid === currentPage.parent_uuid)
-      if (parentPage) {
-        path.unshift(parentPage.title) // Add to beginning of array
-        currentPage = parentPage
-      } else {
-        break
-      }
-    }
-    
-    // Add the current page's title at the end
-    path.push(page.title)
-    
-    return path.length > 1 ? path.join('/') : page.title
-  } catch (error) {
-    console.error('Error building folder path:', error)
-    return 'Unknown Location'
-  }
+interface ParagraphEdit {
+  id: string;
+  paragraphId: string;
+  pageId: string;
+  content: string;
+  timestamp: number;
+  editType: 'create' | 'update' | 'delete';
+  organized?: boolean;
+  metadata?: {
+    wordCount: number;
+    charCount: number;
+  };
+}
+
+interface OrganizedPage {
+  uuid: string;
+  title: string;
+  content: any;
+  content_text: string;
+  organized: boolean;
+  type: 'file' | 'folder';
+  parent_uuid?: string;
+  tags?: string[];
+  category?: string;
+}
+
+interface OrganizationRequest {
+  edits: ParagraphEdit[];
+  currentSummary: string;
+  existingPages: OrganizedPage[];
+  config: {
+    preserveAllInformation: boolean;
+    createNewPagesThreshold: number;
+    maxSimilarityForMerge: number;
+    contextWindowSize: number;
+  };
+}
+
+interface EditMapping {
+  content: string;
+  path: string;
+  editId: string;
+  reasoning?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -50,213 +58,83 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Parse the request body
-    const { noteId, noteContent, organizationInstructions, fileTree, brainStateData } = await request.json()
-
-    if (!noteId || !fileTree || !brainStateData) {
-      return NextResponse.json({ error: 'Missing required fields (noteId, fileTree, brainStateData)' }, { status: 400 })
-    }
-
-    console.log('Organizing brain state for note:', noteId, 'with instructions:', organizationInstructions)
-
-    // Filter unorganized thoughts from brain state
-    const unorganizedThoughts = brainStateData?.pageThoughts?.filter((thought: any) => !thought.isOrganized) || []
+    // Parse the request body - expecting the new thought-tracking format
+    const body = await request.json()
     
-    if (unorganizedThoughts.length === 0) {
-      return NextResponse.json({ 
-        success: true, 
-        message: 'No unorganized thoughts to process',
-        organizedThoughts: 0
+    // Handle both old and new formats for backward compatibility
+    let edits: ParagraphEdit[] = []
+    let existingPages: OrganizedPage[] = []
+    
+    if (body.type === 'organize_content' && body.request) {
+      // New thought-tracking format
+      const { request: orgRequest } = body
+      edits = orgRequest.edits || []
+      existingPages = orgRequest.existingPages || []
+    } else {
+      // Legacy format - convert to new format
+      return NextResponse.json({ error: 'Legacy format not supported. Please use the new thought-tracking format.' }, { status: 400 })
+    }
+
+    if (!edits || edits.length === 0) {
+      return NextResponse.json({
+        updatedPages: [],
+        newPages: [],
+        summary: 'No edits to organize',
+        processedEditIds: []
       })
     }
 
-    console.log(`Found ${unorganizedThoughts.length} unorganized thoughts to process`)
+    console.log(`Organizing ${edits.length} edits using AI...`)
 
-    // Get the current note from database
-    const { data: currentNote, error: noteError } = await supabase
-      .from('pages')
-      .select('*')
-      .eq('uuid', noteId)
-      .eq('user_id', user.id)
-      .single()
-
-    if (noteError || !currentNote) {
-      return NextResponse.json({ error: 'Note not found' }, { status: 404 })
-    }
-
-    // Use AI to analyze and organize the brain state thoughts
-    const organizationPlan = await analyzeAndOrganizeBrainState(
-      unorganizedThoughts,
-      organizationInstructions,
-      fileTree,
-      supabase,
-      currentNote.title,
-      noteId,
-      brainStateData
-    )
-
-    // Execute the organization plan
-    const organizationResults = await executeOrganizationPlan(supabase, user.id, currentNote, organizationPlan, fileTree, unorganizedThoughts)
-
-    // Update the original note metadata to track organization
-    const updatedMetadata = {
-      ...currentNote.metadata,
-      organizationInstructions: organizationInstructions,
-      lastBrainStateOrganizedAt: new Date().toISOString(),
-      organizedThoughtsCount: unorganizedThoughts.length
-    }
-
-    await supabase
-      .from('pages')
-      .update({ 
-        metadata: updatedMetadata
-      })
-      .eq('uuid', noteId)
-      .eq('user_id', user.id)
-
-    // Log cache invalidation info for client-side handling
-    console.log('📦 Cache invalidation needed for organized files')
-    console.log('📦 User ID:', user.id)
-    console.log('📦 Organized files paths:', organizationResults.changedPaths)
-    console.log('📦 Created folders:', organizationResults.createdFolders)
-    console.log('📦 Organized notes:', organizationResults.organizedNotes)
-
-    return NextResponse.json({ 
-      success: true, 
-      message: `Successfully organized ${unorganizedThoughts.length} brain state thoughts! ${organizationResults.organizedNotes.filter(n => n.action === 'appended').length} notes were appended to, ${organizationResults.organizedNotes.filter(n => n.action === 'created').length} new notes were created.`,
-      plan: organizationPlan,
-      changedPaths: organizationResults.changedPaths,
-      createdFolders: organizationResults.createdFolders,
-      organizedNotes: organizationResults.organizedNotes,
-      organizedThoughts: unorganizedThoughts.length
+    // Get organized file tree from existing pages
+    const organizedPages = existingPages.filter(page => page.organized === true)
+    
+    // Use AI to map each edit to a file path
+    const editMappings = await mapEditsToFilePaths(edits, organizedPages)
+    
+    // Execute the mappings - append content to the specified files
+    const results = await executeEditMappings(supabase, user.id, editMappings, organizedPages)
+    
+    return NextResponse.json({
+      updatedPages: results.updatedPages,
+      newPages: results.newPages,
+      summary: `Successfully organized ${edits.length} edits into ${results.updatedPages.length + results.newPages.length} pages`,
+      processedEditIds: edits.map(edit => edit.id)
     })
 
   } catch (error) {
-    console.error('Error organizing brain state:', error)
+    console.error('Error organizing edits:', error)
     return NextResponse.json(
-      { error: 'Failed to organize brain state' }, 
+      { error: 'Failed to organize edits' }, 
       { status: 500 }
     )
   }
 }
 
-async function analyzeAndOrganizeBrainState(unorganizedThoughts: any[], instructions: string, fileTree: any[], supabase?: any, currentTitle?: string, pageUuid?: string, brainStateData?: any) {
-  console.log('Analyzing brain state thoughts for organization with GPT-4o...')
+async function mapEditsToFilePaths(edits: ParagraphEdit[], organizedPages: OrganizedPage[]): Promise<EditMapping[]> {
+  console.log('Mapping edits to file paths using GPT-4o...')
   
-  // Create a clean file tree hierarchy for GPT - only show organized files
-  const cleanFileTree = createCleanFileTree(fileTree.filter(item => item.organized === true))
+  // Create a clean file tree structure for the AI
+  const fileTree = createFileTreeStructure(organizedPages)
   
-  // Prepare brain state thoughts content for organization
-  const thoughtsContent = unorganizedThoughts.map((thought: any, index: number) => 
-    `${index + 1}. "${thought.content}"
-   Last Updated: ${new Date(thought.lastUpdated).toLocaleDateString()}
-   Category: ${thought.category || 'Uncategorized'}`
+  // Get only existing files (not folders) for mapping
+  const existingFiles = organizedPages.filter(page => page.type === 'file' && page.organized === true)
+  
+  // Note: General file will be created during execution if needed
+  
+  // Prepare edits for AI analysis
+  const editsContent = edits.map((edit, index) => 
+    `${index + 1}. ID: ${edit.id}
+   Content: "${edit.content}"
+   Page: ${edit.pageId}
+   Type: ${edit.editType}
+   Timestamp: ${new Date(edit.timestamp).toLocaleDateString()}`
   ).join('\n\n')
   
-  // Build additional context from brain state
-  let brainStateContext = ''
-  if (brainStateData) {
-    const { allCategories, brainStats } = brainStateData
-    
-    brainStateContext = `
-BRAIN STATE CONTEXT:
-You are organizing ${unorganizedThoughts.length} unorganized thoughts from the user's brain state system.
-
-${allCategories && allCategories.length > 0 ? `Available Brain Categories (${allCategories.length} total):
-${allCategories.map((cat: string) => `- ${cat}`).join('\n')}` : ''}
-
-ORGANIZATION APPROACH:
-- Simply copy-paste the thoughts into appropriate files
-- Structure them cleanly but keep original content intact
-- Group related thoughts together
-- No long summaries or explanations needed
-- Just well-organized, structured notes`
-  }
-  
-  // Search memory service for relevant organized content patterns
-  let memoryContext = ''
-  
-  if (memoryService.isConfigured()) {
-    try {
-      console.log('Searching memory service for organization patterns...')
-      
-      // Get current user for user-scoped search
-      const { data: { user }, error: authError } = await supabase?.auth.getUser() || { data: { user: null }, error: null }
-      
-      if (user) {
-        // Use a sample of thoughts to search for similar organized content
-        const searchQuery = unorganizedThoughts.slice(0, 3).map(t => t.content).join(' ')
-        const searchResults = await memoryService.search(searchQuery, user.id, 5);
-
-        console.log('Memory search response for brain state organization:', searchResults)
-
-        if (searchResults && searchResults.length > 0) {
-          // Filter out low-confidence results (below 30%)
-          const highConfidenceResults = searchResults.filter((doc: any) => {
-            const confidence = doc.score || 0;
-            return confidence >= 0.3;
-          });
-          
-          console.log(`Brain state organization: Found ${searchResults.length} documents, ${highConfidenceResults.length} with confidence >= 30%`);
-          
-          // Get page data for high confidence results
-          const pageUuids = highConfidenceResults
-            .map((result: any) => result.metadata?.pageUuid)
-            .filter(Boolean)
-          
-          if (pageUuids.length > 0 && supabase) {
-            // Single database query for all pageUuids - only include organized files
-            const { data: pagesData } = await supabase
-              .from('pages')
-              .select('uuid, title, folder_path, type, organized, visible')
-              .in('uuid', pageUuids)
-              .eq('organized', true) // Only get organized files for patterns
-            
-            const relevantDocuments = []
-            for (const result of highConfidenceResults) {
-              const pageUuid = result.metadata?.pageUuid
-              if (pageUuid) {
-                const pageData = pagesData?.find((p: any) => p.uuid === pageUuid)
-                if (pageData) {
-                  relevantDocuments.push({
-                    title: pageData.title,
-                    folderPath: pageData.folder_path || 'Root',
-                    pageUuid: pageUuid,
-                    content: result.content || '',
-                    relevance: result.score || 0,
-                    summary: (result.content || '').substring(0, 150) + '...'
-                  })
-                }
-              }
-            }
-
-            console.log(`Found ${relevantDocuments.length} relevant organized documents`)
-            
-            if (relevantDocuments.length > 0) {
-              memoryContext = `
-SIMILAR ORGANIZED CONTENT FOUND:
-These organized documents contain similar content to your brain state thoughts. Consider organizing your thoughts in similar locations:
-
-${relevantDocuments
-  .map((doc, index) => 
-    `${index + 1}. "${doc.title}"
-   Location: ${doc.folderPath}
-   Relevance: ${(doc.relevance * 100).toFixed(1)}% match`
-  )
-  .join('\n\n')}
-
-Use these examples to guide where to organize similar brain state thoughts.`
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Memory search failed during brain state organization:', error)
-    }
-  }
+  // Prepare list of existing files for the AI
+  const existingFilePaths = existingFiles.map(file => getFullPath(file, organizedPages))
   
   try {
-    // Call GPT-4o API
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -268,68 +146,53 @@ Use these examples to guide where to organize similar brain state thoughts.`
         messages: [
           {
             role: 'system',
-            content: `You are organizing brain state thoughts into files. Your job is simple: copy-paste the thoughts into appropriate organized files with clean structure.
+            content: `You are an intelligent content organizer. Your job is to map each edit to the most appropriate EXISTING file path from the provided list.
 
-IMPORTANT: You must respond with ONLY a valid JSON object in exactly this format:
-{
-  "contentSections": [
-    {
-      "content": "cleanly structured brain state thoughts (copy-paste style)",
-      "targetFolder": "Work Notes/Projects/Q4 Planning Notes",
-      "reasoning": "brief reason for this location",
-      "thoughtIds": [1, 3, 5]
-    }
-  ]
-}
+CRITICAL CONSTRAINTS:
+- You can ONLY use existing file paths from the provided list
+- DO NOT create new file paths or suggest new files
+- If content doesn't clearly fit an existing file, use "/General" as the fallback
+- Use "/General" sparingly - only when content truly doesn't match any existing file
+
+IMPORTANT: Respond with ONLY a valid JSON array in this exact format:
+[
+  {
+    "content": "the edit content (keep original)",
+    "path": "/full/path/to/existing/file",
+    "editId": "edit-id-from-input",
+    "reasoning": "brief reason for this location"
+  }
+]
 
 Rules:
-1. targetFolder must be the FULL PATH including filename using "/" separator
-2. The LAST part of the path is the FILENAME for the organized note
-3. STRONGLY PREFER EXISTING ORGANIZED FILES: Use existing files when thoughts are related
-4. Only create NEW files when thoughts don't fit any existing organized file
-5. COPY-PASTE approach: Keep the original thought content intact, just structure it cleanly
-6. NO long summaries or explanations - just well-organized notes
-7. Include thoughtIds array with the 1-based indices of thoughts being organized
-8. The content will REPLACE the existing file content entirely
-9. Group related thoughts together by theme/topic
-10. Use simple, clean formatting (bullet points, short headers if needed)
-11. Respond with ONLY the JSON, no markdown formatting or extra text
-
-FORMATTING STYLE:
-- Use bullet points for thoughts
-- Add simple headers to group related ideas
-- Keep original wording but structure cleanly
-- No long explanations or summaries
-- Just clean, organized notes`
+1. Each edit gets mapped to exactly ONE existing file path
+2. Only use paths from the EXISTING FILES list provided
+3. Prioritize content similarity and relevance to existing files
+4. Use "/General" only as last resort when no other file fits
+5. Keep original edit content intact - just map to existing location
+6. Group related edits into the same existing file when appropriate
+7. Respond with ONLY the JSON array, no markdown or extra text`
           },
           {
             role: 'user',
-            content: `Page Title: ${currentTitle || 'Untitled'}
+            content: `Here are the edits to organize:
 
-Unorganized Brain State Thoughts to Copy-Paste and Structure:
-${thoughtsContent}
+${editsContent}
 
-Organization Instructions: ${instructions || 'No specific instructions - organize these thoughts cleanly into appropriate files.'}
+EXISTING FILES (you can ONLY use these paths):
+${existingFilePaths.map(path => `- ${path}`).join('\n')}
 
-Current Organized File Tree:
-${JSON.stringify(cleanFileTree, null, 2)}
+Current organized file tree structure:
+${JSON.stringify(fileTree, null, 2)}
 
-${brainStateContext}
-
-${memoryContext}
-
-Please copy-paste these brain state thoughts into appropriate organized files. Focus on:
-1. Clean structure and formatting
-2. Using existing organized files when thoughts are related
-3. Keeping original thought content intact
-4. Simple organization without long summaries
-5. ${memoryContext ? 'Consider the similar organized content locations' : 'Use the existing file structure as guidance'}
-
-${!instructions ? 'Since no specific instructions were provided, organize based on content themes and existing file structure.' : ''}`
+Please map each edit to the most appropriate EXISTING file path. Focus on:
+1. Content relevance and similarity to existing files
+2. Using the best matching existing file
+3. Only use "/General" when content doesn't fit any existing file`
           }
         ],
-        temperature: 0.2,
-        max_tokens: 1000
+        temperature: 0.1,
+        max_tokens: 2000
       })
     })
 
@@ -344,43 +207,41 @@ ${!instructions ? 'Since no specific instructions were provided, organize based 
       throw new Error('No response from GPT-4o')
     }
 
-    console.log('GPT-4o raw response:', gptResponse)
+    console.log('GPT-4o mapping response:', gptResponse)
 
     // Clean and parse the JSON response
     const cleanedJson = cleanGPTJsonResponse(gptResponse)
-    const organizationPlan = JSON.parse(cleanedJson)
+    const mappings = JSON.parse(cleanedJson) as EditMapping[]
 
-    console.log('Parsed brain state organization plan:', organizationPlan)
-    return organizationPlan
+    // Validate that all mappings use existing files only
+    const validatedMappings = validateMappings(mappings, existingFilePaths, edits)
+
+    console.log('Validated edit mappings:', validatedMappings)
+    return validatedMappings
 
   } catch (error) {
-    console.error('Error calling GPT-4o for brain state organization:', error)
+    console.error('Error calling GPT-4o for edit mapping:', error)
     
-    // Fallback to simple organization if GPT fails
-    console.log('Falling back to simple brain state organization...')
-    return createFallbackBrainStatePlan(unorganizedThoughts, instructions)
+    // Fallback to simple mapping if AI fails
+    console.log('Falling back to simple edit mapping...')
+    return createFallbackMappings(edits, organizedPages)
   }
 }
 
-function createCleanFileTree(fileTree: any[]) {
-  function buildHierarchy(items: any[], parentId: string | null = null): any[] {
+function createFileTreeStructure(organizedPages: OrganizedPage[]): any {
+  // Build a hierarchical structure showing the organized file tree
+  const buildHierarchy = (items: OrganizedPage[], parentId: string | null = null): any[] => {
     return items
       .filter(item => item.parent_uuid === parentId)
-      .filter(item => {
-        // Only include organized files or folders
-        const isFolder = (item.metadata as any)?.isFolder
-        return isFolder || item.organized === true
-      })
       .map(item => {
-        const isFolder = item.type === 'folder'
         const node: any = {
           id: item.uuid,
           name: item.title,
-          type: isFolder ? 'folder' : 'file',
-          organized: item.organized
+          type: item.type,
+          path: getFullPath(item, organizedPages)
         }
         
-        if (isFolder) {
+        if (item.type === 'folder') {
           const children = buildHierarchy(items, item.uuid)
           if (children.length > 0) {
             node.children = children
@@ -391,412 +252,272 @@ function createCleanFileTree(fileTree: any[]) {
       })
   }
   
-  return buildHierarchy(fileTree)
+  return buildHierarchy(organizedPages)
+}
+
+function getFullPath(page: OrganizedPage, allPages: OrganizedPage[]): string {
+  const path: string[] = []
+  let currentPage: OrganizedPage | null = page
+  
+  // Build path by traversing up the parent chain
+  while (currentPage) {
+    path.unshift(currentPage.title)
+    
+    if (currentPage.parent_uuid) {
+      currentPage = allPages.find(p => p.uuid === currentPage!.parent_uuid) || null
+    } else {
+      currentPage = null
+    }
+  }
+  
+  return '/' + path.join('/')
 }
 
 function cleanGPTJsonResponse(response: string): string {
   // Remove markdown code blocks
   let cleaned = response.replace(/```json\s*/gi, '').replace(/```\s*/g, '')
   
-  // Remove any leading/trailing whitespace
-  cleaned = cleaned.trim()
+  // Remove any text before the first [ or {
+  const jsonStart = Math.min(
+    cleaned.indexOf('[') !== -1 ? cleaned.indexOf('[') : Infinity,
+    cleaned.indexOf('{') !== -1 ? cleaned.indexOf('{') : Infinity
+  )
   
-  // Find the first { and last } to extract just the JSON
-  const firstBrace = cleaned.indexOf('{')
-  const lastBrace = cleaned.lastIndexOf('}')
-  
-  if (firstBrace !== -1 && lastBrace !== -1) {
-    cleaned = cleaned.substring(firstBrace, lastBrace + 1)
+  if (jsonStart !== Infinity) {
+    cleaned = cleaned.substring(jsonStart)
   }
   
-  return cleaned
+  // Remove any text after the last ] or }
+  const jsonEnd = Math.max(
+    cleaned.lastIndexOf(']'),
+    cleaned.lastIndexOf('}')
+  )
+  
+  if (jsonEnd !== -1) {
+    cleaned = cleaned.substring(0, jsonEnd + 1)
+  }
+  
+  return cleaned.trim()
 }
 
-function createFallbackBrainStatePlan(unorganizedThoughts: any[], instructions: string) {
-  let targetPath = 'Organized Notes/Brain State Notes'
-  let reasoning = 'Fallback organization - brain state thoughts organized cleanly'
-
-  // Simple fallback logic based on instructions or thought content
-  if (instructions && instructions.trim()) {
-    if (instructions.toLowerCase().includes('work')) {
-      targetPath = 'Work Notes/Brain State Notes'
-    } else if (instructions.toLowerCase().includes('meeting')) {
-      targetPath = 'Meeting Notes/Brain State Notes'
-    } else if (instructions.toLowerCase().includes('personal')) {
-      targetPath = 'Personal/Brain State Notes'
-    }
-    reasoning = `Fallback brain state organization based on instructions: "${instructions}"`
-  } else {
-    // Try to infer from thought content
-    const allThoughtContent = unorganizedThoughts.map(t => t.content).join(' ').toLowerCase()
-    if (allThoughtContent.includes('meeting') || allThoughtContent.includes('standup')) {
-      targetPath = 'Meeting Notes/Brain State Notes'
-      reasoning = 'Fallback organization - thoughts appear to be meeting-related'
-    } else if (allThoughtContent.includes('work') || allThoughtContent.includes('project')) {
-      targetPath = 'Work Notes/Brain State Notes' 
-      reasoning = 'Fallback organization - thoughts appear to be work-related'
-    } else if (allThoughtContent.includes('personal') || allThoughtContent.includes('idea')) {
-      targetPath = 'Personal/Brain State Notes'
-      reasoning = 'Fallback organization - thoughts appear to be personal'
-    }
-  }
-
-  // Create simple structured content from thoughts (copy-paste style)
-  const structuredContent = unorganizedThoughts.map((thought, index) => 
-    `• ${thought.content}`
-  ).join('\n')
-
-  return {
-    contentSections: [
-      {
-        content: structuredContent,
-        targetFolder: targetPath,
-        reasoning: reasoning,
-        thoughtIds: unorganizedThoughts.map((_, index) => index + 1)
+function createFallbackMappings(edits: ParagraphEdit[], organizedPages: OrganizedPage[]): EditMapping[] {
+  // Get existing files only
+  const existingFiles = organizedPages.filter(page => page.type === 'file' && page.organized === true)
+  
+  // Find or use General file as default
+  const generalFile = existingFiles.find(page => page.title.toLowerCase() === 'general')
+  const generalPath = generalFile ? getFullPath(generalFile, organizedPages) : '/General'
+  
+  return edits.map(edit => {
+    // Try to find an existing file that might be related
+    const relatedFile = existingFiles.find(page => {
+      const contentWords = edit.content.toLowerCase().split(' ')
+      const titleWords = page.title.toLowerCase().split(' ')
+      const contentText = page.content_text?.toLowerCase() || ''
+      
+      // Check for keyword matches in title or content
+      return contentWords.some(word => 
+        word.length > 3 && (
+          titleWords.some(titleWord => titleWord.includes(word)) ||
+          contentText.includes(word)
+        )
+      )
+    })
+    
+    if (relatedFile) {
+      return {
+        content: edit.content,
+        path: getFullPath(relatedFile, organizedPages),
+        editId: edit.id,
+        reasoning: 'Fallback: Content similarity detected'
       }
-    ]
-  }
+    } else {
+      // Default to General file
+      return {
+        content: edit.content,
+        path: generalPath,
+        editId: edit.id,
+        reasoning: 'Fallback: Added to General file'
+      }
+    }
+  })
 }
 
-async function executeOrganizationPlan(
+async function executeEditMappings(
   supabase: any, 
   userId: string, 
-  currentNote: any, 
-  plan: any, 
-  fileTree: any[],
-  unorganizedThoughts: any[]
-) {
-  console.log('Executing brain state organization plan:', plan)
-
-  const results = {
-    changedPaths: [] as string[],
-    createdFolders: [] as string[],
-    organizedNotes: [] as any[]
+  mappings: EditMapping[], 
+  organizedPages: OrganizedPage[]
+): Promise<{ updatedPages: OrganizedPage[], newPages: OrganizedPage[] }> {
+  console.log('Executing edit mappings...')
+  
+  const updatedPages: OrganizedPage[] = []
+  const newPages: OrganizedPage[] = []
+  
+  // Ensure General file exists if any mappings use it
+  const needsGeneralFile = mappings.some(mapping => mapping.path === '/General')
+  if (needsGeneralFile) {
+    await ensureGeneralFileExistsInDB(supabase, userId, organizedPages)
   }
-
-  for (const section of plan.contentSections) {
-    const targetFolderPath = section.targetFolder
+  
+  // Group mappings by path to batch updates
+  const mappingsByPath = mappings.reduce((acc, mapping) => {
+    if (!acc[mapping.path]) {
+      acc[mapping.path] = []
+    }
+    acc[mapping.path].push(mapping)
+    return acc
+  }, {} as Record<string, EditMapping[]>)
+  
+  for (const [path, pathMappings] of Object.entries(mappingsByPath)) {
+    // Find existing page with this path
+    let existingPage = organizedPages.find(page => getFullPath(page, organizedPages) === path)
     
-    if (!targetFolderPath) {
-      console.warn('No target folder path specified for section, skipping...')
-      continue
+    // If it's the General file and doesn't exist, find it by title
+    if (!existingPage && path === '/General') {
+      existingPage = organizedPages.find(page => 
+        page.type === 'file' && 
+        page.title.toLowerCase() === 'general' &&
+        page.organized === true
+      )
     }
     
-    // Create the nested folder structure and get the parent folder + filename
-    const pathResult = await createNestedFolderPath(supabase, userId, targetFolderPath, fileTree)
+    // Combine all content for this path
+    const combinedContent = pathMappings.map(m => m.content).join('\n\n')
     
-    if (!pathResult) {
-      console.error('Failed to create folder path:', targetFolderPath)
-      continue
-    }
-
-    // Add the full path to changed paths
-    results.changedPaths.push(targetFolderPath)
-    
-    // Track if we created new folders
-    if (pathResult.isNewFolder) {
-      results.createdFolders.push(targetFolderPath)
-    }
-
-    // Convert content to TipTap format if it's a string
-    let noteContent = section.content
-    if (typeof section.content === 'string') {
-      // Convert markdown-style content to TipTap format
-      noteContent = convertMarkdownToTipTap(section.content)
-    }
-
-    // Check if the target file already exists in organized tree
-    const existingNote = fileTree.find(item => 
-      item.type === 'file' && 
-      item.organized === true &&
-      item.title === pathResult.fileName && 
-      item.parent_uuid === pathResult.parentFolderId &&
-      item.organized === true // Only merge with organized files
-    )
-
-    if (existingNote) {
-      // APPEND content to existing organized note instead of replacing
-      console.log(`Appending to existing organized note: ${pathResult.fileName}`)
+    if (existingPage) {
+      // Update existing page by appending content
+      const updatedContentText = existingPage.content_text + '\n\n' + combinedContent
       
-      // Get the current content of the existing note
-      const { data: currentNoteData, error: fetchError } = await supabase
-        .from('pages')
-        .select('content')
-        .eq('uuid', existingNote.uuid)
-        .single()
-
-      if (fetchError) {
-        throw new Error(`Failed to fetch existing note content: ${fetchError.message}`)
+      // Create new TipTap content with appended paragraphs
+      const newParagraphs = pathMappings.map(mapping => ({
+        type: "paragraph",
+        content: [{ type: "text", text: mapping.content }]
+      }))
+      
+      const updatedContent = {
+        ...existingPage.content,
+        content: [...(existingPage.content?.content || []), ...newParagraphs]
       }
-
-      // Merge the existing content with new content
-      const mergedContent = mergeContentWithExisting(currentNoteData.content, noteContent)
       
-      const { data: updatedNote, error: updateError } = await supabase
+      const { data: updated, error } = await supabase
         .from('pages')
         .update({
-          content: mergedContent, // Use merged content instead of replacing
-          metadata: {
-            ...existingNote.metadata,
-            lastBrainStateOrganizedAt: new Date().toISOString(),
-            organizationReasoning: section.reasoning,
-            organizedThoughtIds: [
-              ...(existingNote.metadata?.organizedThoughtIds || []),
-              ...(section.thoughtIds || [])
-            ],
-            originalNoteId: currentNote.uuid,
-            organizeStatus: 'yes' // Ensure organize status is set for cache refresh
-          }
+          content: updatedContent,
+          content_text: updatedContentText,
+          updated_at: new Date().toISOString()
         })
-        .eq('uuid', existingNote.uuid)
+        .eq('uuid', existingPage.uuid)
+        .eq('user_id', userId)
         .select()
         .single()
-
-      if (updateError) {
-        throw new Error(`Failed to update existing organized note: ${updateError.message}`)
+      
+      if (error) {
+        console.error('Error updating page:', error)
+      } else {
+        updatedPages.push({
+          ...existingPage,
+          content: updatedContent,
+          content_text: updatedContentText
+        })
       }
-
-      results.organizedNotes.push({
-        noteId: existingNote.uuid,
-        title: pathResult.fileName,
-        folderPath: targetFolderPath,
-        action: 'appended'
-      })
     } else {
-      // Create a new organized note with organized = true
-      console.log(`Creating new organized note: ${pathResult.fileName}`)
-      
-      const { data: newNote, error: noteError } = await supabase
-        .from('pages')
-        .insert({
-          title: pathResult.fileName,
-          user_id: userId,
-          content: noteContent,
-          parent_uuid: pathResult.parentFolderId,
-          type: 'file',
-          organized: true,
-          visible: true,
-          metadata: { 
-            originalNoteId: currentNote.uuid,
-            organizationReasoning: section.reasoning,
-            organizedThoughtIds: section.thoughtIds || [],
-            createdFromBrainState: true,
-            brainStateOrganizedAt: new Date().toISOString(),
-            organizeStatus: 'yes' // Set organize status so it appears in loadRelevantNotes
-          }
-        })
-        .select()
-        .single()
-
-      if (noteError) {
-        throw new Error(`Failed to create organized note: ${noteError.message}`)
-      }
-
-      results.organizedNotes.push({
-        noteId: newNote.uuid,
-        title: newNote.title,
-        folderPath: targetFolderPath,
-        action: 'created'
-      })
+      // This should not happen since we only map to existing files
+      // But if it does, skip this mapping and log an error
+      console.error(`Attempted to create new file: ${path}. This should not happen with the new constraints.`)
+      console.error(`Skipping ${pathMappings.length} edits that were mapped to non-existent file.`)
     }
-
-    // Mark the processed thoughts as organized
-    if (section.thoughtIds && Array.isArray(section.thoughtIds)) {
-      const organizedThoughtIds = section.thoughtIds
-      console.log(`Marking ${organizedThoughtIds.length} thoughts as organized`)
-      
-      // Note: This would need to be handled by your brain state system
-      // You might want to return this info to update the brain state
-      results.organizedNotes[results.organizedNotes.length - 1].organizedThoughtIds = organizedThoughtIds
-    }
-
-    console.log('Created/updated organized note in folder path:', targetFolderPath)
   }
-
-  console.log('Brain state organization plan executed successfully')
   
-  return results
+  console.log(`Updated ${updatedPages.length} pages, created ${newPages.length} new pages`)
+  return { updatedPages, newPages }
 }
 
-async function createNestedFolderPath(
+async function ensureGeneralFileExistsInDB(
   supabase: any, 
   userId: string, 
-  fullPath: string, 
-  fileTree: any[]
-): Promise<{parentFolderId: string | null, fileName: string, isNewFolder: boolean} | null> {
-  // Split the path - last part is filename, everything else are folders
-  const pathParts = fullPath.split('/').map(name => name.trim())
-  const fileName = pathParts[pathParts.length - 1] // Last part is the file name
-  const folderNames = pathParts.slice(0, -1) // Everything except last part are folders
+  organizedPages: OrganizedPage[]
+): Promise<void> {
+  // Check if General file already exists
+  const generalFile = organizedPages.find(page => 
+    page.type === 'file' && 
+    page.title.toLowerCase() === 'general' && 
+    page.organized === true
+  )
   
-  let currentParentId: string | null = null
-  let isNewFolder = false
-  
-  // Process each folder in the path (excluding the filename)
-  for (let i = 0; i < folderNames.length; i++) {
-    const folderName = folderNames[i]
+  if (!generalFile) {
+    console.log('Creating General file as it does not exist...')
     
-    // Look for existing organized folder at this level
-    let existingFolder = fileTree.find(item => 
-      item.type === 'folder' && 
-      item.organized === true &&
-      item.title === folderName && 
-      item.parent_uuid === currentParentId
-    )
+    // Create the General file
+    const { data: newGeneralFile, error } = await supabase
+      .from('pages')
+      .insert({
+        title: 'General',
+        user_id: userId,
+        content: { type: 'doc', content: [] },
+        content_text: '',
+        parent_uuid: null,
+        type: 'file',
+        organized: true,
+        visible: true,
+        metadata: {
+          createdFromThoughtTracking: true,
+          isDefaultGeneralFile: true,
+          createdAt: new Date().toISOString()
+        }
+      })
+      .select()
+      .single()
     
-    if (!existingFolder) {
-      // Create the organized folder
-      const { data: newFolder, error: folderError } = await supabase
-        .from('pages')
-        .insert({
-          title: folderName,
-          user_id: userId,
-          content: { type: 'doc', content: [] },
-          parent_uuid: currentParentId,
-          type: 'folder',
-          organized: true,
-          visible: true,
-          metadata: {
-            organizeStatus: 'yes' // Set organize status so folders appear in loadRelevantNotes
-          }
-        })
-        .select()
-        .single()
-
-      if (folderError) {
-        console.error(`Failed to create organized folder "${folderName}":`, folderError)
-        return { parentFolderId: null, fileName, isNewFolder: false }
-      }
-      
-      existingFolder = newFolder
-      isNewFolder = true
-      console.log(`Created new organized folder: ${folderName}`)
-      
-      // Add to file tree for future lookups in this request
-      fileTree.push(existingFolder)
-    }
-    
-    // Update parent for next iteration
-    currentParentId = existingFolder.uuid
-  }
-  
-  return {
-    parentFolderId: currentParentId,
-    fileName: fileName,
-    isNewFolder: isNewFolder
-  }
-}
-
-function convertMarkdownToTipTap(markdownContent: string): any {
-  // Simple markdown to TipTap conversion
-  // This is a basic implementation - you might want to use a proper markdown parser
-  const lines = markdownContent.split('\n')
-  const content: any[] = []
-  
-  for (const line of lines) {
-    if (line.trim() === '') {
-      // Empty line
-      content.push({
-        type: 'paragraph',
-        content: []
-      })
-    } else if (line.startsWith('# ')) {
-      // Heading 1
-      content.push({
-        type: 'heading',
-        attrs: { level: 1 },
-        content: [{ type: 'text', text: line.substring(2) }]
-      })
-    } else if (line.startsWith('## ')) {
-      // Heading 2
-      content.push({
-        type: 'heading',
-        attrs: { level: 2 },
-        content: [{ type: 'text', text: line.substring(3) }]
-      })
-    } else if (line.startsWith('### ')) {
-      // Heading 3
-      content.push({
-        type: 'heading',
-        attrs: { level: 3 },
-        content: [{ type: 'text', text: line.substring(4) }]
-      })
-    } else if (line.trim() === '---') {
-      // Horizontal rule
-      content.push({
-        type: 'horizontalRule'
-      })
+    if (error) {
+      console.error('Error creating General file:', error)
     } else {
-      // Regular paragraph
-      content.push({
-        type: 'paragraph',
-        content: [{ type: 'text', text: line }]
+      // Add to organizedPages for subsequent lookups
+      organizedPages.push({
+        uuid: newGeneralFile.uuid,
+        title: newGeneralFile.title,
+        content: newGeneralFile.content,
+        content_text: newGeneralFile.content_text,
+        organized: true,
+        type: 'file',
+        parent_uuid: newGeneralFile.parent_uuid
+      })
+      console.log('General file created successfully')
+    }
+  }
+}
+
+function validateMappings(mappings: EditMapping[], existingFilePaths: string[], edits: ParagraphEdit[]): EditMapping[] {
+  const validatedMappings: EditMapping[] = []
+  
+  for (const mapping of mappings) {
+    // Check if the path exists in our existing files list
+    if (existingFilePaths.includes(mapping.path) || mapping.path === '/General') {
+      validatedMappings.push(mapping)
+    } else {
+      // Invalid path - redirect to General file
+      console.warn(`Invalid path detected: ${mapping.path}, redirecting to General`)
+      validatedMappings.push({
+        ...mapping,
+        path: '/General',
+        reasoning: 'Redirected to General: Invalid path suggested by AI'
       })
     }
   }
   
-  return {
-    type: 'doc',
-    content: content
-  }
-}
-
-function extractTextFromTipTap(content: any): string {
-  if (!content || !content.content) return ''
-  
-  let text = ''
-  
-  function extractText(node: any): void {
-    if (node.text) {
-      text += node.text + ' '
-    }
-    if (node.content && Array.isArray(node.content)) {
-      node.content.forEach(extractText)
+  // Ensure all edits are mapped
+  const mappedEditIds = new Set(validatedMappings.map(m => m.editId))
+  for (const edit of edits) {
+    if (!mappedEditIds.has(edit.id)) {
+      // Add missing edit to General file
+      validatedMappings.push({
+        content: edit.content,
+        path: '/General',
+        editId: edit.id,
+        reasoning: 'Added to General: Missing from AI response'
+      })
     }
   }
   
-  content.content.forEach(extractText)
-  return text.trim()
-}
-
-function mergeContentWithExisting(existingContent: any, newContent: any): any {
-  // Handle case where existing content is empty or invalid
-  if (!existingContent || !existingContent.content || !Array.isArray(existingContent.content)) {
-    return newContent
-  }
-  
-  // Handle case where new content is empty or invalid
-  if (!newContent || !newContent.content || !Array.isArray(newContent.content)) {
-    return existingContent
-  }
-  
-  // Add a separator between existing and new content
-  const separator = {
-    type: 'horizontalRule'
-  }
-  
-  // Add a timestamp header for the new content
-  const timestampHeader = {
-    type: 'paragraph',
-    content: [
-      {
-        type: 'text',
-        text: `--- Added ${new Date().toLocaleDateString()} ---`,
-        marks: [{ type: 'italic' }]
-      }
-    ]
-  }
-  
-  // Merge the content arrays
-  const mergedContent = {
-    type: 'doc',
-    content: [
-      ...existingContent.content,
-      separator,
-      timestampHeader,
-      ...newContent.content
-    ]
-  }
-  
-  return mergedContent
+  return validatedMappings
 } 

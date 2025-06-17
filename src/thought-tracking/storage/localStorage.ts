@@ -1,6 +1,5 @@
 import { 
   BrainState, 
-  CacheEntry, 
   OrganizedPage, 
   StorageManager, 
   BrainStateConfig 
@@ -9,7 +8,6 @@ import { STORAGE_KEYS, BRAIN_STATE_DEFAULTS } from '../constants';
 
 export class LocalStorageManager implements StorageManager {
   private readonly BRAIN_STATE_KEY = STORAGE_KEYS.BRAIN_STATE;
-  private readonly CACHE_ENTRIES_KEY = STORAGE_KEYS.CACHE_ENTRIES;
   private readonly ORGANIZED_PAGES_KEY = STORAGE_KEYS.ORGANIZED_PAGES;
   private readonly CONFIG_KEY = STORAGE_KEYS.CONFIG;
 
@@ -45,40 +43,6 @@ export class LocalStorageManager implements StorageManager {
     }
   }
 
-  async saveCacheEntry(entry: CacheEntry): Promise<void> {
-    try {
-      const entries = await this.loadCacheEntries();
-      const updatedEntries = [...entries, entry];
-      localStorage.setItem(this.CACHE_ENTRIES_KEY, JSON.stringify(updatedEntries));
-    } catch (error) {
-      console.error('Error saving cache entry:', error);
-      throw new Error('Failed to save cache entry to localStorage');
-    }
-  }
-
-  async loadCacheEntries(): Promise<CacheEntry[]> {
-    try {
-      const stored = localStorage.getItem(this.CACHE_ENTRIES_KEY);
-      if (!stored) return [];
-      
-      return JSON.parse(stored) as CacheEntry[];
-    } catch (error) {
-      console.error('Error loading cache entries:', error);
-      return [];
-    }
-  }
-
-  async clearProcessedCache(ids: string[]): Promise<void> {
-    try {
-      const entries = await this.loadCacheEntries();
-      const filteredEntries = entries.filter(entry => !ids.includes(entry.id));
-      localStorage.setItem(this.CACHE_ENTRIES_KEY, JSON.stringify(filteredEntries));
-    } catch (error) {
-      console.error('Error clearing processed cache:', error);
-      throw new Error('Failed to clear processed cache from localStorage');
-    }
-  }
-
   async saveOrganizedPages(pages: OrganizedPage[]): Promise<void> {
     try {
       localStorage.setItem(this.ORGANIZED_PAGES_KEY, JSON.stringify(pages));
@@ -97,6 +61,16 @@ export class LocalStorageManager implements StorageManager {
     } catch (error) {
       console.error('Error loading organized pages:', error);
       return [];
+    }
+  }
+
+  async getPageByUuid(uuid: string): Promise<OrganizedPage | null> {
+    try {
+      const pages = await this.loadOrganizedPages();
+      return pages.find(page => page.uuid === uuid) || null;
+    } catch (error) {
+      console.error('Error getting page by UUID:', error);
+      return null;
     }
   }
 
@@ -122,21 +96,18 @@ export class LocalStorageManager implements StorageManager {
   }
 
   // Utility methods for storage management
-  async getStorageSize(): Promise<{ brainState: number; cache: number; pages: number }> {
+  async getStorageSize(): Promise<{ brainState: number; pages: number }> {
     const brainStateSize = localStorage.getItem(this.BRAIN_STATE_KEY)?.length || 0;
-    const cacheSize = localStorage.getItem(this.CACHE_ENTRIES_KEY)?.length || 0;
     const pagesSize = localStorage.getItem(this.ORGANIZED_PAGES_KEY)?.length || 0;
     
     return {
       brainState: brainStateSize,
-      cache: cacheSize,
       pages: pagesSize,
     };
   }
 
   async clearAllData(): Promise<void> {
     localStorage.removeItem(this.BRAIN_STATE_KEY);
-    localStorage.removeItem(this.CACHE_ENTRIES_KEY);
     localStorage.removeItem(this.ORGANIZED_PAGES_KEY);
     localStorage.removeItem(this.CONFIG_KEY);
   }

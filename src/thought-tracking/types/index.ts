@@ -7,6 +7,7 @@ export interface ParagraphEdit {
   content: string; // Latest content state - empty string "" for delete
   timestamp: number;
   editType: 'create' | 'update' | 'delete';
+  organized?: boolean; // Mark if this edit has been organized
   metadata?: {
     wordCount: number;
     charCount: number;
@@ -21,19 +22,9 @@ export interface BrainState {
 }
 
 export interface BrainStateConfig {
-  maxEditsInPrimary: number; // Default 30
-  maxEditsInSecondary: number; // Default 30
-  summaryUpdateFrequency: number; // How often to update summary
-  organizationThreshold: number; // When to trigger organization
-}
-
-export interface CacheEntry {
-  id: string;
-  edits: ParagraphEdit[];
-  summary: string;
-  contextSummary: string;
-  timestamp: number;
-  processed: boolean;
+  maxEditsBeforeOrganization: number; // Default 20 - trigger organization when exceeded
+  numEditsToOrganize: number; // Default 5 - how many edits to organize at once
+  summaryUpdateFrequency: number; // How often to update summary (optional)
 }
 
 // Updated to match Supabase schema
@@ -63,7 +54,7 @@ export interface OrganizedPage {
 }
 
 export interface OrganizationRequest {
-  cacheEntries: CacheEntry[];
+  edits: ParagraphEdit[]; // Changed from cacheEntries to edits
   currentSummary: string;
   existingPages: OrganizedPage[];
   config: OrganizationConfig;
@@ -80,24 +71,21 @@ export interface OrganizationResult {
   updatedPages: OrganizedPage[];
   newPages: OrganizedPage[];
   summary: string;
-  processedCacheIds: string[];
+  processedEditIds: string[]; // Changed from processedCacheIds
 }
 
 export interface StorageManager {
   saveBrainState(state: BrainState): Promise<void>;
   loadBrainState(): Promise<BrainState | null>;
-  saveCacheEntry(entry: CacheEntry): Promise<void>;
-  loadCacheEntries(): Promise<CacheEntry[]>;
-  clearProcessedCache(ids: string[]): Promise<void>;
   saveOrganizedPages(pages: OrganizedPage[]): Promise<void>;
   loadOrganizedPages(): Promise<OrganizedPage[]>;
+  getPageByUuid(uuid: string): Promise<OrganizedPage | null>;
 }
 
 // Supabase-specific types
 export interface SupabaseStorageConfig {
   tableName?: string;
   brainStateKey?: string;
-  cacheTableName?: string;
 }
 
 // Database row type for pages

@@ -29,7 +29,7 @@ export const createSupabaseThoughtTracker = async () => {
   const tracker = new ThoughtTracker(
     storageManager,
     '/api/summarize', // Your summary API endpoint
-    '/api/organize'   // Your organization API endpoint
+    '/api/organize-note'   // Your organization API endpoint
   );
 
   await tracker.initialize();
@@ -146,7 +146,7 @@ export const markPageAsOrganized = async (
 
 // 9. Example: React Hook usage
 export const useSupabaseThoughtTracking = () => {
-  return useThoughtTracker('/api/summarize', '/api/organize');
+  return useThoughtTracker('/api/summarize', '/api/organize-note');
 };
 
 // 10. Example: Batch operations
