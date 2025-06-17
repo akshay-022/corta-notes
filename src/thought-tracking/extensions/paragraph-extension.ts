@@ -131,4 +131,39 @@ export const ThoughtParagraph = Node.create<ThoughtParagraphOptions>({
   //     }),
   //   ]
   // },
+
+  // Add plugin to prevent metadata inheritance
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey('preventMetadataInheritance'),
+        appendTransaction: (transactions, oldState, newState) => {
+          const tr = newState.tr
+          let modified = false
+
+          // Check for duplicate metadata IDs and clear them
+          const seenIds = new Set()
+          
+          newState.doc.descendants((node, pos) => {
+            if (node.type.name === 'paragraph' && node.attrs.metadata?.id) {
+              const metadataId = node.attrs.metadata.id
+              
+              if (seenIds.has(metadataId)) {
+                // Duplicate metadata ID found - clear metadata but keep other attributes
+                tr.setNodeMarkup(pos, undefined, { 
+                  ...node.attrs, 
+                  metadata: null // Clear metadata to prevent inheritance
+                })
+                modified = true
+              } else {
+                seenIds.add(metadataId)
+              }
+            }
+          })
+
+          return modified ? tr : null
+        },
+      }),
+    ]
+  },
 }) 

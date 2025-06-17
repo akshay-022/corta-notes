@@ -61,7 +61,7 @@ export function convertPositionToParagraphNumber(editor: Editor, position: numbe
     const lines = fullText.split('\n')
     
     // Get the text at the given position
-    const resolvedPos = editor.state.doc.resolve(position)
+  const resolvedPos = editor.state.doc.resolve(position)
     const nodeAtPosition = resolvedPos.nodeAfter || resolvedPos.nodeBefore
     
     if (!nodeAtPosition || !nodeAtPosition.isText) return 0
@@ -128,21 +128,21 @@ export function setParagraphMetadata(
     const resolvedPos = editor.state.doc.resolve(position)
     const node = resolvedPos.node()
     
-    const currentMetadata = node.attrs.metadata || {}
+      const currentMetadata = node.attrs.metadata || {}
     const newMetadata = { 
     ...currentMetadata, 
     ...metadata,
     lastUpdated: new Date().toISOString() // Always update timestamp
     }
     
-    
-    editor.chain()
-    .focus()
-    .setNodeSelection(resolvedPos.pos - resolvedPos.parentOffset)
-    .updateAttributes('paragraph', { metadata: newMetadata })
-    .run()
       
-    return true
+      editor.chain()
+        .focus()
+        .setNodeSelection(resolvedPos.pos - resolvedPos.parentOffset)
+        .updateAttributes('paragraph', { metadata: newMetadata })
+        .run()
+      
+      return true
     
   } catch (error) {
     console.error('Error setting paragraph metadata:', error)
@@ -301,4 +301,56 @@ export function ensureCurrentParagraphId(editor: Editor): string | null {
   // Return existing ID if present, but don't create new ones
   // Let thought tracking create proper pageUuid-para-timestamp-random IDs
   return currentMetadata.id || null
+}
+
+/**
+ * Set proper IDs for all block-level nodes that don't have them or have old 'para-' format
+ */
+export function setNewParagraphIds(editor: Editor, pageUuid: string): void {
+  if (!editor || !pageUuid) return
+
+  // Block-level node types that can have attributes
+  const blockNodeTypes = ['paragraph', 'heading', 'blockquote', 'bulletList', 'orderedList', 'listItem', 'codeBlock']
+  
+  editor.state.doc.descendants((node, pos) => {
+    // Only process block-level nodes that can have attributes, skip text nodes
+    if (blockNodeTypes.includes(node.type.name)) {
+      const hasNoId = !node.attrs?.id || !node.attrs?.metadata?.id
+      const hasOldParaId = node.attrs?.id?.startsWith('para') || node.attrs?.metadata?.id?.startsWith('para')
+      
+      // Update if no ID exists or if it has old 'para-' format
+      if (hasNoId || hasOldParaId) {
+        // Generate unique ID for this block node
+        const randomHex = Math.random().toString(16).substring(2, 10)
+        const timestamp = Date.now()
+        const nodeTypePrefix = node.type.name
+        const nodeId = `${pageUuid}-${nodeTypePrefix}-${timestamp}-${randomHex}`
+        
+        try {
+          // Set the ID and initial metadata using editor commands
+          editor.chain()
+            .focus()
+            .setNodeSelection(pos)
+            .updateAttributes(node.type.name, {
+              id: nodeId,
+              metadata: {
+                id: nodeId,
+                lastUpdated: new Date().toISOString(),
+                organizationStatus: 'no',
+                isOrganized: false
+              }
+            })
+            .run()
+
+          console.log(`📝 Set new ID for ${node.type.name}:`, {
+            pos,
+            id: nodeId,
+            oldId: node.attrs?.id || 'none'
+          })
+        } catch (error) {
+          console.error(`Error setting ID for ${node.type.name} at position ${pos}:`, error)
+        }
+      }
+    }
+  })
 } 

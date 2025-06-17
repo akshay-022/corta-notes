@@ -6,6 +6,7 @@ import {
   convertParagraphNumberToPosition, 
   setParagraphMetadata, 
   getParagraphMetadata,
+  setNewParagraphIds,
   ensureCurrentParagraphId,
   ParagraphMetadata 
 } from '@/components/editor/paragraph-metadata'
@@ -67,13 +68,16 @@ export async function setupThoughtTracking(
       try {
         const currentContent = editor.getJSON()
 
+        // Set IDs for block-level nodes that don't have them yet
+        setNewParagraphIds(editor, pageUuid)
+
         // Find which specific paragraph changed
         const changedParagraph = findChangedParagraph(stableContent, currentContent)
         
         if (changedParagraph) {
           try {
             // Update paragraph metadata
-            await updateParagraphMetadata(editor, changedParagraph)
+            //await updateParagraphMetadata(editor, changedParagraph)
 
             // Track the edit in thought tracking system
             await tracker.trackEdit({
@@ -125,7 +129,7 @@ export async function setupThoughtTracking(
           }
           
           // Only generate new ID if paragraph doesn't have one
-          if (!existingMetadata?.id) {
+          if (!existingMetadata?.id || existingMetadata.id.startsWith('para-')) {
             const randomHex = Math.random().toString(16).substring(2, 10) // 8 char hex
             const timestamp = Date.now() // raw timestamp 
             const paragraphId = `${pageUuid}-para-${timestamp}-${randomHex}`
