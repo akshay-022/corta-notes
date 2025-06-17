@@ -3,13 +3,84 @@ import { Node as ProseMirrorNode } from '@tiptap/pm/model'
 
 export interface ParagraphMetadata {
   id?: string
-  timestamp?: string
-  author?: string
-  tags?: string[]
-  status?: 'draft' | 'review' | 'final'
-  priority?: 'low' | 'medium' | 'high'
-  category?: string
+  lastUpdated?: string
+  organizationStatus?: 'yes' | 'no'
+  whereOrganized?: Array<{
+    filePath: string
+    paragraphId: string
+    summary_stored?: string
+  }>
+  isOrganized?: boolean
   [key: string]: any // Allow custom metadata fields
+}
+
+/**
+ * Convert paragraph number (0-based index) to editor position
+ * Uses the EXACT same method as thought tracking - splits text by \n to get line numbers
+ */
+export function convertParagraphNumberToPosition(editor: Editor, paragraphNumber: number): number {
+  if (!editor) return 0
+
+  // Use the same method as your friend - get text and split by \n
+  const fullText = editor.getJSON().content?.map(node => 
+    node.content?.map(textNode => textNode.text || '').join('') || ''
+  ).join('\n') || ''
+  const lines = fullText.split('\n')
+  
+  if (paragraphNumber >= lines.length) return 0
+  
+  const targetLineText = lines[paragraphNumber].trim()
+  if (!targetLineText) return 0
+
+  // Now find this line text in the actual ProseMirror document
+  let targetPosition = 0
+
+  editor.state.doc.descendants((node, pos) => {
+    if (node.isText && node.text) {
+      // Check if this text node contains our target line
+      if (node.text.trim() === targetLineText) {
+        targetPosition = pos
+        return false // Stop traversal
+      }
+    }
+  })
+
+  return targetPosition
+}
+
+/**
+ * Convert editor position to paragraph number (0-based index)  
+ * Uses the EXACT same method as thought tracking - splits text by \n to get line numbers
+ */
+export function convertPositionToParagraphNumber(editor: Editor, position: number): number {
+  if (!editor) return 0
+
+  try {
+    // Use the same method as your friend - get text and split by \n
+    const fullText = editor.getText()
+    const lines = fullText.split('\n')
+    
+    // Get the text at the given position
+    const resolvedPos = editor.state.doc.resolve(position)
+    const nodeAtPosition = resolvedPos.nodeAfter || resolvedPos.nodeBefore
+    
+    if (!nodeAtPosition || !nodeAtPosition.isText) return 0
+    
+    const textAtPosition = nodeAtPosition.text?.trim()
+    if (!textAtPosition) return 0
+
+    // Find which line number this text corresponds to
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].trim() === textAtPosition) {
+        return i
+      }
+    }
+
+    return 0
+  } catch (error) {
+    console.error('Error converting position to paragraph number:', error)
+    return 0
+  }
 }
 
 /**
@@ -57,20 +128,26 @@ export function setParagraphMetadata(
     const resolvedPos = editor.state.doc.resolve(position)
     const node = resolvedPos.node()
     
-    if (node.type.name === 'paragraph') {
-      const currentMetadata = node.attrs.metadata || {}
-      const newMetadata = { ...currentMetadata, ...metadata }
-      
-      editor.chain()
-        .focus()
-        .setNodeSelection(resolvedPos.pos - resolvedPos.parentOffset)
-        .updateAttributes('paragraph', { metadata: newMetadata })
-        .run()
-      
-      return true
+    const currentMetadata = node.attrs.metadata || {}
+    const newMetadata = { 
+    ...currentMetadata, 
+    ...metadata,
+    lastUpdated: new Date().toISOString() // Always update timestamp
     }
     
-    return false
+    // Preserve existing ID if it exists
+    if (currentMetadata.id) {
+      newMetadata.id = currentMetadata.id
+    }
+    
+    editor.chain()
+    .focus()
+    .setNodeSelection(resolvedPos.pos - resolvedPos.parentOffset)
+    .updateAttributes('paragraph', { metadata: newMetadata })
+    .run()
+      
+    return true
+    
   } catch (error) {
     console.error('Error setting paragraph metadata:', error)
     return false
@@ -140,36 +217,29 @@ export function removeCurrentParagraphMetadata(editor: Editor): boolean {
 }
 
 /**
- * Find all paragraphs with specific metadata criteria
+ * Mark current paragraph as organized
  */
-export function findParagraphsWithMetadata(
+export function markCurrentParagraphAsOrganized(
   editor: Editor,
-  criteria: Partial<ParagraphMetadata>
-): Array<{ position: number; node: ProseMirrorNode; metadata: ParagraphMetadata }> {
-  if (!editor) return []
-
-  const results: Array<{ position: number; node: ProseMirrorNode; metadata: ParagraphMetadata }> = []
+  filePath: string,
+  paragraphId: string,
+  summaryStored?: string
+): boolean {
+  const currentMetadata = getCurrentParagraphMetadata(editor) || {}
+  const whereOrganized = currentMetadata.whereOrganized || []
   
-  editor.state.doc.descendants((node, pos) => {
-    if (node.type.name === 'paragraph' && node.attrs.metadata) {
-      const metadata = node.attrs.metadata as ParagraphMetadata
-      
-      // Check if metadata matches criteria
-      const matches = Object.entries(criteria).every(([key, value]) => {
-        if (Array.isArray(value) && Array.isArray(metadata[key])) {
-          // For arrays, check if they have common elements
-          return value.some(v => metadata[key].includes(v))
-        }
-        return metadata[key] === value
-      })
-      
-      if (matches) {
-        results.push({ position: pos, node, metadata })
-      }
-    }
+  // Add new organization location
+  whereOrganized.push({
+    filePath,
+    paragraphId,
+    summary_stored: summaryStored
   })
   
-  return results
+  return updateCurrentParagraphMetadata(editor, {
+    organizationStatus: 'yes',
+    isOrganized: true,
+    whereOrganized
+  })
 }
 
 /**
@@ -198,53 +268,31 @@ export function getAllParagraphsMetadata(editor: Editor): Array<{
 }
 
 /**
- * Add a tag to the current paragraph
+ * Get all organized paragraphs
  */
-export function addTagToCurrentParagraph(editor: Editor, tag: string): boolean {
-  const currentMetadata = getCurrentParagraphMetadata(editor) || {}
-  const currentTags = currentMetadata.tags || []
-  
-  if (!currentTags.includes(tag)) {
-    const newTags = [...currentTags, tag]
-    return updateCurrentParagraphMetadata(editor, { tags: newTags })
-  }
-  
-  return false // Tag already exists
+export function getAllOrganizedParagraphs(editor: Editor): Array<{
+  position: number;
+  content: string;
+  metadata: ParagraphMetadata;
+}> {
+  const allParagraphs = getAllParagraphsMetadata(editor)
+  return allParagraphs.filter(p => p.metadata?.isOrganized === true) as Array<{
+    position: number;
+    content: string;
+    metadata: ParagraphMetadata;
+  }>
 }
 
 /**
- * Remove a tag from the current paragraph
+ * Get all unorganized paragraphs
  */
-export function removeTagFromCurrentParagraph(editor: Editor, tag: string): boolean {
-  const currentMetadata = getCurrentParagraphMetadata(editor) || {}
-  const currentTags = currentMetadata.tags || []
-  
-  if (currentTags.includes(tag)) {
-    const newTags = currentTags.filter(t => t !== tag)
-    return updateCurrentParagraphMetadata(editor, { tags: newTags })
-  }
-  
-  return false // Tag doesn't exist
-}
-
-/**
- * Set the status of the current paragraph
- */
-export function setCurrentParagraphStatus(
-  editor: Editor, 
-  status: 'draft' | 'review' | 'final'
-): boolean {
-  return updateCurrentParagraphMetadata(editor, { status })
-}
-
-/**
- * Set the priority of the current paragraph
- */
-export function setCurrentParagraphPriority(
-  editor: Editor, 
-  priority: 'low' | 'medium' | 'high'
-): boolean {
-  return updateCurrentParagraphMetadata(editor, { priority })
+export function getAllUnorganizedParagraphs(editor: Editor): Array<{
+  position: number;
+  content: string;
+  metadata: ParagraphMetadata | null;
+}> {
+  const allParagraphs = getAllParagraphsMetadata(editor)
+  return allParagraphs.filter(p => !p.metadata?.isOrganized)
 }
 
 /**

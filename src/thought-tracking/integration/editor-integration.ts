@@ -2,6 +2,13 @@ import { Editor } from '@tiptap/react'
 import { ThoughtTracker, SupabaseStorageManager, EVENTS } from '../index'
 import { createClient } from '@/lib/supabase/supabase-client'
 import { Page } from '@/lib/supabase/types'
+import { 
+  convertParagraphNumberToPosition, 
+  setParagraphMetadata, 
+  getParagraphMetadata,
+  ensureCurrentParagraphId,
+  ParagraphMetadata 
+} from '@/components/editor/paragraph-metadata'
 
 // Store for editor instances and their trackers
 const editorTrackers = new Map<string, ThoughtTracker>()
@@ -65,6 +72,10 @@ export async function setupThoughtTracking(
         
         if (changedParagraph) {
           try {
+            // Update paragraph metadata
+            await updateParagraphMetadata(editor, changedParagraph)
+
+            // Track the edit in thought tracking system
             await tracker.trackEdit({
               paragraphId: `${pageUuid}-para-${changedParagraph.index}`,
               pageId: pageUuid,
@@ -93,6 +104,49 @@ export async function setupThoughtTracking(
         lastUpdateTime = Date.now()
       } finally {
         isTracking = false
+      }
+    }
+
+    // Helper function to update paragraph metadata
+    const updateParagraphMetadata = async (editor: Editor, changedParagraph: any) => {
+      try {
+        // Get the position of the changed paragraph
+        const position = convertParagraphNumberToPosition(editor, changedParagraph.index)
+        
+        if (position > 0) {
+          // Check if paragraph already has an ID
+          const existingMetadata = getParagraphMetadata(editor, position)
+          
+          // Create metadata update
+          const metadata: Partial<ParagraphMetadata> = {
+            lastUpdated: new Date().toISOString(),
+            organizationStatus: 'no', // Reset to unorganized when content changes
+            isOrganized: false
+          }
+          
+          // Only generate new ID if paragraph doesn't have one
+          if (!existingMetadata?.id) {
+            const randomHex = Math.random().toString(16).substring(2, 10) // 8 char hex
+            const timestamp = Date.now() // raw timestamp 
+            const paragraphId = `${pageUuid}-para-${timestamp}-${randomHex}`
+            metadata.id = paragraphId
+          }
+
+          // Update the paragraph metadata
+          const success = setParagraphMetadata(editor, position, metadata)
+          
+          if (success) {
+            console.log(`📝 Updated metadata for paragraph ${changedParagraph.index}:`, {
+              paragraphId: existingMetadata?.id || metadata.id || 'existing-id',
+              editType: changedParagraph.editType,
+              position
+            })
+          } else {
+            console.warn(`📝 Failed to update metadata for paragraph ${changedParagraph.index}`)
+          }
+        }
+      } catch (error) {
+        console.error('Error updating paragraph metadata:', error)
       }
     }
 

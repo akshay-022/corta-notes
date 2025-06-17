@@ -1,5 +1,6 @@
 import { mergeAttributes, Node } from '@tiptap/core'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { ParagraphMetadata } from '@/components/editor/paragraph-metadata'
 
 export interface ThoughtParagraphOptions {
   HTMLAttributes: Record<string, any>
@@ -11,7 +12,7 @@ declare module '@tiptap/core' {
       /**
        * Set a paragraph node with thought tracking metadata
        */
-      setThoughtParagraph: (attributes?: { id?: string, metadata?: any }) => ReturnType
+      setThoughtParagraph: (attributes?: { id?: string, metadata?: ParagraphMetadata }) => ReturnType
     }
   }
 }
@@ -64,7 +65,12 @@ export const ThoughtParagraph = Node.create<ThoughtParagraphOptions>({
         default: null,
         parseHTML: element => {
           const metadata = element.getAttribute('data-thought-metadata')
-          return metadata ? JSON.parse(metadata) : null
+          try {
+            return metadata ? JSON.parse(metadata) as ParagraphMetadata : null
+          } catch (error) {
+            console.warn('Failed to parse paragraph metadata:', error)
+            return null
+          }
         },
         renderHTML: attributes => {
           if (!attributes.metadata) {
@@ -104,7 +110,17 @@ export const ThoughtParagraph = Node.create<ThoughtParagraphOptions>({
           newState.doc.descendants((node, pos) => {
             if (node.type.name === 'paragraph' && !node.attrs.id) {
               const id = `para-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-              tr.setNodeMarkup(pos, undefined, { ...node.attrs, id })
+              const metadata: ParagraphMetadata = {
+                id,
+                lastUpdated: new Date().toISOString(),
+                organizationStatus: 'no',
+                isOrganized: false
+              }
+              tr.setNodeMarkup(pos, undefined, { 
+                ...node.attrs, 
+                id,
+                metadata 
+              })
               modified = true
             }
           })

@@ -46,7 +46,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
         },
       }),
       Placeholder.configure({
-        placeholder: "Type '/' for commands",
+        placeholder: "Start thinking!",
       }),
       Typography,
     ],
