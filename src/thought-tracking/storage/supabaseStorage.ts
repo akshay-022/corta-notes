@@ -34,35 +34,75 @@ export class SupabaseStorageManager implements StorageManager {
 
   async saveBrainState(state: BrainState): Promise<void> {
     try {
-      // Store brain state in localStorage for now, as it's frequently updated
-      // You could also create a dedicated table for this if needed
+      // Save to both localStorage (for fast access) and database (for persistence)
+      
+      // Save to localStorage for fast access during active session
       if (typeof window !== 'undefined') {
         localStorage.setItem(
           `${this.config.brainStateKey}_${this.userId}`, 
           JSON.stringify(state)
         );
       }
+
+      // Save to database for persistence across sessions
+      if (this.userId) {
+        const { error } = await this.supabase
+          .from('profiles')
+          .update({ 
+            brain_state: state,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', this.userId);
+
+        if (error) {
+          console.warn('Failed to save brain state to database:', error.message);
+          // Don't throw here - localStorage save succeeded, database is backup
+        }
+      } else {
+        console.warn('No userId available - brain state only saved to localStorage');
+      }
     } catch (error) {
       console.error('Error saving brain state:', error);
-      throw new Error('Failed to save brain state to Supabase');
+      throw new Error('Failed to save brain state');
     }
   }
 
   async loadBrainState(): Promise<BrainState | null> {
     try {
-      if (typeof window === 'undefined') return null;
-      
-      const stored = localStorage.getItem(`${this.config.brainStateKey}_${this.userId}`);
-      if (!stored) return null;
-      
-      const state = JSON.parse(stored) as BrainState;
-      
-      // Ensure config exists and has default values
-      if (!state.config) {
-        state.config = this.getDefaultConfig();
+      // Always load from Supabase database
+      if (this.userId) {
+        const { data, error } = await this.supabase
+          .from('profiles')
+          .select('brain_state')
+          .eq('id', this.userId)
+          .single();
+
+        if (error) {
+          console.warn('Failed to load brain state from database:', error.message);
+          return null;
+        }
+
+        if (data?.brain_state) {
+          const state = data.brain_state as BrainState;
+          
+          // Ensure config exists and has default values
+          if (!state.config) {
+            state.config = this.getDefaultConfig();
+          }
+
+          // Update localStorage with the latest data from database
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(
+              `${this.config.brainStateKey}_${this.userId}`, 
+              JSON.stringify(state)
+            );
+          }
+          
+          return state;
+        }
       }
       
-      return state;
+      return null;
     } catch (error) {
       console.error('Error loading brain state:', error);
       return null;
@@ -353,17 +393,16 @@ export class SupabaseStorageManager implements StorageManager {
   async backupBrainStateToDatabase(): Promise<void> {
     try {
       const brainState = await this.loadBrainState();
-      if (!brainState) return;
+      if (!brainState || !this.userId) return;
 
-      // Store as a special metadata entry or dedicated table
+      // Force save to database (this is now the primary storage method)
       const { error } = await this.supabase
-        .from('user_metadata') // You might want to create this table
-        .upsert({
-          user_id: this.userId,
-          key: this.config.brainStateKey,
-          value: brainState,
+        .from('profiles')
+        .update({ 
+          brain_state: brainState,
           updated_at: new Date().toISOString()
-        });
+        })
+        .eq('id', this.userId);
 
       if (error) {
         console.warn('Failed to backup brain state to database:', error.message);
