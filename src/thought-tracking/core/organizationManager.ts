@@ -89,7 +89,17 @@ export class OrganizationManager {
       throw new Error(`Organization API failed: ${response.statusText}`);
     }
 
-    return await response.json();
+    const result = await response.json();
+    
+    // Post notification message to window if organization was successful
+    if (result.notification && typeof window !== 'undefined') {
+      window.postMessage({
+        type: 'ORGANIZATION_NOTIFICATION',
+        data: result.notification
+      }, '*');
+    }
+
+    return result;
   }
 
   private getOrganizationInstructions(): string {
