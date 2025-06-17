@@ -1,6 +1,6 @@
 'use client'
 
-import { useEditor, EditorContent } from '@tiptap/react'
+import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import HorizontalRule from '@tiptap/extension-horizontal-rule'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -8,7 +8,7 @@ import Typography from '@tiptap/extension-typography'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Page, PageUpdate } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/supabase-client'
-import { Calendar, Minus } from 'lucide-react'
+import { Calendar, Minus, Info, Edit2, Save, X } from 'lucide-react'
 import ChatPanel, { ChatPanelHandle } from '../right-sidebar/ChatPanel'
 import { setupThoughtTracking } from '@/thought-tracking/integration/editor-integration'
 import { ThoughtParagraph } from '@/thought-tracking/extensions/paragraph-extension'
@@ -28,6 +28,9 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   const [isUserEditingTitle, setIsUserEditingTitle] = useState(false) // Track title editing specifically
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [selections, setSelections] = useState<Array<{id: string, text: string, startLine: number, endLine: number}>>([])
+  const [selectedParagraphMetadata, setSelectedParagraphMetadata] = useState<{id: string, metadata: any, pos?: number} | null>(null)
+  const [isEditingMetadata, setIsEditingMetadata] = useState(false)
+  const [metadataEditValue, setMetadataEditValue] = useState('')
   
   const titleInputRef = useRef<HTMLInputElement>(null)
   const currentPageRef = useRef(page.uuid)
@@ -204,6 +207,92 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       // Don't clear existing selections if current selection is empty
     }
   }, [editor])
+
+  // Function to get paragraph metadata from current selection
+  const getSelectedParagraphMetadata = useCallback(() => {
+    if (!editor) return null
+
+    const { from, to } = editor.state.selection
+    
+    // Find the paragraph node that contains the selection
+    let paragraphNode: any = null
+    let paragraphPos = -1
+
+    editor.state.doc.nodesBetween(from, to, (node, pos) => {
+      if (node.type.name === 'paragraph' && !paragraphNode) {
+        paragraphNode = node
+        paragraphPos = pos
+        return false // Stop traversal
+      }
+    })
+
+    if (paragraphNode && paragraphNode.attrs) {
+      return {
+        id: paragraphNode.attrs.id,
+        metadata: paragraphNode.attrs.metadata,
+        pos: paragraphPos
+      }
+    }
+
+    return null
+  }, [editor])
+
+  // Function to update paragraph metadata
+  const updateParagraphMetadata = useCallback((newMetadata: any) => {
+    if (!editor || selectedParagraphMetadata?.pos === undefined) return
+
+    try {
+      const parsedMetadata = typeof newMetadata === 'string' ? JSON.parse(newMetadata) : newMetadata
+      
+      const { state } = editor
+      const tr = state.tr
+      const node = state.doc.nodeAt(selectedParagraphMetadata.pos)
+      
+      if (node) {
+        tr.setNodeMarkup(selectedParagraphMetadata.pos, undefined, {
+          ...node.attrs,
+          metadata: parsedMetadata
+        })
+        
+        editor.view.dispatch(tr)
+      }
+
+      // Update local state
+      setSelectedParagraphMetadata(prev => prev ? { ...prev, metadata: parsedMetadata } : null)
+      setIsEditingMetadata(false)
+      setMetadataEditValue('')
+    } catch (error) {
+      console.error('Error updating metadata:', error)
+      // Could add toast notification here
+    }
+  }, [editor, selectedParagraphMetadata])
+
+  // Handle metadata edit start
+  const startEditingMetadata = useCallback(() => {
+    if (selectedParagraphMetadata?.metadata) {
+      setMetadataEditValue(JSON.stringify(selectedParagraphMetadata.metadata, null, 2))
+    } else {
+      setMetadataEditValue('{}')
+    }
+    setIsEditingMetadata(true)
+  }, [selectedParagraphMetadata])
+
+  // Update selected paragraph metadata when selection changes
+  useEffect(() => {
+    if (!editor) return
+
+    const updateSelection = () => {
+      const metadata = getSelectedParagraphMetadata()
+      console.log('Selection updated, metadata:', metadata)
+      setSelectedParagraphMetadata(metadata)
+    }
+
+    editor.on('selectionUpdate', updateSelection)
+    
+    return () => {
+      editor.off('selectionUpdate', updateSelection)
+    }
+  }, [editor, getSelectedParagraphMetadata])
 
   // Command+K keyboard shortcut to open chat
   useEffect(() => {
@@ -402,6 +491,34 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
           />
         </div>
       </div>
+
+      {/* Bubble Menu for Paragraph Metadata */}
+      {editor && (
+        <BubbleMenu 
+          editor={editor} 
+          tippyOptions={{ duration: 100 }}
+          shouldShow={({ state }) => {
+            const { from, to } = state.selection
+            const hasSelection = from !== to
+            return hasSelection
+          }}
+        >
+          <div className="bg-[#2a2a2a] border border-gray-600 rounded-lg p-3 shadow-lg min-w-[250px] max-w-[400px] z-50">
+            <div className="text-xs text-gray-300">
+              {selectedParagraphMetadata && (
+                <div className="mt-2 p-2 bg-[#1a1a1a] rounded">
+                  <div className="text-gray-400">ID: <span className="text-gray-200">{selectedParagraphMetadata.id}</span></div>
+                  {selectedParagraphMetadata.metadata && (
+                    <div className="mt-1 text-gray-400">
+                      Metadata: <span className="text-green-400">✓</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </BubbleMenu>
+      )}
 
       {/* Chat Panel */}
       <ChatPanel
