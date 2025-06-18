@@ -36,9 +36,9 @@ export class SupabaseStorageManager implements StorageManager {
       // Save to both localStorage (for fast access) and database (for persistence)
       
       // Save to localStorage for fast access during active session
-      if (typeof window !== 'undefined') {
+      if (typeof window !== 'undefined' && this.userId) {
         localStorage.setItem(
-          `${this.config.brainStateKey}_${this.userId}`, 
+          `${this.config.brainStateKey}:${this.userId}`, 
           JSON.stringify(state)
         );
       }
@@ -90,9 +90,9 @@ export class SupabaseStorageManager implements StorageManager {
           }
 
           // Update localStorage with the latest data from database
-          if (typeof window !== 'undefined') {
+          if (typeof window !== 'undefined' && this.userId) {
             localStorage.setItem(
-              `${this.config.brainStateKey}_${this.userId}`, 
+              `${this.config.brainStateKey}:${this.userId}`, 
               JSON.stringify(state)
             );
           }

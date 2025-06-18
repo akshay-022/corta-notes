@@ -29,19 +29,23 @@ export const createSupabaseThoughtTracker = async () => {
   const tracker = new ThoughtTracker(
     storageManager,
     '/api/summarize', // Your summary API endpoint
-    '/api/organize-note'   // Your organization API endpoint
+    '/api/organize-note',   // Your organization API endpoint
+    userId
   );
 
   await tracker.initialize();
   return tracker;
 };
 
-// 4. Example: Track edits from a TipTap editor
+// 4. Example: Track edits from a TipTap editor with metadata
+// NOTE: This is a simplified example. In practice, use the editor-integration.ts
+// which handles paragraph metadata automatically.
 export const trackTipTapEdit = async (
   tracker: ThoughtTracker,
   pageUuid: string,
   newContent: any,
-  previousContent: any
+  previousContent: any,
+  getParagraphMetadata?: (content: string) => any // Function to get metadata for paragraph
 ) => {
   // Extract paragraphs from both versions
   const newParagraphs = extractParagraphsFromTipTap(newContent);
@@ -60,20 +64,24 @@ export const trackTipTapEdit = async (
       
       if (previousParagraph === '' && newParagraph !== '') {
         editType = 'create';
-        content = newParagraph; // Just this paragraph
+        content = newParagraph;
       } else if (newParagraph === '') {
         editType = 'delete';
-        content = ''; // Empty string for delete
+        content = '';
       } else {
         editType = 'update';
-        content = newParagraph; // Just this paragraph
+        content = newParagraph;
       }
 
+      // Get paragraph metadata if available
+      const paragraphMetadata = getParagraphMetadata ? getParagraphMetadata(content) : null;
+      
       await tracker.trackEdit({
-        paragraphId: `${pageUuid}-para-${i}`, // Unique paragraph ID
+        paragraphId: paragraphMetadata?.id || `${pageUuid}-fallback-${Date.now()}-${i}`,
         pageId: pageUuid,
-        content, // Only the individual paragraph content
+        content,
         editType,
+        paragraphMetadata,
         metadata: {
           wordCount: content.split(/\s+/).filter(word => word.length > 0).length,
           charCount: content.length

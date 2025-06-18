@@ -3,6 +3,7 @@ import {
   BrainState, 
   BrainStateConfig, 
   OrganizedPage,
+  OrganizationResult,
   StorageManager 
 } from '../types';
 import { BrainStateManager } from './brainState';
@@ -25,14 +26,15 @@ export class ThoughtTracker {
   constructor(
     customStorageManager?: StorageManager,
     summaryApiEndpoint?: string,
-    organizationApiEndpoint?: string
+    organizationApiEndpoint?: string,
+    userId?: string
   ) {
     // Initialize storage manager
-    this.storageManager = customStorageManager || new LocalStorageManager();
+    this.storageManager = customStorageManager || new LocalStorageManager(userId);
     
     // Initialize core components
     const summaryGenerator = new SummaryGenerator(summaryApiEndpoint);
-    this.brainStateManager = new BrainStateManager(this.storageManager, summaryGenerator);
+    this.brainStateManager = new BrainStateManager(summaryGenerator, new LocalStorageManager(userId));
     this.organizationManager = new OrganizationManager(this.storageManager, organizationApiEndpoint);
     
     // Setup debounced save
@@ -134,16 +136,29 @@ export class ThoughtTracker {
       // Mark the organized edits as processed in brain state
       await this.brainStateManager.markEditsAsOrganized(result.processedEditIds);
       
+      // Wait a bit more to ensure all Supabase operations are complete
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
       console.log('Organization completed:', {
         updatedPages: result.updatedPages.length,
         newPages: result.newPages.length,
         summary: result.summary
       });
       
-      // Emit completion event
+      // Emit completion event with detailed information for UI updates
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent(EVENTS.ORGANIZATION_COMPLETE, {
-          detail: result
+          detail: {
+            ...result,
+            // Include page data for client-side updates
+            allOrganizedPages: await this.storageManager.loadOrganizedPages(),
+            // Provide summary for notifications
+            notification: {
+              message: this.createNotificationMessage(result),
+              updatedPageIds: result.updatedPages.map(p => p.uuid),
+              newPageIds: result.newPages.map(p => p.uuid)
+            }
+          }
         }));
       }
       
@@ -158,6 +173,21 @@ export class ThoughtTracker {
       }
     } finally {
       this.organizationPending = false;
+    }
+  }
+
+  private createNotificationMessage(result: OrganizationResult): string {
+    const updatedCount = result.updatedPages.length;
+    const newCount = result.newPages.length;
+    
+    if (updatedCount > 0 && newCount > 0) {
+      return `✅ Organization complete: ${updatedCount} notes updated, ${newCount} new notes created`;
+    } else if (updatedCount > 0) {
+      return `✅ Organization complete: ${updatedCount} notes updated`;
+    } else if (newCount > 0) {
+      return `✅ Organization complete: ${newCount} new notes created`;
+    } else {
+      return '✅ Organization complete: No changes made';
     }
   }
 
@@ -249,18 +279,14 @@ export class ThoughtTracker {
     await this.brainStateManager.updateConfig(newConfig);
   }
 
-  async clearAllData(): Promise<void> {
-    if (!this.initialized) {
-      await this.initialize();
+  setUserId(userId: string): void {
+    if (this.storageManager.setUserId) {
+      this.storageManager.setUserId(userId);
     }
-    
-    await this.brainStateManager.clearBrainState();
-    
-    if (this.storageManager instanceof LocalStorageManager) {
-      await this.storageManager.clearAllData();
-    }
-    
-    console.log('All thought tracking data cleared');
+  }
+
+  getUserId(): string | undefined {
+    return this.storageManager.getUserId?.();
   }
 
   async exportData(): Promise<{

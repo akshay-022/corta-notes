@@ -7,9 +7,31 @@ import {
 import { STORAGE_KEYS, BRAIN_STATE_DEFAULTS } from '../constants';
 
 export class LocalStorageManager implements StorageManager {
-  private readonly BRAIN_STATE_KEY = STORAGE_KEYS.BRAIN_STATE;
-  private readonly ORGANIZED_PAGES_KEY = STORAGE_KEYS.ORGANIZED_PAGES;
-  private readonly CONFIG_KEY = STORAGE_KEYS.CONFIG;
+  private userId?: string;
+
+  constructor(userId?: string) {
+    this.userId = userId;
+  }
+
+  private getBrainStateKey(): string {
+    return this.userId ? `${STORAGE_KEYS.BRAIN_STATE}:${this.userId}` : STORAGE_KEYS.BRAIN_STATE;
+  }
+
+  private getOrganizedPagesKey(): string {
+    return this.userId ? `${STORAGE_KEYS.ORGANIZED_PAGES}:${this.userId}` : STORAGE_KEYS.ORGANIZED_PAGES;
+  }
+
+  private getConfigKey(): string {
+    return this.userId ? `${STORAGE_KEYS.CONFIG}:${this.userId}` : STORAGE_KEYS.CONFIG;
+  }
+
+  setUserId(userId: string): void {
+    this.userId = userId;
+  }
+
+  getUserId(): string | undefined {
+    return this.userId;
+  }
 
   private getDefaultConfig(): BrainStateConfig {
     return BRAIN_STATE_DEFAULTS;
@@ -17,7 +39,7 @@ export class LocalStorageManager implements StorageManager {
 
   async saveBrainState(state: BrainState): Promise<void> {
     try {
-      localStorage.setItem(this.BRAIN_STATE_KEY, JSON.stringify(state));
+      localStorage.setItem(this.getBrainStateKey(), JSON.stringify(state));
     } catch (error) {
       console.error('Error saving brain state:', error);
       throw new Error('Failed to save brain state to localStorage');
@@ -26,7 +48,7 @@ export class LocalStorageManager implements StorageManager {
 
   async loadBrainState(): Promise<BrainState | null> {
     try {
-      const stored = localStorage.getItem(this.BRAIN_STATE_KEY);
+      const stored = localStorage.getItem(this.getBrainStateKey());
       if (!stored) return null;
       
       const state = JSON.parse(stored) as BrainState;
@@ -45,7 +67,7 @@ export class LocalStorageManager implements StorageManager {
 
   async saveOrganizedPages(pages: OrganizedPage[]): Promise<void> {
     try {
-      localStorage.setItem(this.ORGANIZED_PAGES_KEY, JSON.stringify(pages));
+      localStorage.setItem(this.getOrganizedPagesKey(), JSON.stringify(pages));
     } catch (error) {
       console.error('Error saving organized pages:', error);
       throw new Error('Failed to save organized pages to localStorage');
@@ -54,7 +76,7 @@ export class LocalStorageManager implements StorageManager {
 
   async loadOrganizedPages(): Promise<OrganizedPage[]> {
     try {
-      const stored = localStorage.getItem(this.ORGANIZED_PAGES_KEY);
+      const stored = localStorage.getItem(this.getOrganizedPagesKey());
       if (!stored) return [];
       
       return JSON.parse(stored) as OrganizedPage[];
@@ -76,7 +98,7 @@ export class LocalStorageManager implements StorageManager {
 
   async saveConfig(config: BrainStateConfig): Promise<void> {
     try {
-      localStorage.setItem(this.CONFIG_KEY, JSON.stringify(config));
+      localStorage.setItem(this.getConfigKey(), JSON.stringify(config));
     } catch (error) {
       console.error('Error saving config:', error);
       throw new Error('Failed to save config to localStorage');
@@ -85,7 +107,7 @@ export class LocalStorageManager implements StorageManager {
 
   async loadConfig(): Promise<BrainStateConfig> {
     try {
-      const stored = localStorage.getItem(this.CONFIG_KEY);
+      const stored = localStorage.getItem(this.getConfigKey());
       if (!stored) return this.getDefaultConfig();
       
       return { ...this.getDefaultConfig(), ...JSON.parse(stored) };
@@ -97,18 +119,12 @@ export class LocalStorageManager implements StorageManager {
 
   // Utility methods for storage management
   async getStorageSize(): Promise<{ brainState: number; pages: number }> {
-    const brainStateSize = localStorage.getItem(this.BRAIN_STATE_KEY)?.length || 0;
-    const pagesSize = localStorage.getItem(this.ORGANIZED_PAGES_KEY)?.length || 0;
+    const brainStateSize = localStorage.getItem(this.getBrainStateKey())?.length || 0;
+    const pagesSize = localStorage.getItem(this.getOrganizedPagesKey())?.length || 0;
     
     return {
       brainState: brainStateSize,
       pages: pagesSize,
     };
-  }
-
-  async clearAllData(): Promise<void> {
-    localStorage.removeItem(this.BRAIN_STATE_KEY);
-    localStorage.removeItem(this.ORGANIZED_PAGES_KEY);
-    localStorage.removeItem(this.CONFIG_KEY);
   }
 } 

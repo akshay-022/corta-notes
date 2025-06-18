@@ -31,7 +31,6 @@ interface ThoughtTrackerHookReturn {
   // Data management
   exportData: () => Promise<any>;
   importData: (data: any) => Promise<void>;
-  clearAllData: () => Promise<void>;
   
   // State and stats
   stats: any;
@@ -46,7 +45,8 @@ interface ThoughtTrackerHookReturn {
 
 export function useThoughtTracker(
   summaryApiEndpoint?: string,
-  organizationApiEndpoint?: string
+  organizationApiEndpoint?: string,
+  userId?: string
 ): ThoughtTrackerHookReturn {
   const trackerRef = useRef<ThoughtTracker | null>(null);
   
@@ -74,7 +74,8 @@ export function useThoughtTracker(
         trackerRef.current = new ThoughtTracker(
           undefined, // Use default storage manager
           summaryApiEndpoint,
-          organizationApiEndpoint
+          organizationApiEndpoint,
+          userId
         );
         
         await trackerRef.current.initialize();
@@ -227,12 +228,6 @@ export function useThoughtTracker(
     await refreshData();
   }, [refreshData]);
 
-  const clearAllData = useCallback(async () => {
-    if (!trackerRef.current) return;
-    await trackerRef.current.clearAllData();
-    await refreshData();
-  }, [refreshData]);
-
   // Event handlers
   const onOrganizationComplete = useCallback((callback: (result: any) => void) => {
     organizationCompleteCallbacks.current.add(callback);
@@ -271,7 +266,6 @@ export function useThoughtTracker(
     // Data management
     exportData,
     importData,
-    clearAllData,
     
     // State and stats
     stats,

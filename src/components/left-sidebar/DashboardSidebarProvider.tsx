@@ -156,6 +156,141 @@ export default function DashboardSidebarProvider({ children }: { children: React
     return () => document.removeEventListener('click', handleClickOutside)
   }, [])
 
+  // Listen for thought-tracking organization completion events
+  useEffect(() => {
+    const handleOrganizationComplete = async (event: Event) => {
+      const customEvent = event as CustomEvent
+      console.log('🧠 Organization completed from thought tracker:', customEvent.detail)
+      
+      // Add a small delay to ensure Supabase operations are complete
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      // Refresh all pages from Supabase to get the latest organized content
+      console.log('🧠 Refreshing pages from database after organization...')
+      console.log('🧠 Pages before refresh:', pages.length, 'pages')
+      
+      await refreshOrganizedNotes()
+      
+      console.log('🧠 ✅ Page refresh completed after organization')
+      
+      // Show notification if provided
+      if (customEvent.detail.notification?.message) {
+        // Use window.postMessage to trigger notification in Sidebar
+        window.postMessage({
+          type: 'ORGANIZATION_NOTIFICATION',
+          data: { message: customEvent.detail.notification.message }
+        }, '*')
+      }
+      
+      // Highlight any new or updated folders based on the result
+      if (customEvent.detail.newPages?.length > 0 || customEvent.detail.updatedPages?.length > 0) {
+        const foldersToHighlight = new Set<string>()
+        
+        // Get folder names from new and updated pages
+        const allChangedPages = [...(customEvent.detail.newPages || []), ...(customEvent.detail.updatedPages || [])]
+        allChangedPages.forEach((page: any) => {
+          if (page.parent_uuid) {
+            // Find parent folder and highlight it
+            const parentPage = pages.find(p => p.uuid === page.parent_uuid)
+            if (parentPage) {
+              foldersToHighlight.add(parentPage.title)
+            }
+          }
+        })
+        
+        if (foldersToHighlight.size > 0) {
+          setHighlightedFolders(foldersToHighlight)
+          console.log('🧠 ✅ Highlighting folders:', Array.from(foldersToHighlight))
+        }
+      }
+    }
+
+    const handleOrganizationError = (event: Event) => {
+      const customEvent = event as CustomEvent
+      console.error('🧠 Organization error from thought tracker:', customEvent.detail)
+      // Could show error notification here
+    }
+
+    // Enhanced cache update handlers for optimized performance
+    const handleCacheUpdate = async (event: MessageEvent) => {
+      if (event.data.type === 'ORGANIZATION_CACHE_UPDATE') {
+        const { updatedPages, newPages, timestamp } = event.data.data
+        console.log('🧠 Received optimized cache update:', { 
+          updatedCount: updatedPages.length, 
+          newCount: newPages.length,
+          timestamp 
+        })
+        
+        // Immediately update the local state with the new data
+        setPages(prevPages => {
+          const updatedPageMap = new Map(updatedPages.map((page: Page) => [page.uuid, page]))
+          const newPageMap = new Map(newPages.map((page: Page) => [page.uuid, page]))
+          
+          // Update existing pages
+          const updatedExistingPages = prevPages.map(page => {
+            if (updatedPageMap.has(page.uuid)) {
+              return updatedPageMap.get(page.uuid)!
+            }
+            return page
+          })
+          
+          // Add new pages
+          const finalPages = [...updatedExistingPages, ...newPages]
+          
+          console.log('🧠 ✅ Immediate cache update applied:', { 
+            totalPages: finalPages.length,
+            newlyAdded: newPages.length
+          })
+          
+          return finalPages
+        })
+        
+        // Update active page if it was modified
+        if (activePage) {
+          const updatedActivePage = updatedPages.find((page: Page) => page.uuid === activePage.uuid)
+          if (updatedActivePage) {
+            setActivePage(updatedActivePage)
+            console.log('🧠 ✅ Active page updated immediately')
+          }
+        }
+        
+        // Show immediate notification
+        window.postMessage({
+          type: 'ORGANIZATION_NOTIFICATION',
+          data: { 
+            message: `✅ Organization complete: ${updatedPages.length} updated, ${newPages.length} created`
+          }
+        }, '*')
+      }
+    }
+
+    const handleRefreshRequired = async (event: MessageEvent) => {
+      if (event.data.type === 'ORGANIZATION_REFRESH_REQUIRED') {
+        const { reason, timestamp } = event.data.data
+        console.log('🧠 Full refresh requested:', { reason, timestamp })
+        
+        // Perform a full refresh to ensure data consistency
+        await refreshOrganizedNotes()
+        console.log('🧠 ✅ Full refresh completed for consistency')
+      }
+    }
+
+    // Listen for thought-tracking events
+    window.addEventListener('thought-tracking:organization-complete', handleOrganizationComplete)
+    window.addEventListener('thought-tracking:organization-error', handleOrganizationError)
+    
+    // Listen for optimized cache update events
+    window.addEventListener('message', handleCacheUpdate)
+    window.addEventListener('message', handleRefreshRequired)
+
+    return () => {
+      window.removeEventListener('thought-tracking:organization-complete', handleOrganizationComplete)
+      window.removeEventListener('thought-tracking:organization-error', handleOrganizationError)
+      window.removeEventListener('message', handleCacheUpdate)
+      window.removeEventListener('message', handleRefreshRequired)
+    }
+  }, [pages, activePage]) // Added activePage dependency for immediate updates
+
   const handleManualSync = async () => {
     try {
       const pendingPages = superMemorySyncService.getPendingSyncPages(pages)
@@ -189,12 +324,14 @@ export default function DashboardSidebarProvider({ children }: { children: React
       if (freshPages) {
         // Replace all pages with fresh data from database
         setPages(freshPages)
+        console.log('🔄 Pages state updated with fresh data')
         
         // Update active page if it exists in the fresh data
         if (activePage) {
           const updatedActivePage = freshPages.find(p => p.uuid === activePage.uuid)
           if (updatedActivePage) {
             setActivePage(updatedActivePage)
+            console.log('🔄 Active page updated with fresh data')
           }
         }
       }

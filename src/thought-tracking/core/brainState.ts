@@ -2,29 +2,29 @@ import {
   BrainState, 
   ParagraphEdit, 
   BrainStateConfig, 
-  StorageManager 
 } from '../types';
 import { generateId } from '../utils/helpers';
 import { SummaryGenerator } from './summaryGenerator';
 import { BRAIN_STATE_DEFAULTS, EVENTS } from '../constants';
+import { LocalStorageManager } from '../storage/localStorage';
 
 export class BrainStateManager {
-  private storageManager: StorageManager;
+  private localStorageManager: LocalStorageManager;
   private summaryGenerator: SummaryGenerator;
   private currentState: BrainState | null = null;
   private isOrganizing: boolean = false;
 
-  constructor(storageManager: StorageManager, summaryGenerator: SummaryGenerator) {
-    this.storageManager = storageManager;
+  constructor(summaryGenerator: SummaryGenerator, localStorageManager: LocalStorageManager) {
+    this.localStorageManager = localStorageManager;
     this.summaryGenerator = summaryGenerator;
   }
 
   async initialize(): Promise<void> {
-    this.currentState = await this.storageManager.loadBrainState();
+    this.currentState = await this.localStorageManager.loadBrainState();
     
     if (!this.currentState) {
       this.currentState = this.createDefaultBrainState();
-      await this.storageManager.saveBrainState(this.currentState);
+      await this.localStorageManager.saveBrainState(this.currentState);
     }
   }
 
@@ -42,7 +42,7 @@ export class BrainStateManager {
       await this.initialize();
     }
 
-    // Check for duplicate edits within the last 5 seconds for the same paragraph
+    // Check for duplicate edits using paragraph metadata ID within the last 5 seconds
     const now = Date.now();
     const recentEdits = this.currentState!.edits.filter(
       existingEdit => 
@@ -82,15 +82,17 @@ export class BrainStateManager {
     console.log('🧠 Added edit to brain state:', {
       id: fullEdit.id,
       paragraphId: fullEdit.paragraphId,
+      paragraphMetadataId: fullEdit.paragraphMetadata?.id,
       editType: fullEdit.editType,
       totalEdits: this.currentState!.edits.length,
-      unorganizedEdits: this.currentState!.edits.filter(e => !e.organized).length
+      unorganizedEdits: this.currentState!.edits.filter(e => !e.organized).length,
+      position: fullEdit.metadata?.position
     });
 
     // Check if we need to trigger organization
     await this.checkOrganizationTrigger();
 
-    await this.storageManager.saveBrainState(this.currentState!);
+    await this.localStorageManager.saveBrainState(this.currentState!);
   }
 
   private async checkOrganizationTrigger(): Promise<void> {
@@ -139,7 +141,7 @@ export class BrainStateManager {
     );
 
     this.currentState!.lastUpdated = Date.now();
-    await this.storageManager.saveBrainState(this.currentState!);
+    await this.localStorageManager.saveBrainState(this.currentState!);
   }
 
   async getCurrentState(): Promise<BrainState | null> {
@@ -155,7 +157,7 @@ export class BrainStateManager {
     }
 
     this.currentState!.config = { ...this.currentState!.config, ...newConfig };
-    await this.storageManager.saveBrainState(this.currentState!);
+    await this.localStorageManager.saveBrainState(this.currentState!);
   }
 
   async getEditsByPage(pageId: string): Promise<ParagraphEdit[]> {
@@ -174,6 +176,14 @@ export class BrainStateManager {
     return this.currentState!.edits.filter(edit => edit.paragraphId === paragraphId);
   }
 
+  async getEditsByParagraphMetadataId(metadataId: string): Promise<ParagraphEdit[]> {
+    if (!this.currentState) {
+      await this.initialize();
+    }
+
+    return this.currentState!.edits.filter(edit => edit.paragraphMetadata?.id === metadataId);
+  }
+
   async getRecentEdits(limit: number = 10): Promise<ParagraphEdit[]> {
     if (!this.currentState) {
       await this.initialize();
@@ -190,11 +200,6 @@ export class BrainStateManager {
     }
 
     return this.currentState!.edits.filter(edit => !edit.organized);
-  }
-
-  async clearBrainState(): Promise<void> {
-    this.currentState = this.createDefaultBrainState();
-    await this.storageManager.saveBrainState(this.currentState);
   }
 
   async getStats(): Promise<{
