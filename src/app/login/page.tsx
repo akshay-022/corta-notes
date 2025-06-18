@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/supabase-client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import logger from '@/lib/logger'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -19,23 +20,47 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    logger.info('Starting email login attempt', { email })
 
-    if (error) {
-      setError(error.message)
-    } else {
-      // Redirect directly to last opened page or dashboard
-      const lastOpened = typeof window !== 'undefined' ? localStorage.getItem('lastOpenedPageUuid') : null
-      if (lastOpened) {
-        router.push(`/dashboard/page/${lastOpened}`)
+    try {
+      // Add timeout protection (10 seconds)
+      const loginPromise = supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Login timeout after 10 seconds')), 10000)
+      })
+
+      logger.info('Calling Supabase signInWithPassword...')
+      const { data, error } = await Promise.race([loginPromise, timeoutPromise]) as any
+
+      if (error) {
+        logger.error('Login failed with error:', error)
+        setError(error.message)
       } else {
-        router.push('/dashboard')
+        logger.info('Login successful!', { userId: data?.user?.id })
+        
+        // Small delay to ensure auth state is updated
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+        // Redirect directly to last opened page or dashboard
+        const lastOpened = typeof window !== 'undefined' ? localStorage.getItem('lastOpenedPageUuid') : null
+        if (lastOpened) {
+          logger.info('Redirecting to last opened page', { pageUuid: lastOpened })
+          router.push(`/dashboard/page/${lastOpened}`)
+        } else {
+          logger.info('Redirecting to dashboard')
+          router.push('/dashboard')
+        }
       }
+    } catch (error: any) {
+      logger.error('Login attempt failed:', error)
+      setError(error.message || 'Login failed. Please try again.')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const handleGoogleSignIn = async () => {

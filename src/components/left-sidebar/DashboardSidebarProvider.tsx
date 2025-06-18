@@ -8,6 +8,7 @@ import Sidebar from '@/components/left-sidebar/Sidebar'
 import { useDragAndDrop } from '@/hooks/useDragAndDrop'
 import { superMemorySyncService } from '@/lib/memory/memory-client-sync'
 import { createClient } from '@/lib/supabase/supabase-client'
+import { resetClient } from '@/lib/supabase/supabase-client'
 import { loadRelevantNotes } from '@/lib/supabase/page-loader'
 import logger from '@/lib/logger'
 import MobileLayoutWrapper from '@/components/mobile/MobileLayoutWrapper'
@@ -77,10 +78,16 @@ export default function DashboardSidebarProvider({ children }: { children: React
       try {
         logger.info('Initializing dashboard data...')
         
-        // 1. Check user authentication
-        const { data: { user }, error } = await supabase.auth.getUser()
+        // 1. Check user authentication with timeout
+        const authPromise = supabase.auth.getUser()
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Auth check timeout')), 5000)
+        })
+        
+        const { data: { user }, error } = await Promise.race([authPromise, timeoutPromise]) as any
+        
         if (error || !user) {
-          logger.info('No user found, redirecting to login')
+          logger.info('No user found or auth failed, redirecting to login', { error })
           router.push('/login')
           return
         }
@@ -345,8 +352,33 @@ export default function DashboardSidebarProvider({ children }: { children: React
   }
 
   const logout = async () => {
-    await supabase.auth.signOut()
-    router.push('/login')
+    try {
+      logger.info('Starting logout process...')
+      
+      // Sign out from Supabase
+      await supabase.auth.signOut()
+      logger.info('Supabase signOut completed')
+      
+      // Reset the singleton client to clear auth state
+      resetClient()
+      logger.info('Client singleton reset')
+      
+      // Clear localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('lastOpenedPageUuid')
+        logger.info('Cleared localStorage')
+      }
+      
+      // Redirect to login
+      logger.info('Redirecting to login page')
+      router.push('/login')
+      
+    } catch (error) {
+      logger.error('Logout failed:', error)
+      // Force redirect even if logout fails
+      resetClient()
+      router.push('/login')
+    }
   }
 
   const dragAndDrop = useDragAndDrop({ onMoveItem: moveItem })

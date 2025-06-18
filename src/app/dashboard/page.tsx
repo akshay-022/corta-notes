@@ -25,7 +25,7 @@ export default function DashboardPage() {
     }
     
     redirectToPage()
-  }, [router])
+  }, []) // Remove router dependency - it causes multiple re-runs in development
 
   // Show minimal loading while redirecting
   return (
