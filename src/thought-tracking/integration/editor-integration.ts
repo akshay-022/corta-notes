@@ -4,11 +4,12 @@ import { createClient } from '@/lib/supabase/supabase-client'
 import { Page } from '@/lib/supabase/types'
 import { 
   setNewParagraphIds,
-  ParagraphMetadata 
+  ParagraphMetadata
 } from '@/components/editor/paragraph-metadata'
 
 // Store for editor instances and their trackers
 const editorTrackers = new Map<string, ThoughtTracker>()
+const lineContentCache = new Map<string, Map<string, string>>() // pageUuid -> lineId -> lastContent
 
 export async function setupThoughtTracking(
   editor: Editor,
@@ -23,6 +24,11 @@ export async function setupThoughtTracking(
       console.log('🧠 Cleaning up existing tracker for page:', pageUuid)
       existingTracker.dispose()
       editorTrackers.delete(pageUuid)
+    }
+
+    // Initialize line content cache for this page
+    if (!lineContentCache.has(pageUuid)) {
+      lineContentCache.set(pageUuid, new Map())
     }
 
     // Get current user ID
@@ -48,166 +54,24 @@ export async function setupThoughtTracking(
     // Store tracker for this editor
     editorTrackers.set(pageUuid, tracker)
 
-    // Content tracking with stable snapshots
-    let stableContent = editor.getJSON()
-    let lastUpdateTime = Date.now()
-    let isTracking = false // Add flag to prevent concurrent tracking
+    // Initialize line cache with current content
+    await initializeLineCache(editor, pageUuid)
 
-    const trackContentChanges = async () => {
-      // Prevent concurrent tracking
-      if (isTracking) {
-        console.log('🧠 Tracking already in progress, skipping...')
-        return
-      }
-
-      isTracking = true
-      
+    // Set up real-time line tracking without debouncing
+    const trackLineChanges = async () => {
       try {
-        const currentContent = editor.getJSON()
-
-        // Set IDs for block-level nodes that don't have them yet (cursor-safe)
+        // Set IDs for block-level nodes that don't have them yet
         setNewParagraphIds(editor, pageUuid)
 
-        // Find which specific paragraphs changed using actual node metadata
-        const changedParagraphs = findChangedParagraphsWithMetadata(stableContent, currentContent, editor)
-        
-        for (const changedParagraph of changedParagraphs) {
-          try {
-            // Track the edit in thought tracking system using actual paragraph metadata
-            await tracker.trackEdit({
-              paragraphId: changedParagraph.paragraphMetadata?.id || `${pageUuid}-fallback-${Date.now()}`,
-              pageId: pageUuid,
-              content: changedParagraph.content,
-              editType: changedParagraph.editType,
-              paragraphMetadata: changedParagraph.paragraphMetadata || undefined,
-              metadata: {
-                wordCount: changedParagraph.content.split(/\s+/).filter(word => word.length > 0).length,
-                charCount: changedParagraph.content.length,
-                position: changedParagraph.position
-              }
-            })
-
-            console.log(`🧠 Tracked ${changedParagraph.editType} for paragraph:`, {
-              content: changedParagraph.content.substring(0, 50) + (changedParagraph.content.length > 50 ? '...' : ''),
-              pageUuid,
-              paragraphId: changedParagraph.paragraphMetadata?.id,
-              position: changedParagraph.position,
-              timestamp: new Date().toISOString()
-            })
-
-          } catch (error) {
-            console.error('Error tracking thought changes:', error)
-          }
-        }
-
-        // Update stable content snapshot
-        stableContent = currentContent
-        lastUpdateTime = Date.now()
-      } finally {
-        isTracking = false
+        // Track changes for each line with metadata
+        await trackAllLinesInEditor(editor, pageUuid, tracker)
+      } catch (error) {
+        console.error('Error tracking line changes:', error)
       }
     }
 
-    // Helper function to get paragraph metadata similar to getSelectedParagraphMetadata
-    const getParagraphMetadataFromEditor = (editor: Editor, targetContent: string): {
-      metadata: ParagraphMetadata | null;
-      position: number;
-    } | null => {
-      let result: { metadata: ParagraphMetadata | null; position: number } | null = null;
-      
-      editor.state.doc.descendants((node, pos) => {
-        if (node.type.name === 'paragraph' && node.textContent === targetContent) {
-          result = {
-            metadata: node.attrs?.metadata || null,
-            position: pos
-          };
-          return false; // Stop traversal
-        }
-      });
-      
-      return result;
-    };
-
-    // Helper function to find changed paragraphs using actual metadata
-    const findChangedParagraphsWithMetadata = (oldContent: any, newContent: any, editor: Editor) => {
-      const changes: Array<{
-        paragraphMetadata: ParagraphMetadata | null;
-        content: string;
-        editType: 'create' | 'update' | 'delete';
-        position: number;
-      }> = []
-
-      // Extract paragraph content for comparison
-      const oldParagraphs = extractParagraphsFromContent(oldContent)
-      const newParagraphs = extractParagraphsFromContent(newContent)
-
-      // Find paragraphs that have changed
-      const maxLength = Math.max(oldParagraphs.length, newParagraphs.length)
-      
-      for (let i = 0; i < maxLength; i++) {
-        const oldPara = oldParagraphs[i] || ''
-        const newPara = newParagraphs[i] || ''
-        
-        if (oldPara !== newPara) {
-          let editType: 'create' | 'update' | 'delete'
-          let contentToUse = newPara
-          
-          if (oldPara === '' && newPara !== '') {
-            editType = 'create'
-          } else if (newPara === '') {
-            editType = 'delete'
-            contentToUse = oldPara // Use old content for delete operations
-          } else {
-            editType = 'update'
-          }
-          
-          // Get metadata for this paragraph from the editor
-          const paragraphInfo = getParagraphMetadataFromEditor(editor, contentToUse)
-          
-          if (paragraphInfo || editType === 'delete') {
-            changes.push({
-              paragraphMetadata: paragraphInfo?.metadata || null,
-              content: newPara, // Always use new content (empty for delete)
-              editType,
-              position: paragraphInfo?.position || 0
-            })
-          }
-        }
-      }
-      
-      return changes
-    }
-
-    // Helper function to extract paragraphs from content JSON
-    const extractParagraphsFromContent = (content: any): string[] => {
-      if (!content?.content) return []
-      
-      return content.content.map((node: any) => {
-        if (node.type === 'paragraph' || node.type === 'heading') {
-          return node.content?.map((textNode: any) => textNode.text || '').join('').trim() || ''
-        }
-        return ''
-      })
-    }
-
-    // Set up debounced change tracking
-    let changeTimeout: NodeJS.Timeout
-    let quickChangeTimeout: NodeJS.Timeout
-    
-    const debouncedTrackChanges = () => {
-      // Clear any existing timeouts
-      clearTimeout(changeTimeout)
-      clearTimeout(quickChangeTimeout)
-      
-      // Quick check for rapid changes (don't track these)
-      quickChangeTimeout = setTimeout(() => {
-        // Only set the main timeout if user is still editing
-        changeTimeout = setTimeout(trackContentChanges, 500) // 500ms for content changes
-      }, 500) // 500ms quick debounce to avoid tracking rapid keystrokes
-    }
-
-    // Listen to editor updates
-    editor.on('update', debouncedTrackChanges)
+    // Listen to editor updates - immediate tracking
+    editor.on('update', trackLineChanges)
 
     // Listen for organization events
     const handleOrganizationComplete = async (event: Event) => {
@@ -231,14 +95,13 @@ export async function setupThoughtTracking(
       window.addEventListener(EVENTS.ORGANIZATION_ERROR, handleOrganizationError)
     }
 
-    console.log('🧠 Thought tracking setup complete for page:', pageUuid)
+    console.log('🧠 Line-based thought tracking setup complete for page:', pageUuid)
 
     // Return cleanup function
     return () => {
-      clearTimeout(changeTimeout)
-      clearTimeout(quickChangeTimeout)
-      editor.off('update', debouncedTrackChanges)
+      editor.off('update', trackLineChanges)
       editorTrackers.delete(pageUuid)
+      lineContentCache.delete(pageUuid)
       
       if (typeof window !== 'undefined') {
         window.removeEventListener(EVENTS.ORGANIZATION_COMPLETE, handleOrganizationComplete)
@@ -248,6 +111,126 @@ export async function setupThoughtTracking(
 
   } catch (error) {
     console.error('Failed to setup thought tracking:', error)
+  }
+}
+
+/**
+ * Initialize the line cache with current editor content
+ */
+async function initializeLineCache(editor: Editor, pageUuid: string): Promise<void> {
+  const pageCache = lineContentCache.get(pageUuid)
+  if (!pageCache) return
+
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name === 'paragraph' && node.attrs?.metadata?.id) {
+      const lineId = node.attrs.metadata.id
+      const content = node.textContent || ''
+      pageCache.set(lineId, content)
+    }
+  })
+
+  console.log('🧠 Initialized line cache with', pageCache.size, 'lines for page:', pageUuid)
+}
+
+/**
+ * Track all lines in the editor using the line mapping system
+ */
+async function trackAllLinesInEditor(editor: Editor, pageUuid: string, tracker: ThoughtTracker): Promise<void> {
+  const pageCache = lineContentCache.get(pageUuid)
+  if (!pageCache) return
+
+  const currentLines = new Map<string, { content: string; metadata: ParagraphMetadata; position: number }>()
+  
+  // Collect current state of all lines
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name === 'paragraph' && node.attrs?.metadata?.id) {
+      const lineId = node.attrs.metadata.id
+      const content = node.textContent || ''
+      const metadata = node.attrs.metadata
+      
+      currentLines.set(lineId, { content, metadata, position: pos })
+    }
+  })
+
+  // Check for changes, deletions, and new lines
+  const linesToUpdate: Array<{
+    lineId: string;
+    content: string;
+    editType: 'create' | 'update' | 'delete';
+    metadata: ParagraphMetadata;
+    position: number;
+  }> = []
+
+  // Check for new or updated lines
+  for (const [lineId, { content, metadata, position }] of currentLines) {
+    const cachedContent = pageCache.get(lineId)
+    
+    if (cachedContent === undefined) {
+      // New line
+      linesToUpdate.push({
+        lineId,
+        content,
+        editType: 'create',
+        metadata,
+        position
+      })
+      pageCache.set(lineId, content)
+    } else if (cachedContent !== content) {
+      // Updated line
+      linesToUpdate.push({
+        lineId,
+        content,
+        editType: 'update',
+        metadata,
+        position
+      })
+      pageCache.set(lineId, content)
+    }
+  }
+
+  // Check for deleted lines
+  for (const [lineId, cachedContent] of pageCache) {
+    if (!currentLines.has(lineId)) {
+      // Line was deleted
+      linesToUpdate.push({
+        lineId,
+        content: '', // Empty content for deleted lines
+        editType: 'delete',
+        metadata: { id: lineId }, // Minimal metadata for deleted lines
+        position: 0
+      })
+      pageCache.delete(lineId)
+    }
+  }
+
+  // Process all line updates using the new line mapping system
+  for (const lineUpdate of linesToUpdate) {
+    try {
+             // Use the new line mapping system directly
+       await tracker.updateLine({
+         lineId: lineUpdate.lineId,
+         pageId: pageUuid,
+         content: lineUpdate.content,
+         editType: lineUpdate.editType,
+         metadata: {
+           wordCount: lineUpdate.content.split(/\s+/).filter(word => word.length > 0).length,
+           charCount: lineUpdate.content.length,
+           position: lineUpdate.position
+         },
+         paragraphMetadata: lineUpdate.metadata
+       })
+
+      console.log(`🧠 Tracked ${lineUpdate.editType} for line:`, {
+        lineId: lineUpdate.lineId,
+        contentPreview: lineUpdate.content.substring(0, 50) + (lineUpdate.content.length > 50 ? '...' : ''),
+        pageUuid,
+        position: lineUpdate.position,
+        timestamp: new Date().toISOString()
+      })
+
+    } catch (error) {
+      console.error('Error tracking line update:', error)
+    }
   }
 }
 
@@ -273,4 +256,22 @@ export async function getThoughtTrackingStats(pageUuid: string) {
     return await tracker.getStats()
   }
   return null
+}
+
+// Get line history for debugging
+export async function getLineHistory(pageUuid: string, lineId: string) {
+  const tracker = editorTrackers.get(pageUuid)
+  if (tracker) {
+    return await tracker.getLineHistory(lineId)
+  }
+  return []
+}
+
+// Get all lines for a page
+export async function getPageLines(pageUuid: string) {
+  const tracker = editorTrackers.get(pageUuid)
+  if (tracker) {
+    return await tracker.getLinesByPage(pageUuid)
+  }
+  return []
 } 

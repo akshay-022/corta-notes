@@ -350,6 +350,39 @@ export class ThoughtTracker {
     };
   }
 
+  // New line-based tracking methods
+  async updateLine(lineData: {
+    lineId: string;
+    pageId: string;
+    content: string;
+    editType: 'create' | 'update' | 'delete';
+    metadata?: {
+      wordCount: number;
+      charCount: number;
+      position?: number;
+    };
+    paragraphMetadata?: any;
+  }): Promise<void> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+    return this.brainStateManager.updateLine(lineData);
+  }
+
+  async getLineHistory(lineId: string): Promise<any[]> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+    return this.brainStateManager.getLineHistory(lineId);
+  }
+
+  async getLinesByPage(pageId: string): Promise<any[]> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+    return this.brainStateManager.getLinesByPage(pageId);
+  }
+
   dispose(): void {
     if (typeof window !== 'undefined') {
       window.removeEventListener(EVENTS.ORGANIZATION_NEEDED, this.handleOrganizationTrigger.bind(this));

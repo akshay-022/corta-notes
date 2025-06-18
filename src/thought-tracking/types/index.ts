@@ -14,6 +14,28 @@ export interface ParagraphMetadata {
   [key: string]: any // Allow custom metadata fields
 }
 
+// New line-based tracking types
+export interface LineEdit {
+  lineId: string; // Unique identifier for the line (paragraph metadata ID)
+  pageId: string; // Page UUID from Supabase
+  content: string; // Current content of the line
+  timestamp: number; // When this version was created
+  organized: boolean; // Whether this version has been organized
+  version: number; // Version number for this line
+  editType: 'create' | 'update' | 'delete';
+  metadata?: {
+    wordCount: number;
+    charCount: number;
+    position?: number; // Editor position where the paragraph is located
+  };
+  paragraphMetadata?: ParagraphMetadata; // Store the full paragraph metadata
+}
+
+export interface LineMap {
+  [lineId: string]: LineEdit[];
+}
+
+// Legacy ParagraphEdit - keeping for backward compatibility
 export interface ParagraphEdit {
   id: string;
   paragraphId: string; // This will now be the actual paragraph metadata ID from the editor
@@ -31,6 +53,9 @@ export interface ParagraphEdit {
 }
 
 export interface BrainState {
+  // New line-based system
+  lineMap: LineMap;
+  // Legacy system - keeping for backward compatibility
   edits: ParagraphEdit[];
   summary: string;
   lastUpdated: number;
@@ -41,6 +66,7 @@ export interface BrainStateConfig {
   maxEditsBeforeOrganization: number; // Default 20 - trigger organization when exceeded
   numEditsToOrganize: number; // Default 5 - how many edits to organize at once
   summaryUpdateFrequency: number; // How often to update summary (optional)
+  useLineMappingSystem: boolean; // Whether to use the new line mapping system
 }
 
 // Updated to match Supabase schema
