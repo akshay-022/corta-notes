@@ -167,7 +167,6 @@ export default function DashboardSidebarProvider({ children }: { children: React
       
       // Refresh all pages from Supabase to get the latest organized content
       console.log('🧠 Refreshing pages from database after organization...')
-      console.log('🧠 Pages before refresh:', pages.length, 'pages')
       
       await refreshOrganizedNotes()
       
@@ -180,28 +179,6 @@ export default function DashboardSidebarProvider({ children }: { children: React
           type: 'ORGANIZATION_NOTIFICATION',
           data: { message: customEvent.detail.notification.message }
         }, '*')
-      }
-      
-      // Highlight any new or updated folders based on the result
-      if (customEvent.detail.newPages?.length > 0 || customEvent.detail.updatedPages?.length > 0) {
-        const foldersToHighlight = new Set<string>()
-        
-        // Get folder names from new and updated pages
-        const allChangedPages = [...(customEvent.detail.newPages || []), ...(customEvent.detail.updatedPages || [])]
-        allChangedPages.forEach((page: any) => {
-          if (page.parent_uuid) {
-            // Find parent folder and highlight it
-            const parentPage = pages.find(p => p.uuid === page.parent_uuid)
-            if (parentPage) {
-              foldersToHighlight.add(parentPage.title)
-            }
-          }
-        })
-        
-        if (foldersToHighlight.size > 0) {
-          setHighlightedFolders(foldersToHighlight)
-          console.log('🧠 ✅ Highlighting folders:', Array.from(foldersToHighlight))
-        }
       }
     }
 
@@ -245,14 +222,17 @@ export default function DashboardSidebarProvider({ children }: { children: React
           return finalPages
         })
         
-        // Update active page if it was modified
-        if (activePage) {
-          const updatedActivePage = updatedPages.find((page: Page) => page.uuid === activePage.uuid)
-          if (updatedActivePage) {
-            setActivePage(updatedActivePage)
-            console.log('🧠 ✅ Active page updated immediately')
+        // Update active page if it was modified - get current active page at runtime
+        setActivePage(currentActive => {
+          if (currentActive) {
+            const updatedActivePage = updatedPages.find((page: Page) => page.uuid === currentActive.uuid)
+            if (updatedActivePage) {
+              console.log('🧠 ✅ Active page updated immediately')
+              return updatedActivePage
+            }
           }
-        }
+          return currentActive
+        })
         
         // Show immediate notification
         window.postMessage({
@@ -289,7 +269,7 @@ export default function DashboardSidebarProvider({ children }: { children: React
       window.removeEventListener('message', handleCacheUpdate)
       window.removeEventListener('message', handleRefreshRequired)
     }
-  }, [pages, activePage]) // Added activePage dependency for immediate updates
+  }, []) // Remove pages and activePage dependencies to prevent infinite loops
 
   const handleManualSync = async () => {
     try {
