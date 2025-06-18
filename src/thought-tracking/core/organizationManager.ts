@@ -8,9 +8,13 @@ import {
 } from '../types';
 import { calculateTextSimilarity, generateId } from '../utils/helpers';
 import { ORGANIZATION_DEFAULTS, API_ENDPOINTS } from '../constants';
+<<<<<<< HEAD
 import { createClient } from '@/lib/supabase/supabase-client';
 import { PageUpdate, PageInsert } from '@/lib/supabase/types';
 import { organizationCacheManager, OrganizationCacheManager } from '../services/organizationCacheManager';
+=======
+import { updateMetadataByParagraphIdInDB } from '@/components/editor/paragraph-metadata';
+>>>>>>> e696dc6 (Organize fixs)
 
 export class OrganizationManager {
   private storageManager: StorageManager;
@@ -72,7 +76,14 @@ export class OrganizationManager {
       // Call organization API
       const result = await this.callOrganizationAPI(request);
       
+<<<<<<< HEAD
       // Process and save results with Supabase integration
+=======
+      // Update original paragraph metadata with organization info
+      await this.updateOrganizeMetadata(result);
+      
+      // Process and save results
+>>>>>>> e696dc6 (Organize fixs)
       await this.processOrganizationResult(result);
       
       // Complete organization with cache updates
@@ -136,7 +147,11 @@ export class OrganizationManager {
 
   private getOrganizationInstructions(): string {
     return `
+<<<<<<< HEAD
 You are an intelligent content organizer. Your task is to efficiently group edits into the optimal file structure.
+=======
+ You are an intelligent content organizer. Your task is to organize edits into a coherent file structure.
+>>>>>>> e696dc6 (Organize fixs)
 
 CORE PRINCIPLE: Group N edits into M files where N >= M (multiple edits can go to the same file when they're related).
 
@@ -666,6 +681,7 @@ Return a structured response indicating for each edit:
     this.apiEndpoint = endpoint;
   }
 
+<<<<<<< HEAD
   setUserId(userId: string): void {
     this.userId = userId;
     this.cacheManager.setUserId(userId);
@@ -693,4 +709,40 @@ Return a structured response indicating for each edit:
   isOrganizing(): boolean {
     return this.cacheManager.isOrganizing();
   }
+=======
+  /**
+   * After the organizer returns, mark in the ORIGINAL page/paragraph metadata
+   * where each edit finally landed.  This populates / updates the
+   * `whereOrganized` array we added to ParagraphMetadata.
+   */
+  private async updateOrganizeMetadata(result: OrganizationResult): Promise<void> {
+    if (!result) return;
+
+    const allDestPages = [...result.updatedPages, ...result.newPages];
+
+    for (const dest of allDestPages) {
+      if (!Array.isArray(dest.sourceParagraphs)) continue;
+
+      for (const { pageId, paragraphId } of dest.sourceParagraphs) {
+        if (!pageId || !paragraphId) continue;
+        try {
+          const meta = {
+            organizationStatus: 'yes' as const,
+            isOrganized: true,
+            whereOrganized: [
+              {
+                filePath: dest.uuid,
+                organizedAt: new Date().toISOString(),
+              },
+            ],
+          };
+          await updateMetadataByParagraphIdInDB(pageId, paragraphId, meta);
+        } catch (err) {
+          console.error('Failed to update metadata for', { pageId, paragraphId, err });
+        }
+      }
+    }
+  }
+
+>>>>>>> e696dc6 (Organize fixs)
 } 

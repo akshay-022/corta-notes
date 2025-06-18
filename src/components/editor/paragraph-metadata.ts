@@ -1,5 +1,7 @@
 import { Editor } from '@tiptap/react'
 import { Node as ProseMirrorNode } from '@tiptap/pm/model'
+import { createClient } from '@/lib/supabase/supabase-client'
+import { Page } from '@/lib/supabase/types'
 
 export interface ParagraphMetadata {
   id?: string
@@ -7,8 +9,8 @@ export interface ParagraphMetadata {
   organizationStatus?: 'yes' | 'no'
   whereOrganized?: Array<{
     filePath: string
-    paragraphId: string
     summary_stored?: string
+    organizedAt?: string
   }>
   isOrganized?: boolean
   [key: string]: any // Allow custom metadata fields
@@ -227,7 +229,6 @@ export function markCurrentParagraphAsOrganized(
   // Add new organization location
   whereOrganized.push({
     filePath,
-    paragraphId,
     summary_stored: summaryStored
   })
   
@@ -354,4 +355,105 @@ export function setNewParagraphIds(editor: Editor, pageUuid: string): void {
       }
     }
   })
+}
+
+/**
+ * Update metadata of a paragraph by its unique id (searches entire document)
+ */
+export function updateMetadataByParagraphId(
+  editor: Editor,
+  paragraphId: string,
+  updates: Partial<ParagraphMetadata>
+): boolean {
+  if (!editor || !paragraphId) return false
+
+  let foundPos: number | null = null
+
+  editor.state.doc.descendants((node, pos) => {
+    const nid = node.attrs?.id || node.attrs?.metadata?.id
+    if (nid === paragraphId) {
+    foundPos = pos
+    return false // stop traversal
+    }
+    return true
+  })
+
+  if (foundPos === null) return false
+
+  // Merge updates with existing metadata
+  const current = getParagraphMetadata(editor, foundPos) || {}
+  const newMeta = { ...current, ...updates}
+
+  return setParagraphMetadata(editor, foundPos, newMeta)
+}
+
+/**
+ * Update metadata for a paragraph by ID directly in the database (no editor required)
+ */
+export async function updateMetadataByParagraphIdInDB(
+  pageUuid: string,
+  paragraphId: string,
+  updates: Partial<ParagraphMetadata>
+): Promise<boolean> {
+  try {
+    const supabase = createClient()
+
+    // 1. Fetch page
+    const { data: page, error } = await supabase
+      .from('pages')
+      .select('content, updated_at')
+      .eq('uuid', pageUuid)
+      .single()
+
+    if (error || !page) {
+      console.error('Failed to load page', error)
+      return false
+    }
+
+    const doc = page.content as any
+    if (!doc?.content || !Array.isArray(doc.content)) {
+      console.warn('Page has no TipTap content')
+      return false
+    }
+
+    let changed = false
+
+    const patchedBlocks = doc.content.map((block: any) => {
+      if (block.type !== 'paragraph') return block
+
+      const nid = block.attrs?.id || block.attrs?.metadata?.id
+      if (nid !== paragraphId) return block
+
+      const current = block.attrs?.metadata || {}
+      const newMeta = { ...current, ...updates }
+
+      changed = true
+      return {
+        ...block,
+        attrs: {
+          ...block.attrs,
+          metadata: newMeta,
+        },
+      }
+    })
+
+    if (!changed) return false // paragraph not found
+
+    const newDoc = { ...doc, content: patchedBlocks }
+
+    const { error: upErr } = await supabase
+      .from('pages')
+      .update({ content: newDoc, updated_at: new Date().toISOString() })
+      .eq('uuid', pageUuid)
+
+    if (upErr) {
+      console.error('Failed to save updated page', upErr)
+      return false
+    }
+
+    return true
+  } catch (err) {
+    console.error('updateMetadataByParagraphIdInDB error', err)
+    return false
+  }
 } 

@@ -29,6 +29,7 @@ interface OrganizedPage {
   category?: string;
   updated_at?: string;
   created_at?: string;
+  sourceParagraphs?: { pageId: string; paragraphId: string }[];
 }
 
 interface OrganizationRequest {
@@ -115,6 +116,55 @@ export async function POST(request: NextRequest) {
         timestamp: Date.now()
       }))
     ]
+    // ------------------------------------------------------------------
+    // Build sourceParagraphs for each destination page
+    // ------------------------------------------------------------------
+    const allDestPages: OrganizedPage[] = [...results.updatedPages, ...results.newPages]
+
+    // Helper: quick lookup dest page by its full path
+    const pathToPage = new Map<string, OrganizedPage>()
+    allDestPages.forEach(p => {
+      const path = getFullPath(p, organizedPages)
+      pathToPage.set(path, p)
+    })
+
+    // Aggregate source paragraphs per destination page
+    const pageSources: Record<string, { pageId: string; paragraphId: string }[]> = {}
+
+    editMappings.forEach(mapping => {
+      // Only consider mappings that actually insert content into a page
+      if (mapping.action === 'update_existing' || mapping.action === 'create_file') {
+        const destPage = pathToPage.get(mapping.path)
+        if (!destPage) return
+
+        const edit = edits.find(e => e.id === mapping.editId)
+        if (!edit) return
+
+        if (!pageSources[destPage.uuid]) pageSources[destPage.uuid] = []
+        pageSources[destPage.uuid].push({ pageId: edit.pageId, paragraphId: edit.paragraphId })
+      }
+    })
+
+    // Attach to pages
+    allDestPages.forEach(p => {
+      p.sourceParagraphs = pageSources[p.uuid] || []
+    })
+    
+    // Create notification message
+    const updatedCount = results.updatedPages.length
+    const newCount = results.newPages.length
+    const newFileNames = results.newPages.map(page => page.title)
+    
+    let notificationMessage = ''
+    if (updatedCount > 0 && newCount > 0) {
+      notificationMessage = `Updated ${updatedCount} file${updatedCount > 1 ? 's' : ''}, created ${newFileNames.join(', ')}`
+    } else if (updatedCount > 0) {
+      notificationMessage = `Updated ${updatedCount} file${updatedCount > 1 ? 's' : ''}`
+    } else if (newCount > 0) {
+      notificationMessage = `Created ${newFileNames.join(', ')}`
+    } else {
+      notificationMessage = 'No changes made'
+    }
     
     return NextResponse.json({
       updatedPages: results.updatedPages,
@@ -147,6 +197,7 @@ async function mapEditsToFilePaths(edits: ParagraphEdit[], organizedPages: Organ
     `${index + 1}. ID: ${edit.id}
    Content: "${edit.content}"
    Page: ${edit.pageId}
+   Paragraph ID: ${edit.paragraphId}
    Type: ${edit.editType}
    Timestamp: ${new Date(edit.timestamp).toLocaleDateString()}`
   ).join('\n\n')
