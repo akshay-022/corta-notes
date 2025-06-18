@@ -1,6 +1,5 @@
 import { 
   BrainState, 
-  ParagraphEdit, 
   BrainStateConfig,
   LineEdit,
   LineMap,
@@ -31,56 +30,15 @@ export class BrainStateManager {
       this.currentState = this.createDefaultBrainState();
       await this.localStorageManager.saveBrainState(this.currentState);
     }
-
-    // Migrate from old system to new line mapping system if needed
-    if (!this.currentState.lineMap || Object.keys(this.currentState.lineMap).length === 0) {
-      await this.migrateToLineMappingSystem();
-    }
   }
 
   private createDefaultBrainState(): BrainState {
     return {
       lineMap: {},
-      edits: [], // Keep for backward compatibility
       summary: '',
       lastUpdated: Date.now(),
       config: BRAIN_STATE_DEFAULTS,
     };
-  }
-
-  private async migrateToLineMappingSystem(): Promise<void> {
-    if (!this.currentState || !this.currentState.edits.length) return;
-
-    console.log('🧠 Migrating to line mapping system...');
-    
-    const lineMap: LineMap = {};
-    
-    // Convert existing edits to line mapping format
-    for (const edit of this.currentState.edits) {
-      const lineId = edit.paragraphId;
-      if (!lineMap[lineId]) {
-        lineMap[lineId] = [];
-      }
-      
-      const lineEdit: LineEdit = {
-        lineId,
-        pageId: edit.pageId,
-        content: edit.content,
-        timestamp: edit.timestamp,
-        organized: edit.organized || false,
-        version: lineMap[lineId].length + 1,
-        editType: edit.editType,
-        metadata: edit.metadata,
-        paragraphMetadata: edit.paragraphMetadata,
-      };
-      
-      lineMap[lineId].push(lineEdit);
-    }
-    
-    this.currentState.lineMap = lineMap;
-    await this.debouncedSave();
-    
-    console.log('🧠 Migration complete. Line map has', Object.keys(lineMap).length, 'lines');
   }
 
   /**
@@ -257,21 +215,6 @@ export class BrainStateManager {
     await this.debouncedSave();
   }
 
-  /**
-   * Legacy method - converts line edits to paragraph edits for backward compatibility
-   */
-  async addEdit(edit: Omit<ParagraphEdit, 'id' | 'timestamp'>): Promise<void> {
-    // Convert to new line mapping system
-    await this.updateLine({
-      lineId: edit.paragraphId,
-      pageId: edit.pageId,
-      content: edit.content,
-      editType: edit.editType,
-      metadata: edit.metadata,
-      paragraphMetadata: edit.paragraphMetadata,
-    });
-  }
-
   async getCurrentState(): Promise<BrainState | null> {
     if (!this.currentState) {
       await this.initialize();
@@ -318,69 +261,8 @@ export class BrainStateManager {
     return history.length > 0 ? history[history.length - 1] : null;
   }
 
-  // Legacy methods for backward compatibility
-  async markEditsAsOrganized(editIds: string[]): Promise<void> {
-    // This is for backward compatibility - in the new system we use markLinesAsOrganized
-    console.warn('🧠 Using legacy markEditsAsOrganized - consider upgrading to markLinesAsOrganized');
-  }
-
-  async getEditsByPage(pageId: string): Promise<ParagraphEdit[]> {
-    const lineEdits = await this.getLinesByPage(pageId);
-    return lineEdits.map(this.convertLineEditToParagraphEdit);
-  }
-
-  async getEditsByParagraph(paragraphId: string): Promise<ParagraphEdit[]> {
-    const lineHistory = await this.getLineHistory(paragraphId);
-    return lineHistory.map(this.convertLineEditToParagraphEdit);
-  }
-
-  async getEditsByParagraphMetadataId(metadataId: string): Promise<ParagraphEdit[]> {
-    if (!this.currentState) {
-      await this.initialize();
-    }
-
-    if (!this.currentState) {
-      return [];
-    }
-
-    const matchingEdits: ParagraphEdit[] = [];
-    
-    for (const lineEdits of Object.values(this.currentState.lineMap)) {
-      for (const lineEdit of lineEdits) {
-        if (lineEdit.paragraphMetadata?.id === metadataId) {
-          matchingEdits.push(this.convertLineEditToParagraphEdit(lineEdit));
-        }
-      }
-    }
-    
-    return matchingEdits.sort((a, b) => b.timestamp - a.timestamp);
-  }
-
-  async getRecentEdits(limit: number = 10): Promise<ParagraphEdit[]> {
-    const unorganizedEdits = this.getUnorganizedLineEdits();
-    return unorganizedEdits
-      .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(0, limit)
-      .map(this.convertLineEditToParagraphEdit);
-  }
-
-  async getUnorganizedEdits(): Promise<ParagraphEdit[]> {
-    const unorganizedEdits = this.getUnorganizedLineEdits();
-    return unorganizedEdits.map(this.convertLineEditToParagraphEdit);
-  }
-
-  private convertLineEditToParagraphEdit(lineEdit: LineEdit): ParagraphEdit {
-    return {
-      id: `${lineEdit.lineId}-v${lineEdit.version}`,
-      paragraphId: lineEdit.lineId,
-      pageId: lineEdit.pageId,
-      content: lineEdit.content,
-      timestamp: lineEdit.timestamp,
-      editType: lineEdit.editType,
-      organized: lineEdit.organized,
-      paragraphMetadata: lineEdit.paragraphMetadata,
-      metadata: lineEdit.metadata,
-    };
+  async getUnorganizedEdits(): Promise<LineEdit[]> {
+    return this.getUnorganizedLineEdits();
   }
 
   async getStats(): Promise<{

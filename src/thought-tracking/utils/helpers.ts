@@ -1,4 +1,4 @@
-import { ParagraphEdit } from '../types';
+import { LineEdit } from '../types';
 
 export function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -63,15 +63,15 @@ export function extractKeywords(text: string, maxKeywords: number = 10): string[
     .map(([word]) => word);
 }
 
-export function groupEditsByTimeWindow(
-  edits: ParagraphEdit[], 
+export function groupLineEditsByTimeWindow(
+  edits: LineEdit[], 
   windowMs: number = 5 * 60 * 1000 // 5 minutes default
-): ParagraphEdit[][] {
+): LineEdit[][] {
   if (edits.length === 0) return [];
   
   const sortedEdits = [...edits].sort((a, b) => a.timestamp - b.timestamp);
-  const groups: ParagraphEdit[][] = [];
-  let currentGroup: ParagraphEdit[] = [sortedEdits[0]];
+  const groups: LineEdit[][] = [];
+  let currentGroup: LineEdit[] = [sortedEdits[0]];
   
   for (let i = 1; i < sortedEdits.length; i++) {
     const edit = sortedEdits[i];
@@ -96,9 +96,9 @@ export function sanitizeContent(content: string): string {
     .trim();
 }
 
-export function validateParagraphEdit(edit: Partial<ParagraphEdit>): boolean {
+export function validateLineEdit(edit: Partial<LineEdit>): boolean {
   return !!(
-    edit.paragraphId &&
+    edit.lineId &&
     edit.pageId &&
     edit.content !== undefined && // Allow empty string for delete
     edit.editType &&
@@ -106,18 +106,18 @@ export function validateParagraphEdit(edit: Partial<ParagraphEdit>): boolean {
   );
 }
 
-export function compressEdits(edits: ParagraphEdit[]): ParagraphEdit[] {
-  // Group edits by paragraph and keep only the latest edit for each paragraph
-  const editMap = new Map<string, ParagraphEdit>();
+export function getLatestLineEdits(lineMap: Record<string, LineEdit[]>): LineEdit[] {
+  // Get the latest version of each line
+  const latestEdits: LineEdit[] = [];
   
-  edits.forEach(edit => {
-    const existing = editMap.get(edit.paragraphId);
-    if (!existing || edit.timestamp > existing.timestamp) {
-      editMap.set(edit.paragraphId, edit);
+  for (const lineEdits of Object.values(lineMap)) {
+    if (lineEdits.length > 0) {
+      const latestEdit = lineEdits[lineEdits.length - 1];
+      latestEdits.push(latestEdit);
     }
-  });
+  }
   
-  return Array.from(editMap.values()).sort((a, b) => a.timestamp - b.timestamp);
+  return latestEdits.sort((a, b) => a.timestamp - b.timestamp);
 }
 
 export function estimateReadingTime(text: string): number {

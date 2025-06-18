@@ -14,7 +14,7 @@ export interface ParagraphMetadata {
   [key: string]: any // Allow custom metadata fields
 }
 
-// New line-based tracking types
+// Line-based tracking types
 export interface LineEdit {
   lineId: string; // Unique identifier for the line (paragraph metadata ID)
   pageId: string; // Page UUID from Supabase
@@ -35,28 +35,8 @@ export interface LineMap {
   [lineId: string]: LineEdit[];
 }
 
-// Legacy ParagraphEdit - keeping for backward compatibility
-export interface ParagraphEdit {
-  id: string;
-  paragraphId: string; // This will now be the actual paragraph metadata ID from the editor
-  pageId: string; // This will be the page UUID from Supabase
-  content: string; // Latest content state - empty string "" for delete
-  timestamp: number;
-  editType: 'create' | 'update' | 'delete';
-  organized?: boolean; // Mark if this edit has been organized
-  paragraphMetadata?: ParagraphMetadata; // Store the full paragraph metadata
-  metadata?: {
-    wordCount: number;
-    charCount: number;
-    position?: number; // Editor position where the paragraph is located
-  };
-}
-
 export interface BrainState {
-  // New line-based system
   lineMap: LineMap;
-  // Legacy system - keeping for backward compatibility
-  edits: ParagraphEdit[];
   summary: string;
   lastUpdated: number;
   config: BrainStateConfig;
@@ -96,7 +76,7 @@ export interface OrganizedPage {
 }
 
 export interface OrganizationRequest {
-  edits: ParagraphEdit[]; // Changed from cacheEntries to edits
+  edits: LineEdit[]; // Line edits to organize
   currentSummary: string;
   existingPages: OrganizedPage[];
   config: OrganizationConfig;

@@ -37,10 +37,10 @@ export const createSupabaseThoughtTracker = async () => {
   return tracker;
 };
 
-// 4. Example: Track edits from a TipTap editor with metadata
+// 4. Example: Track line edits from a TipTap editor with metadata
 // NOTE: This is a simplified example. In practice, use the editor-integration.ts
 // which handles paragraph metadata automatically.
-export const trackTipTapEdit = async (
+export const trackTipTapLineEdits = async (
   tracker: ThoughtTracker,
   pageUuid: string,
   newContent: any,
@@ -75,17 +75,19 @@ export const trackTipTapEdit = async (
 
       // Get paragraph metadata if available
       const paragraphMetadata = getParagraphMetadata ? getParagraphMetadata(content) : null;
+      const lineId = paragraphMetadata?.id || `${pageUuid}-fallback-${Date.now()}-${i}`;
       
-      await tracker.trackEdit({
-        paragraphId: paragraphMetadata?.id || `${pageUuid}-fallback-${Date.now()}-${i}`,
+      await tracker.updateLine({
+        lineId,
         pageId: pageUuid,
         content,
         editType,
-        paragraphMetadata,
         metadata: {
           wordCount: content.split(/\s+/).filter(word => word.length > 0).length,
-          charCount: content.length
-        }
+          charCount: content.length,
+          position: i
+        },
+        paragraphMetadata
       });
     }
   }
@@ -152,12 +154,58 @@ export const markPageAsOrganized = async (
   await storageManager.updatePageOrganizedStatus(pageUuid, true);
 };
 
-// 9. Example: React Hook usage
-export const useSupabaseThoughtTracking = () => {
-  return useThoughtTracker('/api/summarize', '/api/organize-note');
+// 9. Example: React Hook usage with line-based tracking
+export const useSupabaseThoughtTracking = async () => {
+  const tracker = await createSupabaseThoughtTracker();
+  
+  return useThoughtTracker({ 
+    tracker,
+    autoRefresh: true,
+    refreshInterval: 30000 
+  });
 };
 
-// 10. Example: Batch operations
+// 10. Example: Direct line tracking without TipTap parsing
+export const trackDirectLineEdit = async (
+  tracker: ThoughtTracker,
+  lineId: string,
+  pageId: string,
+  content: string,
+  editType: 'create' | 'update' | 'delete',
+  metadata?: any
+) => {
+  await tracker.updateLine({
+    lineId,
+    pageId,
+    content,
+    editType,
+    metadata: {
+      wordCount: content.split(/\s+/).filter(word => word.length > 0).length,
+      charCount: content.length,
+      ...metadata
+    }
+  });
+};
+
+// 11. Example: Get line history for debugging
+export const getLineEditHistory = async (
+  userId: string,
+  lineId: string
+) => {
+  const tracker = await createSupabaseThoughtTracker();
+  return await tracker.getLineHistory(lineId);
+};
+
+// 12. Example: Get all lines for a page
+export const getPageLineEdits = async (
+  userId: string,
+  pageId: string
+) => {
+  const tracker = await createSupabaseThoughtTracker();
+  return await tracker.getLinesByPage(pageId);
+};
+
+// 13. Example: Batch operations
 export const batchMarkPagesAsOrganized = async (
   pageUuids: string[],
   userId: string
@@ -169,7 +217,7 @@ export const batchMarkPagesAsOrganized = async (
   }
 };
 
-// 11. Example: Migration utility
+// 14. Example: Migration utility
 export const migrateExistingPagesToThoughtTracking = async (userId: string) => {
   const storageManager = new SupabaseStorageManager(supabase, userId);
   
@@ -178,6 +226,32 @@ export const migrateExistingPagesToThoughtTracking = async (userId: string) => {
   
   console.log(`Found ${rawPages.length} raw pages for user ${userId}`);
   
-  // You can now track edits on these pages or mark some as organized
+  // You can now track line edits on these pages or mark some as organized
   return rawPages;
+};
+
+// 15. Example: Track user typing in real-time
+export const setupRealtimeLineTracking = async (
+  pageUuid: string,
+  onLineUpdate: (lineId: string, content: string) => void
+) => {
+  const tracker = await createSupabaseThoughtTracker();
+  
+  // This would be called whenever a user types in a specific line/paragraph
+  const handleLineEdit = async (lineId: string, content: string, editType: 'create' | 'update' | 'delete') => {
+    await tracker.updateLine({
+      lineId,
+      pageId: pageUuid,
+      content,
+      editType,
+      metadata: {
+        wordCount: content.split(/\s+/).filter(word => word.length > 0).length,
+        charCount: content.length
+      }
+    });
+    
+    onLineUpdate(lineId, content);
+  };
+  
+  return { handleLineEdit, tracker };
 }; 
