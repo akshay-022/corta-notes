@@ -254,7 +254,7 @@ export default function Sidebar({
   const getRecentUnorganizedNotes = () => {
     return getUnorganizedPages()
       .filter(page => page.type === 'file')
-      .sort((a, b) => new Date(b.updated_at || b.created_at || '').getTime() - new Date(a.updated_at || a.created_at || '').getTime())
+      .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime())
       .slice(0, 10) // Show latest 10 notes
   }
 
