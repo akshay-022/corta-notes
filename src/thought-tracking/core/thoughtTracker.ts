@@ -29,12 +29,12 @@ export class ThoughtTracker {
     userId?: string
   ) {
     // Initialize storage manager
-    // this.storageManager = customStorageManager || new LocalStorageManager(userId); # TODO: Uncomment this when we have a proper supabase storage manager
-    this.storageManager = new LocalStorageManager(userId);
+    this.storageManager = customStorageManager || new LocalStorageManager(userId); // TODO: Uncomment this when we have a proper supabase storage manager
+    // this.storageManager = new LocalStorageManager(userId);
     
     // Initialize core components
     const summaryGenerator = new SummaryGenerator(summaryApiEndpoint);
-    this.brainStateManager = new BrainStateManager(this.storageManager, summaryGenerator);
+    this.brainStateManager = new BrainStateManager(summaryGenerator, new LocalStorageManager(userId));
     this.organizationManager = new OrganizationManager(this.storageManager, organizationApiEndpoint);
     
     // Setup debounced save
