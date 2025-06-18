@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, LogOut, Plus, Edit3, Edit, Check, X, RefreshCw, Clock, Trash } from 'lucide-react'
+import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, LogOut, Plus, Edit3, Edit, Check, X, RefreshCw, Clock, Trash, Eye, EyeOff } from 'lucide-react'
 import { Page } from '@/lib/supabase/types'
 import { DragDropStyles, isValidDrop, DropZoneIndicator } from '@/components/left-sidebar/DragDropStyles'
 import type { DragItem, DropTarget } from '@/hooks/useDragAndDrop'
@@ -40,6 +40,7 @@ interface SidebarProps {
   logout: () => void
   onRefreshOrganizedNotes: () => Promise<void>
   onManualSync: () => void
+  togglePageVisibility: (page: Page) => void
   dragAndDrop: {
     dragState: { isDragging: boolean; dragItem: DragItem | null; dragOverElement: string | null }
     getDragHandlers: (item: DragItem) => any
@@ -70,6 +71,7 @@ export default function Sidebar({
   logout,
   onRefreshOrganizedNotes,
   onManualSync,
+  togglePageVisibility,
   dragAndDrop,
   isMobile,
   newlyCreatedItem,
@@ -82,6 +84,7 @@ export default function Sidebar({
   const [searchResults, setSearchResults] = useState<SuperMemoryDocument[]>([])
   const [isSearchActive, setIsSearchActive] = useState(false)
   const [viewMode, setViewMode] = useState<'normal' | 'chronological'>('normal')
+  const [showHiddenItems, setShowHiddenItems] = useState(false)
 
   const router = useRouter();
 
@@ -237,7 +240,7 @@ export default function Sidebar({
   const getUnorganizedPages = () => {
     return pages.filter(page => 
       page.organized === false && 
-      page.visible !== false && // Show visible pages (default to true if null)
+      (showHiddenItems || page.visible !== false) && // Show all pages if showHiddenItems is true, otherwise only visible
       !page.is_deleted // Exclude deleted pages
     )
   }
@@ -245,7 +248,7 @@ export default function Sidebar({
   const getOrganizedPages = () => {
     return pages.filter(page => 
       page.organized === true && 
-      page.visible !== false && // Show visible pages (default to true if null)
+      (showHiddenItems || page.visible !== false) && // Show all pages if showHiddenItems is true, otherwise only visible
       !page.is_deleted // Exclude deleted pages
     )
   }
@@ -393,8 +396,31 @@ export default function Sidebar({
                 autoFocus
               />
             ) : (
-              <span className="text-[#cccccc] truncate text-sm font-normal ml-1">{item.title}</span>
+              <span className={`truncate text-sm font-normal ml-1 ${
+                item.visible === false ? 'text-[#969696] opacity-60' : 'text-[#cccccc]'
+              }`}>
+                {item.title}
+                {item.visible === false && <span className="ml-1 text-xs">(hidden)</span>}
+              </span>
             )}
+            
+            {/* Hide/Show button - appears on hover */}
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  togglePageVisibility(item)
+                }}
+                className="p-1 hover:bg-[#404040] rounded transition-colors"
+                title={item.visible === false ? `Show "${item.title}"` : `Hide "${item.title}"`}
+              >
+                {item.visible === false ? (
+                  <Eye size={12} className="text-[#969696] hover:text-[#cccccc]" />
+                ) : (
+                  <EyeOff size={12} className="text-[#969696] hover:text-[#cccccc]" />
+                )}
+              </button>
+            </div>
           </div>
           
 
@@ -425,6 +451,7 @@ export default function Sidebar({
           onBackToNormal={() => setViewMode('normal')}
           deleteItem={deleteItem}
           setRenaming={setRenaming}
+          togglePageVisibility={togglePageVisibility}
           isMobile={isMobile}
         />
         
@@ -452,9 +479,22 @@ export default function Sidebar({
         <div className="flex flex-col h-full">
           {/* Fixed Header Section */}
           <div className="flex-shrink-0">
-            {/* Clean Header - removed logout button */}
+            {/* Clean Header with show/hide toggle */}
             <div className="p-4">
-              {/* Header content without logout button */}
+              <div className="flex items-center justify-between">
+                <span className="text-[#cccccc] text-sm font-medium">Notes</span>
+                <button
+                  onClick={() => setShowHiddenItems(!showHiddenItems)}
+                  className={`text-xs px-2 py-1 rounded transition-colors ${
+                    showHiddenItems 
+                      ? 'bg-[#007acc] text-white' 
+                      : 'text-[#969696] hover:text-[#cccccc] hover:bg-[#2a2a2a]'
+                  }`}
+                  title={showHiddenItems ? 'Hide hidden items' : 'Show hidden items'}
+                >
+                  {showHiddenItems ? 'Hide Hidden' : 'Show Hidden'}
+                </button>
+              </div>
             </div>
             
             {/* New Note Button - ChatGPT style */}
@@ -581,11 +621,14 @@ export default function Sidebar({
                         >
                           <div className="flex items-center gap-1 flex-1 min-w-0">
                             <div className="w-4 h-4 flex items-center justify-center">
-                              <FileText size={14} className="text-[#519aba]" />
+                              <FileText size={14} className={`${correspondingPage.visible === false ? 'text-[#969696]' : 'text-[#519aba]'}`} />
                             </div>
                             <div className="flex-1 min-w-0 ml-1">
-                              <div className="text-[#cccccc] truncate text-sm font-normal">
+                              <div className={`truncate text-sm font-normal ${
+                                correspondingPage.visible === false ? 'text-[#969696] opacity-60' : 'text-[#cccccc]'
+                              }`}>
                                 {doc.title || doc.metadata?.title || 'Untitled'}
+                                {correspondingPage.visible === false && <span className="ml-1 text-xs">(hidden)</span>}
                               </div>
                               
                             </div>
@@ -594,6 +637,24 @@ export default function Sidebar({
                                 {Math.round(doc.score * 100)}%
                               </div>
                             )}
+                          </div>
+                          
+                          {/* Hide/Show button for search results */}
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                togglePageVisibility(correspondingPage)
+                              }}
+                              className="p-1 hover:bg-[#404040] rounded transition-colors"
+                              title={correspondingPage.visible === false ? `Show "${correspondingPage.title}"` : `Hide "${correspondingPage.title}"`}
+                            >
+                              {correspondingPage.visible === false ? (
+                                <Eye size={12} className="text-[#969696] hover:text-[#cccccc]" />
+                              ) : (
+                                <EyeOff size={12} className="text-[#969696] hover:text-[#cccccc]" />
+                              )}
+                            </button>
                           </div>
                         </div>
                       </DragDropStyles>
@@ -632,13 +693,32 @@ export default function Sidebar({
                           >
                             <div className="flex items-center gap-1 flex-1 min-w-0">
                               <div className="w-4 h-4 flex items-center justify-center">
-                                <FileText size={14} className="text-[#519aba]" />
+                                <FileText size={14} className={`${item.visible === false ? 'text-[#969696]' : 'text-[#519aba]'}`} />
                               </div>
-                              <span className="text-[#cccccc] truncate text-sm font-normal ml-1">{item.title}</span>
+                              <span className={`truncate text-sm font-normal ml-1 ${
+                                item.visible === false ? 'text-[#969696] opacity-60' : 'text-[#cccccc]'
+                              }`}>
+                                {item.title}
+                                {item.visible === false && <span className="ml-1 text-xs">(hidden)</span>}
+                              </span>
                             </div>
                             
                             {/* Action buttons - hidden by default, shown on hover */}
                             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  togglePageVisibility(item)
+                                }}
+                                className="p-1 hover:bg-[#404040] rounded transition-colors"
+                                title={item.visible === false ? `Show "${item.title}"` : `Hide "${item.title}"`}
+                              >
+                                {item.visible === false ? (
+                                  <Eye size={12} className="text-[#969696] hover:text-[#cccccc]" />
+                                ) : (
+                                  <EyeOff size={12} className="text-[#969696] hover:text-[#cccccc]" />
+                                )}
+                              </button>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation()
@@ -778,6 +858,25 @@ export default function Sidebar({
               >
                 <Edit size={12} />
                 Rename
+              </button>
+              <button
+                className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-[#3a3a3a] flex items-center gap-2"
+                onClick={() => {
+                  togglePageVisibility(contextMenu.item!)
+                  setContextMenu(null)
+                }}
+              >
+                {contextMenu.item.visible === false ? (
+                  <>
+                    <FileText size={12} />
+                    Show
+                  </>
+                ) : (
+                  <>
+                    <FileText size={12} className="opacity-50" />
+                    Hide
+                  </>
+                )}
               </button>
               <button
                 className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-[#3a3a3a] flex items-center gap-2"

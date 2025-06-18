@@ -460,6 +460,27 @@ export default function DashboardSidebarProvider({ children }: { children: React
     }
   }
 
+  const togglePageVisibility = async (page: Page) => {
+    if (!user) return
+    const newVisibility = !page.visible
+    const { error } = await supabase
+      .from('pages')
+      .update({ visible: newVisibility })
+      .eq('uuid', page.uuid)
+      .eq('user_id', user.id)
+    
+    if (!error) {
+      const updatedPage = { ...page, visible: newVisibility }
+      setPages(pages.map(p => p.uuid === page.uuid ? updatedPage : p))
+      if (activePage?.uuid === page.uuid) {
+        setActivePage(updatedPage)
+      }
+      logger.info(`Page visibility toggled: ${page.title} is now ${newVisibility ? 'visible' : 'hidden'}`)
+    } else {
+      logger.error('Failed to toggle page visibility:', error)
+    }
+  }
+
   // Function to update a page in the context (for editor updates)
   const updatePage = (updatedPage: Page) => {
     setPages(pages.map(p => p.uuid === updatedPage.uuid ? updatedPage : p))
@@ -538,6 +559,7 @@ export default function DashboardSidebarProvider({ children }: { children: React
               setHighlightedFolders={setHighlightedFolders}
               logout={logout}
               onManualSync={handleManualSync}
+              togglePageVisibility={togglePageVisibility}
               dragAndDrop={dragAndDrop}
               isMobile={true}
               newlyCreatedItem={newlyCreatedItem}
@@ -590,6 +612,7 @@ export default function DashboardSidebarProvider({ children }: { children: React
               logout={logout}
               onRefreshOrganizedNotes={refreshOrganizedNotes}
               onManualSync={handleManualSync}
+              togglePageVisibility={togglePageVisibility}
               dragAndDrop={dragAndDrop}
               isMobile={false}
               newlyCreatedItem={newlyCreatedItem}
