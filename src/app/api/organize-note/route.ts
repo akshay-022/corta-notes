@@ -100,33 +100,28 @@ export async function POST(request: NextRequest) {
     // Execute the mappings - append content to the specified files
     const results = await executeEditMappings(supabase, user.id, editMappings, organizedPages)
     
-    // Create notification message
-    const updatedCount = results.updatedPages.length
-    const newCount = results.newPages.length
-    const newFileNames = results.newPages.map(page => page.title)
-    
-    let notificationMessage = ''
-    if (updatedCount > 0 && newCount > 0) {
-      notificationMessage = `Updated ${updatedCount} file${updatedCount > 1 ? 's' : ''}, created ${newFileNames.join(', ')}`
-    } else if (updatedCount > 0) {
-      notificationMessage = `Updated ${updatedCount} file${updatedCount > 1 ? 's' : ''}`
-    } else if (newCount > 0) {
-      notificationMessage = `Created ${newFileNames.join(', ')}`
-    } else {
-      notificationMessage = 'No changes made'
-    }
+    // Create file history items
+    const fileHistoryItems = [
+      ...results.updatedPages.map(page => ({
+        uuid: page.uuid,
+        title: page.title,
+        action: 'updated' as const,
+        timestamp: Date.now()
+      })),
+      ...results.newPages.map(page => ({
+        uuid: page.uuid,
+        title: page.title,
+        action: 'created' as const,
+        timestamp: Date.now()
+      }))
+    ]
     
     return NextResponse.json({
       updatedPages: results.updatedPages,
       newPages: results.newPages,
       summary: `Successfully organized ${edits.length} edits into ${results.updatedPages.length + results.newPages.length} pages`,
       processedEditIds: edits.map(edit => edit.id),
-      notification: {
-        message: notificationMessage,
-        updatedCount,
-        newCount,
-        newFileNames
-      }
+      fileHistory: fileHistoryItems
     })
 
   } catch (error) {

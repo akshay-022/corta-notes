@@ -123,11 +123,11 @@ export class OrganizationManager {
 
     const result = await response.json();
     
-    // Post notification message to window if organization was successful
-    if (result.notification && typeof window !== 'undefined') {
+    // Post file history update to window if organization was successful
+    if (result.fileHistory && typeof window !== 'undefined') {
       window.postMessage({
-        type: 'ORGANIZATION_NOTIFICATION',
-        data: result.notification
+        type: 'FILE_HISTORY_UPDATE',
+        data: result.fileHistory
       }, '*');
     }
 
@@ -398,6 +398,29 @@ Return a structured response indicating for each edit:
       
       // Complete organization with cache updates
       await this.cacheManager.completeOrganization(fallbackResult);
+      
+      // Post file history update for fallback organization
+      if (typeof window !== 'undefined') {
+        const fileHistoryItems = [
+          ...fallbackResult.updatedPages.map(page => ({
+            uuid: page.uuid,
+            title: page.title,
+            action: 'updated' as const,
+            timestamp: Date.now()
+          })),
+          ...fallbackResult.newPages.map(page => ({
+            uuid: page.uuid,
+            title: page.title,
+            action: 'created' as const,
+            timestamp: Date.now()
+          }))
+        ];
+        
+        window.postMessage({
+          type: 'FILE_HISTORY_UPDATE',
+          data: fileHistoryItems
+        }, '*');
+      }
       
     } catch (error) {
       console.error('❌ Error in fallback organization:', error);
