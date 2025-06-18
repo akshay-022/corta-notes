@@ -428,3 +428,5 @@ export const Constants = {
 export type Page = Tables<'pages'>
 export type PageUpdate = TablesUpdate<'pages'>
 export type PageInsert = TablesInsert<'pages'>
+export type Conversation = Tables<'conversations'>
+export type ChatMessage = Tables<'chat_messages'>

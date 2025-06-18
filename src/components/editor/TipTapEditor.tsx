@@ -566,22 +566,64 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
             return hasSelection
           }}
         >
-          <div className="bg-[#2a2a2a] border border-gray-600 rounded-lg p-3 shadow-lg min-w-[250px] max-w-[400px] z-50">
+          <div className="bg-[#2a2a2a] border border-gray-600 rounded-lg p-3 shadow-lg min-w-[300px] max-w-[500px] z-50">
             <div className="text-xs text-gray-300">
-              {selectedParagraphMetadata && (
-                <div className="mt-2 p-2 bg-[#1a1a1a] rounded">
-                  <div className="text-gray-400">ID: <span className="text-gray-200">{selectedParagraphMetadata.id}</span></div>
-                  {selectedParagraphMetadata.metadata?.whereOrganized && (
-                    <div className="mt-1 text-gray-400">
-                      <div className="font-semibold mb-1">Organized In:</div>
-                      {selectedParagraphMetadata.metadata.whereOrganized.map((w: any) => (
-                        <div key={w.filePath + w.paragraphId} className="pl-2 py-0.5">
-                          • {w.filePath}
+              {selectedParagraphMetadata ? (
+                <div className="space-y-2">
+                  <div className="text-gray-400 font-medium mb-2">Paragraph Metadata</div>
+                  
+                  {/* ID */}
+                  <div className="p-2 bg-[#1a1a1a] rounded">
+                    <div className="text-gray-400">
+                      ID: <span className="text-gray-200 font-mono text-xs break-all">{selectedParagraphMetadata.id || 'No ID'}</span>
+                    </div>
+                  </div>
+
+                  {selectedParagraphMetadata.metadata && (
+                    <>
+                      {/* Last Updated */}
+                      <div className="p-2 bg-[#1a1a1a] rounded">
+                        <div className="text-gray-400">
+                          Last Updated: <span className="text-gray-200">
+                            {selectedParagraphMetadata.metadata.lastUpdated 
+                              ? new Date(selectedParagraphMetadata.metadata.lastUpdated).toLocaleString()
+                              : 'Never'
+                            }
+                          </span>
                         </div>
-                      ))}
+                      </div>
+
+                      {/* Where Organized */}
+                      {selectedParagraphMetadata.metadata.whereOrganized && 
+                       selectedParagraphMetadata.metadata.whereOrganized.length > 0 && (
+                        <div className="p-2 bg-[#1a1a1a] rounded">
+                          <div className="text-gray-400 mb-1">Organized In:</div>
+                          <div className="space-y-1 max-h-20 overflow-y-auto">
+                            {selectedParagraphMetadata.metadata.whereOrganized.map((location: any, index: number) => (
+                              <div key={index} className="text-xs">
+                                <div className="text-blue-400 break-all">{location.filePath}</div>
+                                {location.paragraphId && (
+                                  <div className="text-gray-500 font-mono ml-2">→ {location.paragraphId}</div>
+                                )}
+                                {location.summary_stored && (
+                                  <div className="text-gray-500 ml-2 italic">"{location.summary_stored}"</div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {!selectedParagraphMetadata.metadata && (
+                    <div className="p-2 bg-[#1a1a1a] rounded">
+                      <div className="text-gray-500 italic">No metadata available</div>
                     </div>
                   )}
                 </div>
+              ) : (
+                <div className="text-gray-500 italic">No paragraph metadata</div>
               )}
             </div>
           </div>

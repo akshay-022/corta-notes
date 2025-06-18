@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Page } from '@/lib/supabase/types'
-import { FileText, ArrowLeft, Edit, Trash } from 'lucide-react'
+import { FileText, ArrowLeft, Edit, Trash, EyeOff, Eye } from 'lucide-react'
 
 interface ContextMenu {
   x: number
@@ -20,6 +20,7 @@ interface ChronologicalSidebarProps {
   onBackToNormal: () => void
   deleteItem: (page: Page) => void
   setRenaming: (page: Page) => void
+  togglePageVisibility: (page: Page) => void
   isMobile?: boolean
 }
 
@@ -38,9 +39,12 @@ export default function ChronologicalSidebar({
   onBackToNormal,
   deleteItem,
   setRenaming,
+  togglePageVisibility,
   isMobile = false
 }: ChronologicalSidebarProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
+  const [showHiddenItems, setShowHiddenItems] = useState(false)
+  const [activeTab, setActiveTab] = useState<'organized' | 'unorganized'>('organized')
   const router = useRouter()
 
   const handleContextMenu = (e: React.MouseEvent, page: Page) => {
@@ -69,22 +73,30 @@ export default function ChronologicalSidebar({
     router.push(`/dashboard/page/${page.uuid}`)
   }
   
-  // Filter out folders and deleted items, then sort by updated_at descending
-  const sortedPages = pages
-    .filter(page => 
-      page.type === 'file' && 
-      !page.is_deleted
-    )
-    .sort((a, b) => {
-      const dateA = new Date(a.updated_at || a.created_at || 0)
-      const dateB = new Date(b.updated_at || b.created_at || 0)
-      return dateB.getTime() - dateA.getTime()
-    })
+  // Filter and sort pages by organized status
+  const getFilteredPages = (organized: boolean) => {
+    return pages
+      .filter(page => 
+        page.type === 'file' && 
+        !page.is_deleted &&
+        page.organized === organized &&
+        (showHiddenItems || page.visible !== false)
+      )
+      .sort((a, b) => {
+        const dateA = new Date(a.updated_at || a.created_at || 0)
+        const dateB = new Date(b.updated_at || b.created_at || 0)
+        return dateB.getTime() - dateA.getTime()
+      })
+  }
+
+  const organizedPages = getFilteredPages(true)
+  const unorganizedPages = getFilteredPages(false)
+  const activePages = activeTab === 'organized' ? organizedPages : unorganizedPages
 
   // Group pages by date
   const groupedPages: GroupedPages = {}
   
-  sortedPages.forEach(page => {
+  activePages.forEach(page => {
     const pageDate = new Date(page.updated_at || page.created_at || 0)
     const dateKey = pageDate.toDateString() // "Mon Oct 23 2023"
     
@@ -122,15 +134,8 @@ export default function ChronologicalSidebar({
 
   function formatDateTime(dateString: string, groupDisplayDate: string): string {
     const date = new Date(dateString)
-    const today = new Date()
-    const yesterday = new Date(today)
-    yesterday.setDate(yesterday.getDate() - 1)
     
-    const dateStr = date.toDateString()
-    const todayStr = today.toDateString()
-    const yesterdayStr = yesterday.toDateString()
-    
-    // Only show time if we're in a date group header
+    // Only show time
     const timeDisplay = date.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
@@ -139,8 +144,6 @@ export default function ChronologicalSidebar({
     
     return timeDisplay
   }
-
-  // No longer need the badge function - keeping it simple
 
   return (
     <div 
@@ -152,22 +155,69 @@ export default function ChronologicalSidebar({
       onClick={handleClick}
     >
       <div className="flex flex-col h-full">
-        {/* Fixed Header with back button */}
-        <div className="flex-shrink-0 p-4 border-b border-[#333333]">
-          <button
-            onClick={onBackToNormal}
-            className="flex items-center gap-2 text-[#cccccc] hover:text-white transition-colors cursor-pointer"
-          >
-            <ArrowLeft size={16} />
-            <span className="text-sm font-medium">All Notes</span>
-          </button>
+        {/* Fixed Header with back button and controls */}
+        <div className="flex-shrink-0 border-b border-[#333333]">
+          <div className="p-4">
+            <button
+              onClick={onBackToNormal}
+              className="flex items-center gap-2 text-[#cccccc] hover:text-white transition-colors cursor-pointer"
+            >
+              <ArrowLeft size={16} />
+              <span className="text-sm font-medium">All Notes</span>
+            </button>
+          </div>
+          
+          {/* Tabs for organized/unorganized */}
+          <div className="px-4 pb-2">
+            <div className="flex bg-[#2a2a2a] rounded-lg p-1">
+              <button
+                onClick={() => setActiveTab('organized')}
+                className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  activeTab === 'organized'
+                    ? 'bg-[#007acc] text-white'
+                    : 'text-[#cccccc] hover:bg-[#3a3a3a]'
+                }`}
+              >
+                Organized ({organizedPages.length})
+              </button>
+              <button
+                onClick={() => setActiveTab('unorganized')}
+                className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  activeTab === 'unorganized'
+                    ? 'bg-[#007acc] text-white'
+                    : 'text-[#cccccc] hover:bg-[#3a3a3a]'
+                }`}
+              >
+                Unorganized ({unorganizedPages.length})
+              </button>
+            </div>
+          </div>
+          
+          {/* Show/Hide toggle */}
+          <div className="px-4 pb-2">
+            <button
+              onClick={() => setShowHiddenItems(!showHiddenItems)}
+              className={`w-full text-xs px-2 py-1 rounded transition-colors flex items-center gap-2 ${
+                showHiddenItems 
+                  ? 'bg-[#007acc] text-white' 
+                  : 'text-[#969696] hover:text-[#cccccc] hover:bg-[#2a2a2a]'
+              }`}
+              title={showHiddenItems ? 'Hide hidden items' : 'Show hidden items'}
+            >
+              {showHiddenItems ? <EyeOff size={12} /> : <Eye size={12} />}
+              {showHiddenItems ? 'Hide Hidden' : 'Show Hidden'}
+            </button>
+          </div>
         </div>
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto">
           {Object.keys(groupedPages).length === 0 ? (
             <div className="p-4 text-center">
-              <p className="text-[#969696] text-sm">No notes found</p>
+              <p className="text-[#969696] text-sm">
+                No {activeTab} notes found
+                {!showHiddenItems && ' (some may be hidden)'}
+              </p>
             </div>
           ) : (
             Object.entries(groupedPages).map(([dateKey, group]) => (
@@ -184,6 +234,7 @@ export default function ChronologicalSidebar({
                   {group.pages.map((page, index) => {
                     const isActive = activePage?.uuid === page.uuid
                     const timeDisplay = formatDateTime(page.updated_at || page.created_at || '', group.displayDate)
+                    const isHidden = page.visible === false
                     
                     return (
                       <div
@@ -196,24 +247,46 @@ export default function ChronologicalSidebar({
                             ? 'bg-[#37373d] text-[#cccccc]' 
                             : 'hover:bg-[#2a2d2e] text-[#cccccc]'
                           }
+                          ${isHidden ? 'opacity-60' : ''}
                         `}
                       >
                         {/* File icon */}
                         <div className="w-4 h-4 flex items-center justify-center flex-shrink-0">
-                          <FileText size={14} className="text-[#519aba]" />
+                          <FileText size={14} className={`${isHidden ? 'text-[#969696]' : 'text-[#519aba]'}`} />
                         </div>
 
                         {/* Note info */}
                         <div className="flex-1 min-w-0 ml-3">
                           <div className="mb-1">
-                            <span className="text-sm font-medium text-[#cccccc] truncate block">
+                            <span className={`text-sm font-medium truncate block ${
+                              isHidden ? 'text-[#969696]' : 'text-[#cccccc]'
+                            }`}>
                               {page.title}
+                              {isHidden && <span className="ml-1 text-xs">(hidden)</span>}
                             </span>
                           </div>
                           
                           <div className="text-xs text-[#969696]">
                             {timeDisplay}
                           </div>
+                        </div>
+                        
+                        {/* Hide/Show button - appears on hover */}
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              togglePageVisibility(page)
+                            }}
+                            className="p-1 hover:bg-[#404040] rounded transition-colors"
+                            title={page.visible === false ? `Show "${page.title}"` : `Hide "${page.title}"`}
+                          >
+                            {page.visible === false ? (
+                              <Eye size={12} className="text-[#969696] hover:text-[#cccccc]" />
+                            ) : (
+                              <EyeOff size={12} className="text-[#969696] hover:text-[#cccccc]" />
+                            )}
+                          </button>
                         </div>
                       </div>
                     )
@@ -229,7 +302,7 @@ export default function ChronologicalSidebar({
           <div className="flex items-center justify-center gap-2">
             <div className="w-1 h-1 bg-[#666666] rounded-full"></div>
             <span className="text-[#666666] text-xs font-medium">
-              {sortedPages.length} {sortedPages.length === 1 ? 'note' : 'notes'}
+              {activePages.length} {activePages.length === 1 ? 'note' : 'notes'}
             </span>
             <div className="w-1 h-1 bg-[#666666] rounded-full"></div>
           </div>
@@ -252,6 +325,25 @@ export default function ChronologicalSidebar({
           >
             <Edit size={12} />
             Rename
+          </button>
+          <button
+            className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-[#3a3a3a] flex items-center gap-2"
+            onClick={() => {
+              togglePageVisibility(contextMenu.item)
+              setContextMenu(null)
+            }}
+          >
+            {contextMenu.item.visible === false ? (
+              <>
+                <Eye size={12} />
+                Show
+              </>
+            ) : (
+              <>
+                <EyeOff size={12} />
+                Hide
+              </>
+            )}
           </button>
           <button
             className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-[#3a3a3a] flex items-center gap-2"
