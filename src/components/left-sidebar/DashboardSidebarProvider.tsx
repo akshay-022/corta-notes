@@ -204,15 +204,85 @@ export default function DashboardSidebarProvider({ children }: { children: React
       // Could show error notification here
     }
 
+    // Enhanced cache update handlers for optimized performance
+    const handleCacheUpdate = async (event: MessageEvent) => {
+      if (event.data.type === 'ORGANIZATION_CACHE_UPDATE') {
+        const { updatedPages, newPages, timestamp } = event.data.data
+        console.log('🧠 Received optimized cache update:', { 
+          updatedCount: updatedPages.length, 
+          newCount: newPages.length,
+          timestamp 
+        })
+        
+        // Immediately update the local state with the new data
+        setPages(prevPages => {
+          const updatedPageMap = new Map(updatedPages.map((page: Page) => [page.uuid, page]))
+          const newPageMap = new Map(newPages.map((page: Page) => [page.uuid, page]))
+          
+          // Update existing pages
+          const updatedExistingPages = prevPages.map(page => {
+            if (updatedPageMap.has(page.uuid)) {
+              return updatedPageMap.get(page.uuid)!
+            }
+            return page
+          })
+          
+          // Add new pages
+          const finalPages = [...updatedExistingPages, ...newPages]
+          
+          console.log('🧠 ✅ Immediate cache update applied:', { 
+            totalPages: finalPages.length,
+            newlyAdded: newPages.length
+          })
+          
+          return finalPages
+        })
+        
+        // Update active page if it was modified
+        if (activePage) {
+          const updatedActivePage = updatedPages.find((page: Page) => page.uuid === activePage.uuid)
+          if (updatedActivePage) {
+            setActivePage(updatedActivePage)
+            console.log('🧠 ✅ Active page updated immediately')
+          }
+        }
+        
+        // Show immediate notification
+        window.postMessage({
+          type: 'ORGANIZATION_NOTIFICATION',
+          data: { 
+            message: `✅ Organization complete: ${updatedPages.length} updated, ${newPages.length} created`
+          }
+        }, '*')
+      }
+    }
+
+    const handleRefreshRequired = async (event: MessageEvent) => {
+      if (event.data.type === 'ORGANIZATION_REFRESH_REQUIRED') {
+        const { reason, timestamp } = event.data.data
+        console.log('🧠 Full refresh requested:', { reason, timestamp })
+        
+        // Perform a full refresh to ensure data consistency
+        await refreshOrganizedNotes()
+        console.log('🧠 ✅ Full refresh completed for consistency')
+      }
+    }
+
     // Listen for thought-tracking events
     window.addEventListener('thought-tracking:organization-complete', handleOrganizationComplete)
     window.addEventListener('thought-tracking:organization-error', handleOrganizationError)
+    
+    // Listen for optimized cache update events
+    window.addEventListener('message', handleCacheUpdate)
+    window.addEventListener('message', handleRefreshRequired)
 
     return () => {
       window.removeEventListener('thought-tracking:organization-complete', handleOrganizationComplete)
       window.removeEventListener('thought-tracking:organization-error', handleOrganizationError)
+      window.removeEventListener('message', handleCacheUpdate)
+      window.removeEventListener('message', handleRefreshRequired)
     }
-  }, [pages]) // Keep pages dependency since we use it for folder highlighting
+  }, [pages, activePage]) // Added activePage dependency for immediate updates
 
   const handleManualSync = async () => {
     try {

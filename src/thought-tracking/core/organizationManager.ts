@@ -8,19 +8,34 @@ import {
 } from '../types';
 import { calculateTextSimilarity, generateId } from '../utils/helpers';
 import { ORGANIZATION_DEFAULTS, API_ENDPOINTS } from '../constants';
+import { createClient } from '@/lib/supabase/supabase-client';
+import { Page, PageUpdate, PageInsert } from '@/lib/supabase/types';
+import { organizationCacheManager, OrganizationCacheManager } from '../services/organizationCacheManager';
 
 export class OrganizationManager {
   private storageManager: StorageManager;
   private apiEndpoint: string;
   private defaultConfig: OrganizationConfig;
+  private supabase: any;
+  private userId?: string;
+  private cacheManager: OrganizationCacheManager;
 
   constructor(
     storageManager: StorageManager, 
-    apiEndpoint: string = API_ENDPOINTS.ORGANIZATION
+    apiEndpoint: string = API_ENDPOINTS.ORGANIZATION,
+    userId?: string
   ) {
     this.storageManager = storageManager;
     this.apiEndpoint = apiEndpoint;
     this.defaultConfig = ORGANIZATION_DEFAULTS;
+    this.supabase = createClient();
+    this.userId = userId;
+    this.cacheManager = organizationCacheManager;
+    
+    // Set userId in cache manager
+    if (userId) {
+      this.cacheManager.setUserId(userId);
+    }
   }
 
   async organizeContent(edits: ParagraphEdit[]): Promise<OrganizationResult> {
@@ -33,7 +48,21 @@ export class OrganizationManager {
       };
     }
 
+    // Prevent concurrent organization
+    if (this.cacheManager.isOrganizing()) {
+      console.warn('Organization already in progress, skipping...');
+      return {
+        updatedPages: [],
+        newPages: [],
+        summary: 'Organization already in progress',
+        processedEditIds: [],
+      };
+    }
+
     try {
+      // Start organization process
+      this.cacheManager.startOrganization();
+      
       // Load existing organized pages
       const existingPages = await this.storageManager.loadOrganizedPages();
       
@@ -43,8 +72,11 @@ export class OrganizationManager {
       // Call organization API
       const result = await this.callOrganizationAPI(request);
       
-      // Process and save results
+      // Process and save results with Supabase integration
       await this.processOrganizationResult(result);
+      
+      // Complete organization with cache updates
+      await this.cacheManager.completeOrganization(result);
       
       return result;
     } catch (error) {
@@ -138,11 +170,124 @@ Return a structured response indicating for each edit:
   }
 
   private async processOrganizationResult(result: OrganizationResult): Promise<void> {
-    // Save updated and new pages
-    const existingPages = await this.storageManager.loadOrganizedPages();
-    const allPages = this.mergePages(existingPages, result.updatedPages, result.newPages);
+    try {
+      // Save to storage manager (for compatibility)
+      const existingPages = await this.storageManager.loadOrganizedPages();
+      const allPages = this.mergePages(existingPages, result.updatedPages, result.newPages);
+      await this.storageManager.saveOrganizedPages(allPages);
+
+      // Direct Supabase updates for better performance and consistency
+      await this.updateSupabasePages(result);
+      
+      console.log('✅ Organization result processed successfully');
+    } catch (error) {
+      console.error('❌ Error processing organization result:', error);
+      throw error;
+    }
+  }
+
+  private async updateSupabasePages(result: OrganizationResult): Promise<void> {
+    if (!this.userId) {
+      console.warn('No userId provided, skipping Supabase updates');
+      return;
+    }
+
+    const promises: Promise<any>[] = [];
+
+    // Update existing pages
+    for (const page of result.updatedPages) {
+      if (page.uuid) {
+        const updateData: PageUpdate = {
+          title: page.title,
+          content: page.content,
+          content_text: page.content_text,
+          organized: page.organized,
+          metadata: {
+            ...page.metadata,
+            thoughtTracking: {
+              ...page.metadata?.thoughtTracking,
+              lastOrganizationUpdate: new Date().toISOString(),
+              editUpdates: (page.metadata?.thoughtTracking?.editUpdates || 0) + 1
+            }
+          },
+          updated_at: new Date().toISOString(),
+        };
+
+        if (page.description) updateData.description = page.description;
+        if (page.emoji) updateData.emoji = page.emoji;
+        if (page.parent_uuid) updateData.parent_uuid = page.parent_uuid;
+
+        const updatePromise = this.supabase
+          .from('pages')
+          .update(updateData)
+          .eq('uuid', page.uuid)
+          .eq('user_id', this.userId);
+
+        promises.push(updatePromise);
+      }
+    }
+
+    // Create new pages
+    for (const page of result.newPages) {
+      const insertData: PageInsert = {
+        user_id: this.userId,
+        title: page.title,
+        content: page.content || { type: "doc", content: [] },
+        content_text: page.content_text,
+        organized: page.organized !== false,
+        type: page.type || 'file',
+        visible: page.visible !== false,
+        is_deleted: false,
+        is_published: false,
+        is_locked: false,
+        metadata: {
+          thoughtTracking: {
+            tags: page.tags,
+            category: page.category,
+            relatedPages: page.relatedPages,
+            createdFromOrganization: true,
+            organizationTimestamp: new Date().toISOString()
+          },
+          ...page.metadata
+        },
+      };
+
+      if (page.description) insertData.description = page.description;
+      if (page.emoji) insertData.emoji = page.emoji;
+      if (page.parent_uuid) insertData.parent_uuid = page.parent_uuid;
+      if (page.uuid) insertData.uuid = page.uuid;
+
+      const insertPromise = this.supabase
+        .from('pages')
+        .insert(insertData)
+        .select('*')
+        .single();
+
+      promises.push(insertPromise);
+    }
+
+    // Execute all updates/inserts in parallel
+    const results = await Promise.allSettled(promises);
     
-    await this.storageManager.saveOrganizedPages(allPages);
+    // Log any errors but don't fail the entire operation
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.error(`❌ Supabase operation ${index} failed:`, result.reason);
+      }
+    });
+
+    console.log(`✅ Completed ${promises.length} Supabase operations for organization`);
+  }
+
+  private async updateClientCache(result: OrganizationResult): Promise<void> {
+    try {
+      // Use cache manager for coordinated updates
+      await this.cacheManager.completeOrganization(result);
+      
+      console.log('✅ Client cache updated via cache manager');
+    } catch (error) {
+      console.error('❌ Error updating client cache:', error);
+    }
   }
 
   private mergePages(
@@ -169,6 +314,9 @@ Return a structured response indicating for each edit:
   }
 
   private async performFallbackOrganization(edits: ParagraphEdit[]): Promise<OrganizationResult> {
+    // Start fallback organization
+    this.cacheManager.startOrganization();
+    
     const existingPages = await this.storageManager.loadOrganizedPages();
     const newPages: OrganizedPage[] = [];
     const updatedPages: OrganizedPage[] = [];
@@ -237,12 +385,26 @@ Return a structured response indicating for each edit:
       }
     }
 
-    return {
+    const fallbackResult = {
       updatedPages,
       newPages,
       summary: `Fallback organization: ${updatedPages.length} pages updated, ${newPages.length} pages created (prioritized existing files)`,
       processedEditIds: edits.map(e => e.id),
     };
+
+    try {
+      // Apply fallback result to Supabase
+      await this.updateSupabasePages(fallbackResult);
+      
+      // Complete organization with cache updates
+      await this.cacheManager.completeOrganization(fallbackResult);
+      
+    } catch (error) {
+      console.error('❌ Error in fallback organization:', error);
+      // Still return the result even if cache update fails
+    }
+
+    return fallbackResult;
   }
 
   private findBestPageMatch(edit: ParagraphEdit, pages: OrganizedPage[]): OrganizedPage | null {
@@ -443,6 +605,8 @@ Return a structured response indicating for each edit:
     totalOrganizedPages: number;
     lastOrganization: number | null;
     averagePageSize: number;
+    cacheVersion: number;
+    isOrganizing: boolean;
   }> {
     const pages = await this.storageManager.loadOrganizedPages();
     const organizedPages = pages.filter(page => page.organized);
@@ -460,10 +624,14 @@ Return a structured response indicating for each edit:
       }
     });
 
+    const cacheState = this.cacheManager.getState();
+
     return {
       totalOrganizedPages: organizedPages.length,
-      lastOrganization,
+      lastOrganization: cacheState.lastOrganization || lastOrganization,
       averagePageSize,
+      cacheVersion: cacheState.cacheVersion,
+      isOrganizing: cacheState.isOrganizing,
     };
   }
 
@@ -473,5 +641,33 @@ Return a structured response indicating for each edit:
 
   updateApiEndpoint(endpoint: string): void {
     this.apiEndpoint = endpoint;
+  }
+
+  setUserId(userId: string): void {
+    this.userId = userId;
+    this.cacheManager.setUserId(userId);
+    
+    // Update storage manager if it supports it
+    if (this.storageManager.setUserId) {
+      this.storageManager.setUserId(userId);
+    }
+  }
+
+  getUserId(): string | undefined {
+    return this.userId;
+  }
+
+  /**
+   * Get the cache manager instance for external access
+   */
+  getCacheManager(): OrganizationCacheManager {
+    return this.cacheManager;
+  }
+
+  /**
+   * Check if organization is currently in progress
+   */
+  isOrganizing(): boolean {
+    return this.cacheManager.isOrganizing();
   }
 } 
