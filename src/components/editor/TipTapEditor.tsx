@@ -8,10 +8,11 @@ import Typography from '@tiptap/extension-typography'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Page, PageUpdate } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/supabase-client'
-import { Calendar, Minus, Info, Edit2, Save, X } from 'lucide-react'
+import { Calendar, Minus, Info, Edit2, Save, X, FileText, Eye } from 'lucide-react'
 import ChatPanel, { ChatPanelHandle } from '../right-sidebar/ChatPanel'
 import { setupThoughtTracking } from '@/thought-tracking/integration/editor-integration'
 import { ThoughtParagraph } from '@/thought-tracking/extensions/paragraph-extension'
+import logger from '@/lib/logger'
 
 interface TipTapEditorProps {
   page: Page
@@ -31,11 +32,15 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   const [selectedParagraphMetadata, setSelectedParagraphMetadata] = useState<{id: string, metadata: any, pos?: number} | null>(null)
   const [isEditingMetadata, setIsEditingMetadata] = useState(false)
   const [metadataEditValue, setMetadataEditValue] = useState('')
+  const [showSummary, setShowSummary] = useState(false) // Toggle between content and summary
   
   const titleInputRef = useRef<HTMLInputElement>(null)
   const currentPageRef = useRef(page.uuid)
   const chatPanelRef = useRef<ChatPanelHandle>(null)
   const supabase = createClient()
+
+  // Determine which content to show based on toggle
+  const currentContent = showSummary ? (page.page_summary || page.content) : page.content
 
   const editor = useEditor({
     extensions: [
@@ -49,16 +54,17 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
         },
       }),
       Placeholder.configure({
-        placeholder: "Start thinking!",
+        placeholder: showSummary ? "Page summary..." : "Start thinking!",
       }),
       Typography,
     ],
-    content: page.content as any,
+    content: currentContent as any,
     editorProps: {
       attributes: {
         class: 'prose prose-invert max-w-none focus:outline-none min-h-[calc(100vh-180px)] md:min-h-[calc(100vh-120px)] px-4 py-4 md:px-16 md:py-8 prose-sm md:prose-base text-sm md:text-base leading-relaxed',
       },
     },
+    editable: !showSummary, // Make read-only when showing summary
     onUpdate: ({ editor }) => {
       setIsUserTyping(true)
       debounceUpdate(editor.getJSON(), editor.getText())
@@ -71,8 +77,8 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     return (content: any, textContent: string) => {
       clearTimeout(timeoutId)
       timeoutId = setTimeout(() => {
+        setIsUserTyping(false) // User stopped typing (set first so updatePage can propagate changes)
         updatePage(content, textContent)
-        setIsUserTyping(false) // User stopped typing
       }, 1000) // Save after 1 second of inactivity
     }
   })()
@@ -283,7 +289,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
 
     const updateSelection = () => {
       const metadata = getSelectedParagraphMetadata()
-      console.log('Selection updated, metadata:', metadata)
+      // console.log('Selection updated, metadata:', metadata) // Disabled to reduce noise
       setSelectedParagraphMetadata(metadata)
     }
 
@@ -292,7 +298,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     return () => {
       editor.off('selectionUpdate', updateSelection)
     }
-  }, [editor, getSelectedParagraphMetadata])
+  }, [editor]) // Removed getSelectedParagraphMetadata dependency to prevent loop
 
   // Command+K keyboard shortcut to open chat
   useEffect(() => {
@@ -372,7 +378,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     }
   }, [editor, page.uuid]) // Removed pageRefreshCallback from dependencies to prevent unnecessary re-runs
 
-  // Update editor content when page changes (but not when user is typing)
+  // Update editor content when page changes or toggle changes
   useEffect(() => {
     // Only update content if we switched to a different page
     const pageChanged = currentPageRef.current !== page.uuid
@@ -380,7 +386,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     if (pageChanged) {
       currentPageRef.current = page.uuid
       if (editor) {
-        editor.commands.setContent(page.content as any)
+        editor.commands.setContent(currentContent as any)
       }
       setTitle(page.title)
       setIsUserTyping(false)
@@ -395,6 +401,14 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     // Content updates from user typing should NOT trigger editor.setContent()
   }, [page.uuid, page.title, editor]) // Removed page.content dependency
 
+  // Update editor content when summary toggle changes
+  useEffect(() => {
+    if (editor) {
+      editor.commands.setContent(currentContent as any)
+      editor.setEditable(!showSummary) // Update editable state
+    }
+  }, [showSummary, page.uuid, editor])
+
   if (!editor) {
     return (
       <div className="flex-1 flex items-center justify-center bg-[#1a1a1a]">
@@ -408,9 +422,37 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       className="flex-1 bg-[#1a1a1a] flex flex-col overflow-hidden w-full"
       data-editor
     >
-      {/* Minimal toolbar - appears on hover */}
-      <div className="absolute top-4 right-4 md:right-6 z-10 opacity-0 hover:opacity-100 transition-opacity">
+      {/* Minimal toolbar - always visible */}
+      <div className="absolute top-4 right-4 md:right-6 z-10">
         <div className="flex items-center gap-1 bg-[#2a2a2a] rounded-lg p-1 border border-gray-700">
+          {/* Summary Toggle - show for organized pages */}
+          {page.organized && (
+            <>
+              <button
+                onClick={() => {
+                  const newShowSummary = !showSummary
+                  setShowSummary(newShowSummary)
+                  logger.info(`Toggled to ${newShowSummary ? 'summary' : 'content'} view`, {
+                    pageUuid: page.uuid,
+                    pageTitle: page.title,
+                    hasSummary: !!page.page_summary,
+                    summaryEmpty: !page.page_summary
+                  })
+                }}
+                className={`p-1.5 rounded transition-colors ${
+                  showSummary 
+                    ? 'text-blue-400 bg-blue-500/20' 
+                    : 'text-gray-400 hover:text-white hover:bg-[#3a3a3a]'
+                }`}
+                title={showSummary ? "Show full content" : "Show summary"}
+              >
+                {showSummary ? <FileText size={14} /> : <Eye size={14} />}
+              </button>
+              
+              <div className="w-px h-4 bg-gray-600" />
+            </>
+          )}
+          
           <button
             onClick={insertHorizontalRule}
             className="p-1.5 text-gray-400 hover:text-white hover:bg-[#3a3a3a] rounded transition-colors"
@@ -453,37 +495,47 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                 placeholder="Untitled"
               />
             ) : (
-              <h1
-                onClick={startEditingTitle}
-                onKeyDown={(e) => {
-                  // Start editing on any printable character or backspace/delete
-                  if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') {
-                    e.preventDefault()
-                    startEditingTitle()
-                    // If it's a printable character, we'll set it as the new title
-                    if (e.key.length === 1) {
-                      setTimeout(() => {
-                        setTitle(e.key)
-                        // Position cursor at the end
-                        if (titleInputRef.current) {
-                          titleInputRef.current.setSelectionRange(1, 1)
-                        }
-                      }, 0)
-                    } else {
-                      // For backspace/delete, clear the title
-                      setTimeout(() => {
-                        setTitle('')
-                      }, 0)
+              <div className="flex items-center gap-3">
+                <h1
+                  onClick={startEditingTitle}
+                  onKeyDown={(e) => {
+                    // Start editing on any printable character or backspace/delete
+                    if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') {
+                      e.preventDefault()
+                      startEditingTitle()
+                      // If it's a printable character, we'll set it as the new title
+                      if (e.key.length === 1) {
+                        setTimeout(() => {
+                          setTitle(e.key)
+                          // Position cursor at the end
+                          if (titleInputRef.current) {
+                            titleInputRef.current.setSelectionRange(1, 1)
+                          }
+                        }, 0)
+                      } else {
+                        // For backspace/delete, clear the title
+                        setTimeout(() => {
+                          setTitle('')
+                        }, 0)
+                      }
                     }
-                  }
-                }}
-                tabIndex={0} // Make it focusable
-                className="text-white text-2xl md:text-4xl font-bold cursor-text hover:bg-[#2a2a2a]/30 rounded px-1 py-1 -mx-1 transition-colors min-h-[2rem] md:min-h-[3rem] flex items-center focus:outline-none focus:bg-[#2a2a2a]/30"
-              >
-                {title || (
-                  <span className="text-gray-600">Untitled</span>
+                  }}
+                  tabIndex={0} // Make it focusable
+                  className="text-white text-2xl md:text-4xl font-bold cursor-text hover:bg-[#2a2a2a]/30 rounded px-1 py-1 -mx-1 transition-colors min-h-[2rem] md:min-h-[3rem] flex items-center focus:outline-none focus:bg-[#2a2a2a]/30"
+                >
+                  {title || (
+                    <span className="text-gray-600">Untitled</span>
+                  )}
+                </h1>
+                
+                {/* Summary indicator */}
+                {showSummary && (
+                  <span className="text-blue-400 text-sm bg-blue-500/20 px-2 py-1 rounded-md flex items-center gap-1">
+                    <Eye size={12} />
+                    Summary
+                  </span>
                 )}
-              </h1>
+              </div>
             )}
           </div>
 

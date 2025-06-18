@@ -12,7 +12,7 @@ export type Database = {
       chat_messages: {
         Row: {
           content: string
-          conversation_id: string
+          conversation_id: string | null
           created_at: string | null
           id: string
           is_user_message: boolean | null
@@ -21,7 +21,7 @@ export type Database = {
         }
         Insert: {
           content: string
-          conversation_id: string
+          conversation_id?: string | null
           created_at?: string | null
           id?: string
           is_user_message?: boolean | null
@@ -30,7 +30,7 @@ export type Database = {
         }
         Update: {
           content?: string
-          conversation_id?: string
+          conversation_id?: string | null
           created_at?: string | null
           id?: string
           is_user_message?: boolean | null
@@ -77,6 +77,41 @@ export type Database = {
         }
         Relationships: []
       }
+      document_supermemory_mapping: {
+        Row: {
+          created_at: string | null
+          id: number
+          page_uuid: string
+          supermemory_id: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: number
+          page_uuid: string
+          supermemory_id: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: number
+          page_uuid?: string
+          supermemory_id?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_supermemory_mapping_page_uuid_fkey"
+            columns: ["page_uuid"]
+            isOneToOne: true
+            referencedRelation: "pages"
+            referencedColumns: ["uuid"]
+          },
+        ]
+      }
       pages: {
         Row: {
           content: Json | null
@@ -88,15 +123,17 @@ export type Database = {
           is_deleted: boolean | null
           is_locked: boolean | null
           is_published: boolean | null
+          last_summary_content: Json | null
           metadata: Json | null
-          organized: boolean | null
+          organized: boolean
+          page_summary: Json | null
           parent_uuid: string | null
           title: string
-          type: string | null
+          type: string
           updated_at: string | null
           user_id: string | null
           uuid: string
-          visible: boolean | null
+          visible: boolean
         }
         Insert: {
           content?: Json | null
@@ -108,15 +145,17 @@ export type Database = {
           is_deleted?: boolean | null
           is_locked?: boolean | null
           is_published?: boolean | null
+          last_summary_content?: Json | null
           metadata?: Json | null
-          organized?: boolean | null
+          organized?: boolean
+          page_summary?: Json | null
           parent_uuid?: string | null
           title: string
-          type?: string | null
+          type?: string
           updated_at?: string | null
           user_id?: string | null
           uuid?: string
-          visible?: boolean | null
+          visible?: boolean
         }
         Update: {
           content?: Json | null
@@ -128,15 +167,17 @@ export type Database = {
           is_deleted?: boolean | null
           is_locked?: boolean | null
           is_published?: boolean | null
+          last_summary_content?: Json | null
           metadata?: Json | null
-          organized?: boolean | null
+          organized?: boolean
+          page_summary?: Json | null
           parent_uuid?: string | null
           title?: string
-          type?: string | null
+          type?: string
           updated_at?: string | null
           user_id?: string | null
           uuid?: string
-          visible?: boolean | null
+          visible?: boolean
         }
         Relationships: [
           {
@@ -150,6 +191,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          brain_state: Json | null
           created_at: string | null
           fullname: string | null
           id: number
@@ -158,6 +200,7 @@ export type Database = {
           username: string | null
         }
         Insert: {
+          brain_state?: Json | null
           created_at?: string | null
           fullname?: string | null
           id?: number
@@ -166,6 +209,7 @@ export type Database = {
           username?: string | null
         }
         Update: {
+          brain_state?: Json | null
           created_at?: string | null
           fullname?: string | null
           id?: number
@@ -180,13 +224,91 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      bytea_to_text: {
+        Args: { data: string }
+        Returns: string
+      }
+      http: {
+        Args: { request: Database["public"]["CompositeTypes"]["http_request"] }
+        Returns: Database["public"]["CompositeTypes"]["http_response"]
+      }
+      http_delete: {
+        Args:
+          | { uri: string }
+          | { uri: string; content: string; content_type: string }
+        Returns: Database["public"]["CompositeTypes"]["http_response"]
+      }
+      http_get: {
+        Args: { uri: string } | { uri: string; data: Json }
+        Returns: Database["public"]["CompositeTypes"]["http_response"]
+      }
+      http_head: {
+        Args: { uri: string }
+        Returns: Database["public"]["CompositeTypes"]["http_response"]
+      }
+      http_header: {
+        Args: { field: string; value: string }
+        Returns: Database["public"]["CompositeTypes"]["http_header"]
+      }
+      http_list_curlopt: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          curlopt: string
+          value: string
+        }[]
+      }
+      http_patch: {
+        Args: { uri: string; content: string; content_type: string }
+        Returns: Database["public"]["CompositeTypes"]["http_response"]
+      }
+      http_post: {
+        Args:
+          | { uri: string; content: string; content_type: string }
+          | { uri: string; data: Json }
+        Returns: Database["public"]["CompositeTypes"]["http_response"]
+      }
+      http_put: {
+        Args: { uri: string; content: string; content_type: string }
+        Returns: Database["public"]["CompositeTypes"]["http_response"]
+      }
+      http_reset_curlopt: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
+      http_set_curlopt: {
+        Args: { curlopt: string; value: string }
+        Returns: boolean
+      }
+      text_to_bytea: {
+        Args: { data: string }
+        Returns: string
+      }
+      urlencode: {
+        Args: { data: Json } | { string: string } | { string: string }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
     }
     CompositeTypes: {
-      [_ in never]: never
+      http_header: {
+        field: string | null
+        value: string | null
+      }
+      http_request: {
+        method: unknown | null
+        uri: string | null
+        headers: Database["public"]["CompositeTypes"]["http_header"][] | null
+        content_type: string | null
+        content: string | null
+      }
+      http_response: {
+        status: number | null
+        content_type: string | null
+        headers: Database["public"]["CompositeTypes"]["http_header"][] | null
+        content: string | null
+      }
     }
   }
 }
@@ -302,25 +424,6 @@ export const Constants = {
   },
 } as const
 
-// Convenient type aliases for our app
-export type Profile = Tables<'profiles'>
+// Convenience type aliases
 export type Page = Tables<'pages'>
-export type ChatMessage = Tables<'chat_messages'>
-export type Conversation = Tables<'conversations'>
-
-export type PageInsert = TablesInsert<'pages'>
 export type PageUpdate = TablesUpdate<'pages'>
-export type ChatMessageInsert = TablesInsert<'chat_messages'>
-export type ConversationInsert = TablesInsert<'conversations'>
-export type ConversationUpdate = TablesUpdate<'conversations'>
-
-// TipTap content type (more specific than generic Json)
-export type TipTapContent = {
-  type: 'doc'
-  content?: Array<{
-    type: string
-    attrs?: Record<string, any>
-    content?: Array<any>
-    text?: string
-  }>
-}
