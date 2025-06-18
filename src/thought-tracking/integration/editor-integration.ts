@@ -3,11 +3,7 @@ import { ThoughtTracker, SupabaseStorageManager, EVENTS } from '../index'
 import { createClient } from '@/lib/supabase/supabase-client'
 import { Page } from '@/lib/supabase/types'
 import { 
-  convertParagraphNumberToPosition, 
-  setParagraphMetadata, 
-  getParagraphMetadata,
   setNewParagraphIds,
-  ensureCurrentParagraphId,
   ParagraphMetadata 
 } from '@/components/editor/paragraph-metadata'
 
@@ -43,7 +39,8 @@ export async function setupThoughtTracking(
     const tracker = new ThoughtTracker(
       storageManager,
       '/api/summarize',
-      '/api/organize-note'
+      '/api/organize-note',
+      user.id
     )
 
     await tracker.initialize()
@@ -71,30 +68,30 @@ export async function setupThoughtTracking(
         // Set IDs for block-level nodes that don't have them yet
         setNewParagraphIds(editor, pageUuid)
 
-        // Find which specific paragraph changed
-        const changedParagraph = findChangedParagraph(stableContent, currentContent)
+        // Find which specific paragraphs changed using actual node metadata
+        const changedParagraphs = findChangedParagraphsWithMetadata(stableContent, currentContent, editor)
         
-        if (changedParagraph) {
+        for (const changedParagraph of changedParagraphs) {
           try {
-            // Update paragraph metadata
-            //await updateParagraphMetadata(editor, changedParagraph)
-
-            // Track the edit in thought tracking system
+            // Track the edit in thought tracking system using actual paragraph metadata
             await tracker.trackEdit({
-              paragraphId: `${pageUuid}-para-${changedParagraph.index}`,
+              paragraphId: changedParagraph.paragraphMetadata?.id || `${pageUuid}-fallback-${Date.now()}`,
               pageId: pageUuid,
-              content: changedParagraph.content, // Only this paragraph's content  
+              content: changedParagraph.content,
               editType: changedParagraph.editType,
+              paragraphMetadata: changedParagraph.paragraphMetadata || undefined,
               metadata: {
                 wordCount: changedParagraph.content.split(/\s+/).filter(word => word.length > 0).length,
-                charCount: changedParagraph.content.length
+                charCount: changedParagraph.content.length,
+                position: changedParagraph.position
               }
             })
 
-            console.log(`🧠 Tracked ${changedParagraph.editType} for paragraph ${changedParagraph.index}:`, {
+            console.log(`🧠 Tracked ${changedParagraph.editType} for paragraph:`, {
               content: changedParagraph.content.substring(0, 50) + (changedParagraph.content.length > 50 ? '...' : ''),
               pageUuid,
-              paragraphId: `${pageUuid}-para-${changedParagraph.index}`,
+              paragraphId: changedParagraph.paragraphMetadata?.id,
+              position: changedParagraph.position,
               timestamp: new Date().toISOString()
             })
 
@@ -111,85 +108,78 @@ export async function setupThoughtTracking(
       }
     }
 
-    // Helper function to update paragraph metadata
-    const updateParagraphMetadata = async (editor: Editor, changedParagraph: any) => {
-      try {
-        // Get the position of the changed paragraph
-        const position = convertParagraphNumberToPosition(editor, changedParagraph.index)
-        
-        if (position > 0) {
-          // Check if paragraph already has an ID
-          const existingMetadata = getParagraphMetadata(editor, position)
-          
-          // Create metadata update
-          const metadata: Partial<ParagraphMetadata> = {
-            lastUpdated: new Date().toISOString(),
-            organizationStatus: 'no', // Reset to unorganized when content changes
-            isOrganized: false
-          }
-          
-          // Only generate new ID if paragraph doesn't have one
-          if (!existingMetadata?.id || existingMetadata.id.startsWith('para-')) {
-            const randomHex = Math.random().toString(16).substring(2, 10) // 8 char hex
-            const timestamp = Date.now() // raw timestamp 
-            const paragraphId = `${pageUuid}-para-${timestamp}-${randomHex}`
-            metadata.id = paragraphId
-          }
-
-          // Update the paragraph metadata
-          const success = setParagraphMetadata(editor, position, metadata)
-          
-          if (success) {
-            console.log(`📝 Updated metadata for paragraph ${changedParagraph.index}:`, {
-              paragraphId: existingMetadata?.id || metadata.id || 'existing-id',
-              editType: changedParagraph.editType,
-              position
-            })
-          } else {
-            console.warn(`📝 Failed to update metadata for paragraph ${changedParagraph.index}`)
-          }
-        }
-      } catch (error) {
-        console.error('Error updating paragraph metadata:', error)
-      }
-    }
-
-    // Helper function to find which specific paragraph changed
-    const findChangedParagraph = (oldContent: any, newContent: any) => {
-      const oldParagraphs = extractParagraphs(oldContent)
-      const newParagraphs = extractParagraphs(newContent)
+    // Helper function to get paragraph metadata similar to getSelectedParagraphMetadata
+    const getParagraphMetadataFromEditor = (editor: Editor, targetContent: string): {
+      metadata: ParagraphMetadata | null;
+      position: number;
+    } | null => {
+      let result: { metadata: ParagraphMetadata | null; position: number } | null = null;
       
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'paragraph' && node.textContent === targetContent) {
+          result = {
+            metadata: node.attrs?.metadata || null,
+            position: pos
+          };
+          return false; // Stop traversal
+        }
+      });
+      
+      return result;
+    };
+
+    // Helper function to find changed paragraphs using actual metadata
+    const findChangedParagraphsWithMetadata = (oldContent: any, newContent: any, editor: Editor) => {
+      const changes: Array<{
+        paragraphMetadata: ParagraphMetadata | null;
+        content: string;
+        editType: 'create' | 'update' | 'delete';
+        position: number;
+      }> = []
+
+      // Extract paragraph content for comparison
+      const oldParagraphs = extractParagraphsFromContent(oldContent)
+      const newParagraphs = extractParagraphsFromContent(newContent)
+
+      // Find paragraphs that have changed
       const maxLength = Math.max(oldParagraphs.length, newParagraphs.length)
       
-      // Find first changed paragraph
       for (let i = 0; i < maxLength; i++) {
         const oldPara = oldParagraphs[i] || ''
         const newPara = newParagraphs[i] || ''
         
         if (oldPara !== newPara) {
           let editType: 'create' | 'update' | 'delete'
+          let contentToUse = newPara
           
           if (oldPara === '' && newPara !== '') {
             editType = 'create'
           } else if (newPara === '') {
             editType = 'delete'
+            contentToUse = oldPara // Use old content for delete operations
           } else {
             editType = 'update'
           }
           
-          return {
-            index: i,
-            content: newPara, // Empty string for delete
-            editType
+          // Get metadata for this paragraph from the editor
+          const paragraphInfo = getParagraphMetadataFromEditor(editor, contentToUse)
+          
+          if (paragraphInfo || editType === 'delete') {
+            changes.push({
+              paragraphMetadata: paragraphInfo?.metadata || null,
+              content: newPara, // Always use new content (empty for delete)
+              editType,
+              position: paragraphInfo?.position || 0
+            })
           }
         }
       }
       
-      return null // No changes found
+      return changes
     }
 
-    // Helper function to extract paragraphs
-    const extractParagraphs = (content: any): string[] => {
+    // Helper function to extract paragraphs from content JSON
+    const extractParagraphsFromContent = (content: any): string[] => {
       if (!content?.content) return []
       
       return content.content.map((node: any) => {
@@ -198,8 +188,6 @@ export async function setupThoughtTracking(
         }
         return ''
       })
-      // Note: We keep all paragraphs including empty ones to maintain position indexing
-      // This is important for tracking which specific paragraph changed
     }
 
     // Set up debounced change tracking
@@ -214,7 +202,7 @@ export async function setupThoughtTracking(
       // Quick check for rapid changes (don't track these)
       quickChangeTimeout = setTimeout(() => {
         // Only set the main timeout if user is still editing
-        changeTimeout = setTimeout(trackContentChanges, 500) // 2 seconds for content changes
+        changeTimeout = setTimeout(trackContentChanges, 500) // 500ms for content changes
       }, 500) // 500ms quick debounce to avoid tracking rapid keystrokes
     }
 

@@ -1,16 +1,32 @@
 // Core types for the thought-tracking system
 
+// Import paragraph metadata type
+export interface ParagraphMetadata {
+  id?: string
+  lastUpdated?: string
+  organizationStatus?: 'yes' | 'no'
+  whereOrganized?: Array<{
+    filePath: string
+    paragraphId: string
+    summary_stored?: string
+  }>
+  isOrganized?: boolean
+  [key: string]: any // Allow custom metadata fields
+}
+
 export interface ParagraphEdit {
   id: string;
-  paragraphId: string; // Unique identifier for the paragraph/line
+  paragraphId: string; // This will now be the actual paragraph metadata ID from the editor
   pageId: string; // This will be the page UUID from Supabase
   content: string; // Latest content state - empty string "" for delete
   timestamp: number;
   editType: 'create' | 'update' | 'delete';
   organized?: boolean; // Mark if this edit has been organized
+  paragraphMetadata?: ParagraphMetadata; // Store the full paragraph metadata
   metadata?: {
     wordCount: number;
     charCount: number;
+    position?: number; // Editor position where the paragraph is located
   };
 }
 
@@ -80,6 +96,8 @@ export interface StorageManager {
   saveOrganizedPages(pages: OrganizedPage[]): Promise<void>;
   loadOrganizedPages(): Promise<OrganizedPage[]>;
   getPageByUuid(uuid: string): Promise<OrganizedPage | null>;
+  setUserId?(userId: string): void;
+  getUserId?(): string | undefined;
 }
 
 // Supabase-specific types

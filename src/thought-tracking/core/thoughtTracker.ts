@@ -25,10 +25,12 @@ export class ThoughtTracker {
   constructor(
     customStorageManager?: StorageManager,
     summaryApiEndpoint?: string,
-    organizationApiEndpoint?: string
+    organizationApiEndpoint?: string,
+    userId?: string
   ) {
     // Initialize storage manager
-    this.storageManager = customStorageManager || new LocalStorageManager();
+    // this.storageManager = customStorageManager || new LocalStorageManager(userId); # TODO: Uncomment this when we have a proper supabase storage manager
+    this.storageManager = new LocalStorageManager(userId);
     
     // Initialize core components
     const summaryGenerator = new SummaryGenerator(summaryApiEndpoint);
@@ -249,18 +251,14 @@ export class ThoughtTracker {
     await this.brainStateManager.updateConfig(newConfig);
   }
 
-  async clearAllData(): Promise<void> {
-    if (!this.initialized) {
-      await this.initialize();
+  setUserId(userId: string): void {
+    if (this.storageManager.setUserId) {
+      this.storageManager.setUserId(userId);
     }
-    
-    await this.brainStateManager.clearBrainState();
-    
-    if (this.storageManager instanceof LocalStorageManager) {
-      await this.storageManager.clearAllData();
-    }
-    
-    console.log('All thought tracking data cleared');
+  }
+
+  getUserId(): string | undefined {
+    return this.storageManager.getUserId?.();
   }
 
   async exportData(): Promise<{
