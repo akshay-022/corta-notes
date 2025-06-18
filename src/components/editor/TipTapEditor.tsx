@@ -571,9 +571,14 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
               {selectedParagraphMetadata && (
                 <div className="mt-2 p-2 bg-[#1a1a1a] rounded">
                   <div className="text-gray-400">ID: <span className="text-gray-200">{selectedParagraphMetadata.id}</span></div>
-                  {selectedParagraphMetadata.metadata && (
+                  {selectedParagraphMetadata.metadata?.whereOrganized && (
                     <div className="mt-1 text-gray-400">
-                      Metadata: <span className="text-green-400">✓</span>
+                      <div className="font-semibold mb-1">Organized In:</div>
+                      {selectedParagraphMetadata.metadata.whereOrganized.map((w: any) => (
+                        <div key={w.filePath + w.paragraphId} className="pl-2 py-0.5">
+                          • {w.filePath}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

@@ -73,6 +73,18 @@ export interface OrganizedPage {
   tags?: string[];
   category?: string;
   relatedPages?: string[];
+
+  /**
+   * OPTIONAL – when the organizer creates / updates this page it should list the
+   * paragraph edits that were merged into it so the client can quickly map
+   * sources → destination without digging through metadata.
+   * Each entry contains the originating page uuid and the paragraphId (and
+   * optionally the editId if the LLM includes it).
+   */
+  sourceParagraphs?: Array<{
+    pageId: string;        // uuid of the page where the paragraph came from
+    paragraphId: string;   // id of the paragraph in that page
+  }>;
 }
 
 export interface OrganizationRequest {
