@@ -1,7 +1,9 @@
 import { 
   BrainState, 
-  ParagraphEdit, 
-  BrainStateConfig, 
+  BrainStateConfig,
+  LineEdit,
+  LineMap,
+  ParagraphMetadata,
 } from '../types';
 import { generateId } from '../utils/helpers';
 import { SummaryGenerator } from './summaryGenerator';
@@ -13,6 +15,8 @@ export class BrainStateManager {
   private summaryGenerator: SummaryGenerator;
   private currentState: BrainState | null = null;
   private isOrganizing: boolean = false;
+  private saveTimeout: NodeJS.Timeout | null = null;
+  private readonly SAVE_DEBOUNCE_MS = 1000; // 1 second debounce for saves
 
   constructor(summaryGenerator: SummaryGenerator, localStorageManager: LocalStorageManager) {
     this.localStorageManager = localStorageManager;
@@ -30,79 +34,140 @@ export class BrainStateManager {
 
   private createDefaultBrainState(): BrainState {
     return {
-      edits: [],
+      lineMap: {},
       summary: '',
       lastUpdated: Date.now(),
       config: BRAIN_STATE_DEFAULTS,
     };
   }
 
-  async addEdit(edit: Omit<ParagraphEdit, 'id' | 'timestamp'>): Promise<void> {
+  /**
+   * Add or update a line edit using the mapping system
+   */
+  async updateLine(lineData: {
+    lineId: string;
+    pageId: string;
+    content: string;
+    editType: 'create' | 'update' | 'delete';
+    metadata?: {
+      wordCount: number;
+      charCount: number;
+      position?: number;
+    };
+    paragraphMetadata?: ParagraphMetadata;
+  }): Promise<void> {
     if (!this.currentState) {
       await this.initialize();
     }
 
-    // Check for duplicate edits using paragraph metadata ID within the last 5 seconds
     const now = Date.now();
-    const recentEdits = this.currentState!.edits.filter(
-      existingEdit => 
-        existingEdit.paragraphId === edit.paragraphId &&
-        existingEdit.pageId === edit.pageId &&
-        (now - existingEdit.timestamp) < 5000 // 5 seconds
-    );
+    const { lineId, pageId, content, editType, metadata, paragraphMetadata } = lineData;
 
-    // If there's a very recent edit with the same content, skip this one
-    if (recentEdits.length > 0) {
-      const mostRecentEdit = recentEdits[recentEdits.length - 1];
-      if (mostRecentEdit.content === edit.content && mostRecentEdit.editType === edit.editType) {
-        console.log('🧠 Skipping duplicate edit for paragraph:', {
-          paragraphId: edit.paragraphId,
-          content: edit.content.substring(0, 30) + '...',
-          timeSinceLastEdit: now - mostRecentEdit.timestamp + 'ms'
-        });
-        return;
-      }
+    // Initialize line map if it doesn't exist
+    if (!this.currentState!.lineMap[lineId]) {
+      this.currentState!.lineMap[lineId] = [];
     }
 
-    const fullEdit: ParagraphEdit = {
-      ...edit,
-      id: generateId(),
-      timestamp: now,
-      organized: false,
-      metadata: {
-        wordCount: edit.content.split(/\s+/).length,
-        charCount: edit.content.length,
-        ...edit.metadata,
-      },
-    };
+    const lineEdits = this.currentState!.lineMap[lineId];
+    const latestEdit = lineEdits[lineEdits.length - 1];
 
-    this.currentState!.edits.push(fullEdit);
+    // Check if content actually changed
+    if (latestEdit && latestEdit.content === content && latestEdit.editType === editType) {
+      console.log('🧠 No change detected for line:', lineId);
+      return;
+    }
+
+    // If the latest edit is not organized, we can update it directly
+    if (latestEdit && !latestEdit.organized) {
+      latestEdit.content = content;
+      latestEdit.timestamp = now;
+      latestEdit.editType = editType;
+      latestEdit.metadata = {
+        wordCount: content.split(/\s+/).filter(word => word.length > 0).length,
+        charCount: content.length,
+        ...metadata,
+      };
+      latestEdit.paragraphMetadata = paragraphMetadata;
+      
+      console.log('🧠 Updated existing unorganized line:', {
+        lineId,
+        version: latestEdit.version,
+        editType,
+        contentPreview: content.substring(0, 50) + (content.length > 50 ? '...' : ''),
+      });
+    } else {
+      // Create a new version if the latest edit is organized or if this is the first edit
+      const newVersion = lineEdits.length + 1;
+      const lineEdit: LineEdit = {
+        lineId,
+        pageId,
+        content,
+        timestamp: now,
+        organized: false,
+        version: newVersion,
+        editType,
+        metadata: {
+          wordCount: content.split(/\s+/).filter(word => word.length > 0).length,
+          charCount: content.length,
+          ...metadata,
+        },
+        paragraphMetadata,
+      };
+      
+      lineEdits.push(lineEdit);
+      
+      console.log('🧠 Created new line version:', {
+        lineId,
+        version: newVersion,
+        editType,
+        contentPreview: content.substring(0, 50) + (content.length > 50 ? '...' : ''),
+      });
+    }
+
     this.currentState!.lastUpdated = now;
     
-    console.log('🧠 Added edit to brain state:', {
-      id: fullEdit.id,
-      paragraphId: fullEdit.paragraphId,
-      paragraphMetadataId: fullEdit.paragraphMetadata?.id,
-      editType: fullEdit.editType,
-      totalEdits: this.currentState!.edits.length,
-      unorganizedEdits: this.currentState!.edits.filter(e => !e.organized).length,
-      position: fullEdit.metadata?.position
-    });
-
     // Check if we need to trigger organization
     await this.checkOrganizationTrigger();
+    
+    // Debounced save to avoid too frequent storage operations
+    this.debouncedSave();
+  }
 
-    await this.localStorageManager.saveBrainState(this.currentState!);
+  private debouncedSave(): void {
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+    }
+    
+    this.saveTimeout = setTimeout(async () => {
+      if (this.currentState) {
+        await this.localStorageManager.saveBrainState(this.currentState);
+      }
+    }, this.SAVE_DEBOUNCE_MS);
   }
 
   private async checkOrganizationTrigger(): Promise<void> {
     if (!this.currentState || this.isOrganizing) return;
 
-    const unorganizedEdits = this.currentState.edits.filter(edit => !edit.organized);
+    const unorganizedLines = this.getUnorganizedLineEdits();
     
-    if (unorganizedEdits.length >= this.currentState.config.maxEditsBeforeOrganization + this.currentState.config.numEditsToOrganize) {
+    if (unorganizedLines.length >= this.currentState.config.maxEditsBeforeOrganization + this.currentState.config.numEditsToOrganize) {
       await this.triggerOrganization();
     }
+  }
+
+  private getUnorganizedLineEdits(): LineEdit[] {
+    if (!this.currentState) return [];
+    
+    const unorganizedEdits: LineEdit[] = [];
+    
+    for (const lineEdits of Object.values(this.currentState.lineMap)) {
+      const latestEdit = lineEdits[lineEdits.length - 1];
+      if (latestEdit && !latestEdit.organized) {
+        unorganizedEdits.push(latestEdit);
+      }
+    }
+    
+    return unorganizedEdits.sort((a, b) => a.timestamp - b.timestamp);
   }
 
   private async triggerOrganization(): Promise<void> {
@@ -111,13 +176,10 @@ export class BrainStateManager {
     this.isOrganizing = true;
     
     try {
-      // Get oldest unorganized edits
-      const unorganizedEdits = this.currentState.edits
-        .filter(edit => !edit.organized)
-        .sort((a, b) => a.timestamp - b.timestamp)
+      const unorganizedEdits = this.getUnorganizedLineEdits()
         .slice(0, this.currentState.config.numEditsToOrganize);
 
-      console.log('Triggering organization for', unorganizedEdits.length, 'edits');
+      console.log('🧠 Triggering organization for', unorganizedEdits.length, 'line edits');
       
       // Emit organization event
       if (typeof window !== 'undefined') {
@@ -130,18 +192,27 @@ export class BrainStateManager {
     }
   }
 
-  async markEditsAsOrganized(editIds: string[]): Promise<void> {
+  /**
+   * Mark specific line versions as organized
+   */
+  async markLinesAsOrganized(lineVersions: Array<{ lineId: string; version: number }>): Promise<void> {
     if (!this.currentState) {
       await this.initialize();
     }
 
-    const editIdSet = new Set(editIds);
-    this.currentState!.edits = this.currentState!.edits.map(edit => 
-      editIdSet.has(edit.id) ? { ...edit, organized: true } : edit
-    );
+    for (const { lineId, version } of lineVersions) {
+      const lineEdits = this.currentState!.lineMap[lineId];
+      if (lineEdits) {
+        const editToMark = lineEdits.find(edit => edit.version === version);
+        if (editToMark) {
+          editToMark.organized = true;
+          console.log('🧠 Marked line as organized:', { lineId, version });
+        }
+      }
+    }
 
     this.currentState!.lastUpdated = Date.now();
-    await this.localStorageManager.saveBrainState(this.currentState!);
+    await this.debouncedSave();
   }
 
   async getCurrentState(): Promise<BrainState | null> {
@@ -157,55 +228,48 @@ export class BrainStateManager {
     }
 
     this.currentState!.config = { ...this.currentState!.config, ...newConfig };
-    await this.localStorageManager.saveBrainState(this.currentState!);
+    await this.debouncedSave();
   }
 
-  async getEditsByPage(pageId: string): Promise<ParagraphEdit[]> {
+  async getLinesByPage(pageId: string): Promise<LineEdit[]> {
     if (!this.currentState) {
       await this.initialize();
     }
 
-    return this.currentState!.edits.filter(edit => edit.pageId === pageId);
+    const pageLines: LineEdit[] = [];
+    
+    for (const lineEdits of Object.values(this.currentState!.lineMap)) {
+      const latestEdit = lineEdits[lineEdits.length - 1];
+      if (latestEdit && latestEdit.pageId === pageId) {
+        pageLines.push(latestEdit);
+      }
+    }
+    
+    return pageLines.sort((a, b) => a.timestamp - b.timestamp);
   }
 
-  async getEditsByParagraph(paragraphId: string): Promise<ParagraphEdit[]> {
+  async getLineHistory(lineId: string): Promise<LineEdit[]> {
     if (!this.currentState) {
       await this.initialize();
     }
 
-    return this.currentState!.edits.filter(edit => edit.paragraphId === paragraphId);
+    return this.currentState!.lineMap[lineId] || [];
   }
 
-  async getEditsByParagraphMetadataId(metadataId: string): Promise<ParagraphEdit[]> {
-    if (!this.currentState) {
-      await this.initialize();
-    }
-
-    return this.currentState!.edits.filter(edit => edit.paragraphMetadata?.id === metadataId);
+  async getLatestLineEdit(lineId: string): Promise<LineEdit | null> {
+    const history = await this.getLineHistory(lineId);
+    return history.length > 0 ? history[history.length - 1] : null;
   }
 
-  async getRecentEdits(limit: number = 10): Promise<ParagraphEdit[]> {
-    if (!this.currentState) {
-      await this.initialize();
-    }
-
-    return this.currentState!.edits
-      .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(0, limit);
-  }
-
-  async getUnorganizedEdits(): Promise<ParagraphEdit[]> {
-    if (!this.currentState) {
-      await this.initialize();
-    }
-
-    return this.currentState!.edits.filter(edit => !edit.organized);
+  async getUnorganizedEdits(): Promise<LineEdit[]> {
+    return this.getUnorganizedLineEdits();
   }
 
   async getStats(): Promise<{
-    totalEdits: number;
-    organizedEdits: number;
-    unorganizedEdits: number;
+    totalLines: number;
+    totalVersions: number;
+    organizedVersions: number;
+    unorganizedVersions: number;
     lastUpdate: number;
     averageEditSize: number;
     editTypes: Record<string, number>;
@@ -214,25 +278,29 @@ export class BrainStateManager {
       await this.initialize();
     }
 
-    const allEdits = this.currentState!.edits;
-    const organizedEdits = allEdits.filter(edit => edit.organized);
-    const unorganizedEdits = allEdits.filter(edit => !edit.organized);
+    let totalVersions = 0;
+    let organizedVersions = 0;
+    let totalCharCount = 0;
+    const editTypes: Record<string, number> = {};
     
-    const editTypes = allEdits.reduce((acc, edit) => {
-      acc[edit.editType] = (acc[edit.editType] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    const averageEditSize = allEdits.length > 0 
-      ? allEdits.reduce((sum, edit) => sum + (edit.metadata?.charCount || 0), 0) / allEdits.length
-      : 0;
+    for (const lineEdits of Object.values(this.currentState!.lineMap)) {
+      for (const lineEdit of lineEdits) {
+        totalVersions++;
+        if (lineEdit.organized) {
+          organizedVersions++;
+        }
+        totalCharCount += lineEdit.metadata?.charCount || 0;
+        editTypes[lineEdit.editType] = (editTypes[lineEdit.editType] || 0) + 1;
+      }
+    }
 
     return {
-      totalEdits: allEdits.length,
-      organizedEdits: organizedEdits.length,
-      unorganizedEdits: unorganizedEdits.length,
+      totalLines: Object.keys(this.currentState!.lineMap).length,
+      totalVersions,
+      organizedVersions,
+      unorganizedVersions: totalVersions - organizedVersions,
       lastUpdate: this.currentState!.lastUpdated,
-      averageEditSize,
+      averageEditSize: totalVersions > 0 ? totalCharCount / totalVersions : 0,
       editTypes,
     };
   }

@@ -13,6 +13,7 @@ export const BRAIN_STATE_DEFAULTS = {
   maxEditsBeforeOrganization: 2, // Trigger organization when > 2 edits
   numEditsToOrganize: 3, // Organize 3 edits at a time
   summaryUpdateFrequency: 1, // Update summary every 10 edits (optional, not in use at the moment)
+  useLineMappingSystem: true, // Use the new line mapping system by default
 } as const;
 
 // =============================================================================

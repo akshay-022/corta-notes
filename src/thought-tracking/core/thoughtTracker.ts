@@ -1,5 +1,5 @@
 import { 
-  ParagraphEdit, 
+  LineEdit,
   BrainState, 
   BrainStateConfig, 
   OrganizedPage,
@@ -10,7 +10,7 @@ import { BrainStateManager } from './brainState';
 import { SummaryGenerator } from './summaryGenerator';
 import { OrganizationManager } from './organizationManager';
 import { LocalStorageManager } from '../storage/localStorage';
-import { validateParagraphEdit, debounce } from '../utils/helpers';
+import { debounce } from '../utils/helpers';
 import { EVENTS, PERFORMANCE_THRESHOLDS } from '../constants';
 
 export class ThoughtTracker {
@@ -64,54 +64,6 @@ export class ThoughtTracker {
     }
   }
 
-  async trackEdit(edit: Omit<ParagraphEdit, 'id' | 'timestamp'>): Promise<void> {
-    if (!this.initialized) {
-      await this.initialize();
-    }
-
-    try {
-      // Validate the edit
-      if (!validateParagraphEdit(edit)) {
-        throw new Error('Invalid paragraph edit provided');
-      }
-
-      // Check if the page has organized = false before tracking
-      // Only track edits for pages that are not organized (organized = false)
-      const page = await this.storageManager.getPageByUuid(edit.pageId);
-      
-      if (page && page.organized === true) {
-        return;
-      }
-      
-      if (!page) {
-        console.warn('🧠 Page not found, but continuing with edit tracking:', edit.pageId);
-      } else {
-        console.log('🧠 Page organized status check passed:', {
-          pageId: edit.pageId,
-          organized: page.organized,
-          willTrack: page.organized === false
-        });
-      }
-
-      // Add to brain state
-      await this.brainStateManager.addEdit(edit);
-      
-      // Debounced save
-      this.debouncedSave();
-
-      // Emit edit added event
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent(EVENTS.EDIT_ADDED, {
-          detail: { edit }
-        }));
-      }
-
-    } catch (error) {
-      console.error('Error tracking edit:', error);
-      throw error;
-    }
-  }
-
   private async saveState(): Promise<void> {
     // This is handled automatically by BrainStateManager
     // Placeholder for any additional save logic if needed
@@ -133,8 +85,13 @@ export class ThoughtTracker {
       
       const result = await this.organizationManager.organizeContent(edits);
       
-      // Mark the organized edits as processed in brain state
-      await this.brainStateManager.markEditsAsOrganized(result.processedEditIds);
+      // Mark the organized line versions as processed in brain state
+      const lineVersionsToMark = edits.map((edit: LineEdit) => ({
+        lineId: edit.lineId,
+        version: edit.version
+      }));
+      
+      await this.brainStateManager.markLinesAsOrganized(lineVersionsToMark);
       
       // Wait a bit more to ensure all Supabase operations are complete
       await new Promise(resolve => setTimeout(resolve, 200));
@@ -199,32 +156,11 @@ export class ThoughtTracker {
     return this.brainStateManager.getCurrentState();
   }
 
-  async getRecentEdits(limit: number = 10): Promise<ParagraphEdit[]> {
-    if (!this.initialized) {
-      await this.initialize();
-    }
-    return this.brainStateManager.getRecentEdits(limit);
-  }
-
-  async getUnorganizedEdits(): Promise<ParagraphEdit[]> {
+  async getUnorganizedEdits(): Promise<LineEdit[]> {
     if (!this.initialized) {
       await this.initialize();
     }
     return this.brainStateManager.getUnorganizedEdits();
-  }
-
-  async getEditsByPage(pageId: string): Promise<ParagraphEdit[]> {
-    if (!this.initialized) {
-      await this.initialize();
-    }
-    return this.brainStateManager.getEditsByPage(pageId);
-  }
-
-  async getEditsByParagraph(paragraphId: string): Promise<ParagraphEdit[]> {
-    if (!this.initialized) {
-      await this.initialize();
-    }
-    return this.brainStateManager.getEditsByParagraph(paragraphId);
   }
 
   async getOrganizedPages(): Promise<OrganizedPage[]> {
@@ -348,6 +284,39 @@ export class ThoughtTracker {
       brain: brainStats,
       organization: organizationStats,
     };
+  }
+
+  // Line-based tracking methods
+  async updateLine(lineData: {
+    lineId: string;
+    pageId: string;
+    content: string;
+    editType: 'create' | 'update' | 'delete';
+    metadata?: {
+      wordCount: number;
+      charCount: number;
+      position?: number;
+    };
+    paragraphMetadata?: any;
+  }): Promise<void> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+    return this.brainStateManager.updateLine(lineData);
+  }
+
+  async getLineHistory(lineId: string): Promise<LineEdit[]> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+    return this.brainStateManager.getLineHistory(lineId);
+  }
+
+  async getLinesByPage(pageId: string): Promise<LineEdit[]> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+    return this.brainStateManager.getLinesByPage(pageId);
   }
 
   dispose(): void {

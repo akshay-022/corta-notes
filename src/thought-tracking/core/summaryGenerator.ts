@@ -1,5 +1,5 @@
-import { ParagraphEdit } from '../types';
-import { extractKeywords, groupEditsByTimeWindow, truncateText } from '../utils/helpers';
+import { LineEdit } from '../types';
+import { extractKeywords, groupLineEditsByTimeWindow, truncateText } from '../utils/helpers';
 
 export class SummaryGenerator {
   private apiEndpoint: string;
@@ -10,7 +10,7 @@ export class SummaryGenerator {
     this.maxSummaryLength = maxSummaryLength;
   }
 
-  async generateSummary(edits: ParagraphEdit[], previousSummary: string = ''): Promise<string> {
+  async generateSummary(edits: LineEdit[], previousSummary: string = ''): Promise<string> {
     if (edits.length === 0) return previousSummary;
 
     try {
@@ -43,7 +43,7 @@ export class SummaryGenerator {
     }
   }
 
-  async generateContextSummary(edits: ParagraphEdit[]): Promise<string> {
+  async generateContextSummary(edits: LineEdit[]): Promise<string> {
     if (edits.length === 0) return '';
 
     try {
@@ -73,8 +73,8 @@ export class SummaryGenerator {
     }
   }
 
-  private prepareContext(edits: ParagraphEdit[], previousSummary: string): any {
-    const editGroups = groupEditsByTimeWindow(edits);
+  private prepareContext(edits: LineEdit[], previousSummary: string): any {
+    const editGroups = groupLineEditsByTimeWindow(edits);
     const recentEdits = edits.slice(-10); // Last 10 edits for immediate context
     
     return {
@@ -95,7 +95,9 @@ export class SummaryGenerator {
       recentEdits: recentEdits.map(edit => ({
         type: edit.editType,
         content: truncateText(edit.content, 100),
+        lineId: edit.lineId,
         pageId: edit.pageId,
+        version: edit.version,
         timestamp: edit.timestamp,
       })),
       keywords: this.extractOverallKeywords(edits),
@@ -103,7 +105,7 @@ export class SummaryGenerator {
     };
   }
 
-  private prepareContextForCaching(edits: ParagraphEdit[]): any {
+  private prepareContextForCaching(edits: LineEdit[]): any {
     return {
       editCount: edits.length,
       timeSpan: {
@@ -117,26 +119,27 @@ export class SummaryGenerator {
     };
   }
 
-  private extractMainTopics(edits: ParagraphEdit[]): string[] {
+  private extractMainTopics(edits: LineEdit[]): string[] {
     const allContent = edits.map(edit => edit.content).join(' ');
     return extractKeywords(allContent, 5);
   }
 
-  private analyzeEditTypes(edits: ParagraphEdit[]): Record<string, number> {
+  private analyzeEditTypes(edits: LineEdit[]): Record<string, number> {
     return edits.reduce((acc, edit) => {
       acc[edit.editType] = (acc[edit.editType] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
   }
 
-  private extractOverallKeywords(edits: ParagraphEdit[]): string[] {
+  private extractOverallKeywords(edits: LineEdit[]): string[] {
     const allContent = edits.map(edit => edit.content).join(' ');
     return extractKeywords(allContent, 10);
   }
 
-  private generateFallbackSummary(edits: ParagraphEdit[], previousSummary: string): string {
+  private generateFallbackSummary(edits: LineEdit[], previousSummary: string): string {
     const editCount = edits.length;
     const pageCount = new Set(edits.map(edit => edit.pageId)).size;
+    const lineCount = new Set(edits.map(edit => edit.lineId)).size;
     const editTypes = this.analyzeEditTypes(edits);
     const keywords = this.extractOverallKeywords(edits).slice(0, 5);
     
@@ -145,7 +148,7 @@ export class SummaryGenerator {
       end: new Date(edits[edits.length - 1].timestamp).toLocaleDateString(),
     } : null;
 
-    let summary = `Brain state contains ${editCount} edits across ${pageCount} pages`;
+    let summary = `Brain state contains ${editCount} line edits for ${lineCount} lines across ${pageCount} pages`;
     
     if (timeSpan && timeSpan.start !== timeSpan.end) {
       summary += ` from ${timeSpan.start} to ${timeSpan.end}`;
@@ -169,12 +172,13 @@ export class SummaryGenerator {
     return truncateText(summary, this.maxSummaryLength);
   }
 
-  private generateFallbackContextSummary(edits: ParagraphEdit[]): string {
+  private generateFallbackContextSummary(edits: LineEdit[]): string {
     const keywords = this.extractOverallKeywords(edits).slice(0, 3);
     const editTypes = this.analyzeEditTypes(edits);
     const pageCount = new Set(edits.map(edit => edit.pageId)).size;
+    const lineCount = new Set(edits.map(edit => edit.lineId)).size;
 
-    let summary = `Context: ${edits.length} edits on ${pageCount} page${pageCount > 1 ? 's' : ''}`;
+    let summary = `Context: ${edits.length} edits on ${lineCount} lines across ${pageCount} page${pageCount > 1 ? 's' : ''}`;
     
     if (keywords.length > 0) {
       summary += ` about ${keywords.join(', ')}`;
@@ -198,6 +202,6 @@ export class SummaryGenerator {
 
   // Method to validate summary quality (can be expanded)
   validateSummary(summary: string): boolean {
-    return summary.length > 10 && summary.length <= this.maxSummaryLength;
+    return summary.length > 0 && summary.length <= this.maxSummaryLength;
   }
 } 

@@ -1,5 +1,5 @@
 import { 
-  ParagraphEdit,
+  LineEdit,
   OrganizedPage, 
   OrganizationRequest, 
   OrganizationResult, 
@@ -9,7 +9,7 @@ import {
 import { calculateTextSimilarity, generateId } from '../utils/helpers';
 import { ORGANIZATION_DEFAULTS, API_ENDPOINTS } from '../constants';
 import { createClient } from '@/lib/supabase/supabase-client';
-import { Page, PageUpdate, PageInsert } from '@/lib/supabase/types';
+import { PageUpdate, PageInsert } from '@/lib/supabase/types';
 import { organizationCacheManager, OrganizationCacheManager } from '../services/organizationCacheManager';
 
 export class OrganizationManager {
@@ -38,7 +38,7 @@ export class OrganizationManager {
     }
   }
 
-  async organizeContent(edits: ParagraphEdit[]): Promise<OrganizationResult> {
+  async organizeContent(edits: LineEdit[]): Promise<OrganizationResult> {
     if (edits.length === 0) {
       return {
         updatedPages: [],
@@ -88,7 +88,7 @@ export class OrganizationManager {
   }
 
   private prepareOrganizationRequest(
-    edits: ParagraphEdit[], 
+    edits: LineEdit[], 
     existingPages: OrganizedPage[]
   ): OrganizationRequest {
     // Generate a summary from the edits
@@ -313,7 +313,7 @@ Return a structured response indicating for each edit:
     return result;
   }
 
-  private async performFallbackOrganization(edits: ParagraphEdit[]): Promise<OrganizationResult> {
+  private async performFallbackOrganization(edits: LineEdit[]): Promise<OrganizationResult> {
     // Start fallback organization
     this.cacheManager.startOrganization();
     
@@ -389,7 +389,7 @@ Return a structured response indicating for each edit:
       updatedPages,
       newPages,
       summary: `Fallback organization: ${updatedPages.length} pages updated, ${newPages.length} pages created (prioritized existing files)`,
-      processedEditIds: edits.map(e => e.id),
+      processedEditIds: edits.map(e => `${e.lineId}-v${e.version}`),
     };
 
     try {
@@ -407,7 +407,7 @@ Return a structured response indicating for each edit:
     return fallbackResult;
   }
 
-  private findBestPageMatch(edit: ParagraphEdit, pages: OrganizedPage[]): OrganizedPage | null {
+  private findBestPageMatch(edit: LineEdit, pages: OrganizedPage[]): OrganizedPage | null {
     if (pages.length === 0) return null;
 
     let bestMatch: OrganizedPage | null = null;
@@ -442,11 +442,11 @@ Return a structured response indicating for each edit:
     return sortedPages[0];
   }
 
-  private calculateSimilarity(edit: ParagraphEdit, page: OrganizedPage): number {
+  private calculateSimilarity(edit: LineEdit, page: OrganizedPage): number {
     return calculateTextSimilarity(edit.content, page.content_text);
   }
 
-  private updatePageWithEdit(page: OrganizedPage, edit: ParagraphEdit): OrganizedPage {
+  private updatePageWithEdit(page: OrganizedPage, edit: LineEdit): OrganizedPage {
     const additionalContent = edit.content;
 
     // Update both content structures
@@ -484,7 +484,7 @@ Return a structured response indicating for each edit:
     };
   }
 
-  private createPageFromEdit(edit: ParagraphEdit): OrganizedPage {
+  private createPageFromEdit(edit: LineEdit): OrganizedPage {
     const content_text = edit.content;
 
     // Extract potential title from content
@@ -521,10 +521,10 @@ Return a structured response indicating for each edit:
           tags: this.extractTagsFromContent(content_text),
           category: this.inferCategoryFromContent(content_text),
           createdFromEdit: true,
-          editId: edit.id,
+          lineId: edit.lineId,
+          version: edit.version,
           editTimestamp: edit.timestamp,
-          pageId: edit.pageId,
-          paragraphId: edit.paragraphId
+          pageId: edit.pageId
         }
       },
       tags: this.extractTagsFromContent(content_text),

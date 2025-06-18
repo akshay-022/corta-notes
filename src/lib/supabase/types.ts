@@ -427,3 +427,4 @@ export const Constants = {
 // Convenience type aliases
 export type Page = Tables<'pages'>
 export type PageUpdate = TablesUpdate<'pages'>
+export type PageInsert = TablesInsert<'pages'>
