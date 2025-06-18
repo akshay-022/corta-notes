@@ -419,7 +419,6 @@ export async function updateMetadataByParagraphIdInDB(
     let changed = false
 
     const patchedBlocks = doc.content.map((block: any) => {
-      if (block.type !== 'paragraph') return block
 
       const nid = block.attrs?.id || block.attrs?.metadata?.id
       if (nid !== paragraphId) return block
