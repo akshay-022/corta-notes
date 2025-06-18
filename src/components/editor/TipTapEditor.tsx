@@ -39,6 +39,14 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   const chatPanelRef = useRef<ChatPanelHandle>(null)
   const supabase = createClient()
 
+  // Use refs to prevent unnecessary re-renders
+  const allPagesRef = useRef(allPages)
+  const pageRefreshCallbackRef = useRef(pageRefreshCallback)
+  
+  // Update refs when values change
+  allPagesRef.current = allPages
+  pageRefreshCallbackRef.current = pageRefreshCallback
+
   // Determine which content to show based on toggle
   const currentContent = showSummary ? (page.page_summary || page.content) : page.content
 
@@ -363,7 +371,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
           cleanup()
         }
         
-        cleanup = await setupThoughtTracking(editor, page.uuid, allPages, pageRefreshCallback)
+        cleanup = await setupThoughtTracking(editor, page.uuid, allPagesRef.current, pageRefreshCallbackRef.current)
         console.log('🧠 Thought tracking initialized for editor with page:', page.uuid)
       }
     }
@@ -376,7 +384,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
         cleanup()
       }
     }
-  }, [editor, page.uuid]) // Removed pageRefreshCallback from dependencies to prevent unnecessary re-runs
+  }, [editor, page.uuid]) // Removed allPages and pageRefreshCallback dependencies - using refs instead
 
   // Update editor content when page changes or toggle changes
   useEffect(() => {

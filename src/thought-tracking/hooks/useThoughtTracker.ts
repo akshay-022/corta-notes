@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
   LineEdit,
   BrainState, 
@@ -67,7 +67,11 @@ export function useThoughtTracker({
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<any>(null);
 
-  // Initialize and load data
+  // Use ref to prevent recreating loadData function on every render
+  const trackerRef = useRef(tracker);
+  trackerRef.current = tracker;
+
+  // Initialize and load data - stable function
   const loadData = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -79,10 +83,10 @@ export function useThoughtTracker({
         organizedPagesData,
         statsData
       ] = await Promise.all([
-        tracker.getBrainState(),
-        tracker.getUnorganizedEdits(),
-        tracker.getOrganizedPages(),
-        tracker.getStats()
+        trackerRef.current.getBrainState(),
+        trackerRef.current.getUnorganizedEdits(),
+        trackerRef.current.getOrganizedPages(),
+        trackerRef.current.getStats()
       ]);
 
       setBrainState(brainStateData);
@@ -96,7 +100,7 @@ export function useThoughtTracker({
     } finally {
       setIsLoading(false);
     }
-  }, [tracker]);
+  }, []); // Empty dependency array - function is now stable
 
   // Initialize on mount and when tracker changes
   useEffect(() => {
@@ -104,7 +108,7 @@ export function useThoughtTracker({
 
     const initializeTracker = async () => {
       try {
-        await tracker.initialize();
+        await trackerRef.current.initialize();
         if (mounted) {
           await loadData();
         }
@@ -122,7 +126,7 @@ export function useThoughtTracker({
     return () => {
       mounted = false;
     };
-  }, [tracker, loadData]);
+  }, [tracker]); // Remove loadData dependency
 
   // Auto-refresh
   useEffect(() => {
@@ -130,7 +134,7 @@ export function useThoughtTracker({
 
     const interval = setInterval(loadData, refreshInterval);
     return () => clearInterval(interval);
-  }, [autoRefresh, refreshInterval, loadData]);
+  }, [autoRefresh, refreshInterval]); // Remove loadData dependency
 
   // Event listeners for real-time updates
   useEffect(() => {
@@ -157,7 +161,7 @@ export function useThoughtTracker({
         window.removeEventListener(EVENTS.BRAIN_STATE_UPDATED, handleBrainStateUpdate);
       };
     }
-  }, [loadData]);
+  }, []); // Remove loadData dependency - function is stable now
 
   // Line-based tracking method
   const updateLine = useCallback(async (lineData: {
@@ -173,7 +177,7 @@ export function useThoughtTracker({
     paragraphMetadata?: any;
   }) => {
     try {
-      await tracker.updateLine(lineData);
+      await trackerRef.current.updateLine(lineData);
       
       // Refresh data after tracking
       setTimeout(loadData, 100); // Small delay to ensure data is saved
@@ -181,30 +185,30 @@ export function useThoughtTracker({
       console.error('Error updating line:', err);
       setError(err instanceof Error ? err.message : 'Failed to update line');
     }
-  }, [tracker, loadData]);
+  }, []); // Remove dependencies - use refs instead
 
   const getLineHistory = useCallback(async (lineId: string): Promise<LineEdit[]> => {
     try {
-      return await tracker.getLineHistory(lineId);
+      return await trackerRef.current.getLineHistory(lineId);
     } catch (err) {
       console.error('Error getting line history:', err);
       return [];
     }
-  }, [tracker]);
+  }, []);
 
   const getLinesByPage = useCallback(async (pageId: string): Promise<LineEdit[]> => {
     try {
-      return await tracker.getLinesByPage(pageId);
+      return await trackerRef.current.getLinesByPage(pageId);
     } catch (err) {
       console.error('Error getting lines by page:', err);
       return [];
     }
-  }, [tracker]);
+  }, []);
 
   const triggerOrganization = useCallback(async (): Promise<void> => {
     try {
       setIsLoading(true);
-      await tracker.triggerManualOrganization();
+      await trackerRef.current.triggerManualOrganization();
       // Data will be refreshed via event listeners
     } catch (err) {
       console.error('Error triggering organization:', err);
@@ -212,21 +216,21 @@ export function useThoughtTracker({
     } finally {
       setIsLoading(false);
     }
-  }, [tracker]);
+  }, []);
 
   const updateConfig = useCallback(async (config: Partial<BrainStateConfig>): Promise<void> => {
     try {
-      await tracker.updateConfig(config);
+      await trackerRef.current.updateConfig(config);
       await loadData(); // Refresh to reflect config changes
     } catch (err) {
       console.error('Error updating config:', err);
       setError(err instanceof Error ? err.message : 'Failed to update config');
     }
-  }, [tracker, loadData]);
+  }, []); // Remove dependencies - use refs instead
 
   const refresh = useCallback(async (): Promise<void> => {
     await loadData();
-  }, [loadData]);
+  }, []); // Remove loadData dependency
 
   // Memoized return object
   return useMemo(() => ({
