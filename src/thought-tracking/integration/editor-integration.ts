@@ -68,7 +68,7 @@ export async function setupThoughtTracking(
       try {
         const currentContent = editor.getJSON()
 
-        // Set IDs for block-level nodes that don't have them yet
+        // Set IDs for block-level nodes that don't have them yet (cursor-safe)
         setNewParagraphIds(editor, pageUuid)
 
         // Find which specific paragraph changed

@@ -390,7 +390,10 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       // (regardless of whether they're typing in the editor content)
       setTitle(page.title)
     }
-  }, [page.uuid, page.title, page.content, editor]) // More specific dependencies to prevent unnecessary re-runs
+    
+    // CRITICAL FIX: Remove page.content from dependencies to prevent cursor jumping
+    // Content updates from user typing should NOT trigger editor.setContent()
+  }, [page.uuid, page.title, editor]) // Removed page.content dependency
 
   if (!editor) {
     return (

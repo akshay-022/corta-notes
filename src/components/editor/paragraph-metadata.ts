@@ -327,20 +327,21 @@ export function setNewParagraphIds(editor: Editor, pageUuid: string): void {
         const nodeId = `${pageUuid}-${nodeTypePrefix}-${timestamp}-${randomHex}`
         
         try {
-          // Set the ID and initial metadata using editor commands
-          editor.chain()
-            .focus()
-            .setNodeSelection(pos)
-            .updateAttributes(node.type.name, {
+          // Update attributes WITHOUT moving cursor or changing selection
+          const tr = editor.state.tr
+          tr.setNodeMarkup(pos, undefined, {
+            ...node.attrs,
+            id: nodeId,
+            metadata: {
               id: nodeId,
-              metadata: {
-                id: nodeId,
-                lastUpdated: new Date().toISOString(),
-                organizationStatus: 'no',
-                isOrganized: false
-              }
-            })
-            .run()
+              lastUpdated: new Date().toISOString(),
+              organizationStatus: 'no',
+              isOrganized: false
+            }
+          })
+          
+          // Apply transaction without affecting cursor position
+          editor.view.dispatch(tr)
 
           console.log(`📝 Set new ID for ${node.type.name}:`, {
             pos,
