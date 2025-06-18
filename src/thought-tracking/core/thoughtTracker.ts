@@ -3,6 +3,7 @@ import {
   BrainState, 
   BrainStateConfig, 
   OrganizedPage,
+  OrganizationResult,
   StorageManager 
 } from '../types';
 import { BrainStateManager } from './brainState';
@@ -29,8 +30,7 @@ export class ThoughtTracker {
     userId?: string
   ) {
     // Initialize storage manager
-    this.storageManager = customStorageManager || new LocalStorageManager(userId); // TODO: Uncomment this when we have a proper supabase storage manager
-    // this.storageManager = new LocalStorageManager(userId);
+    this.storageManager = customStorageManager || new LocalStorageManager(userId);
     
     // Initialize core components
     const summaryGenerator = new SummaryGenerator(summaryApiEndpoint);
@@ -136,16 +136,29 @@ export class ThoughtTracker {
       // Mark the organized edits as processed in brain state
       await this.brainStateManager.markEditsAsOrganized(result.processedEditIds);
       
+      // Wait a bit more to ensure all Supabase operations are complete
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
       console.log('Organization completed:', {
         updatedPages: result.updatedPages.length,
         newPages: result.newPages.length,
         summary: result.summary
       });
       
-      // Emit completion event
+      // Emit completion event with detailed information for UI updates
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent(EVENTS.ORGANIZATION_COMPLETE, {
-          detail: result
+          detail: {
+            ...result,
+            // Include page data for client-side updates
+            allOrganizedPages: await this.storageManager.loadOrganizedPages(),
+            // Provide summary for notifications
+            notification: {
+              message: this.createNotificationMessage(result),
+              updatedPageIds: result.updatedPages.map(p => p.uuid),
+              newPageIds: result.newPages.map(p => p.uuid)
+            }
+          }
         }));
       }
       
@@ -160,6 +173,21 @@ export class ThoughtTracker {
       }
     } finally {
       this.organizationPending = false;
+    }
+  }
+
+  private createNotificationMessage(result: OrganizationResult): string {
+    const updatedCount = result.updatedPages.length;
+    const newCount = result.newPages.length;
+    
+    if (updatedCount > 0 && newCount > 0) {
+      return `✅ Organization complete: ${updatedCount} notes updated, ${newCount} new notes created`;
+    } else if (updatedCount > 0) {
+      return `✅ Organization complete: ${updatedCount} notes updated`;
+    } else if (newCount > 0) {
+      return `✅ Organization complete: ${newCount} new notes created`;
+    } else {
+      return '✅ Organization complete: No changes made';
     }
   }
 

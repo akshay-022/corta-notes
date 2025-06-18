@@ -149,6 +149,71 @@ export default function DashboardSidebarProvider({ children }: { children: React
     return () => document.removeEventListener('click', handleClickOutside)
   }, [])
 
+  // Listen for thought-tracking organization completion events
+  useEffect(() => {
+    const handleOrganizationComplete = async (event: Event) => {
+      const customEvent = event as CustomEvent
+      console.log('🧠 Organization completed from thought tracker:', customEvent.detail)
+      
+      // Add a small delay to ensure Supabase operations are complete
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      // Refresh all pages from Supabase to get the latest organized content
+      console.log('🧠 Refreshing pages from database after organization...')
+      console.log('🧠 Pages before refresh:', pages.length, 'pages')
+      
+      await refreshOrganizedNotes()
+      
+      console.log('🧠 ✅ Page refresh completed after organization')
+      
+      // Show notification if provided
+      if (customEvent.detail.notification?.message) {
+        // Use window.postMessage to trigger notification in Sidebar
+        window.postMessage({
+          type: 'ORGANIZATION_NOTIFICATION',
+          data: { message: customEvent.detail.notification.message }
+        }, '*')
+      }
+      
+      // Highlight any new or updated folders based on the result
+      if (customEvent.detail.newPages?.length > 0 || customEvent.detail.updatedPages?.length > 0) {
+        const foldersToHighlight = new Set<string>()
+        
+        // Get folder names from new and updated pages
+        const allChangedPages = [...(customEvent.detail.newPages || []), ...(customEvent.detail.updatedPages || [])]
+        allChangedPages.forEach((page: any) => {
+          if (page.parent_uuid) {
+            // Find parent folder and highlight it
+            const parentPage = pages.find(p => p.uuid === page.parent_uuid)
+            if (parentPage) {
+              foldersToHighlight.add(parentPage.title)
+            }
+          }
+        })
+        
+        if (foldersToHighlight.size > 0) {
+          setHighlightedFolders(foldersToHighlight)
+          console.log('🧠 ✅ Highlighting folders:', Array.from(foldersToHighlight))
+        }
+      }
+    }
+
+    const handleOrganizationError = (event: Event) => {
+      const customEvent = event as CustomEvent
+      console.error('🧠 Organization error from thought tracker:', customEvent.detail)
+      // Could show error notification here
+    }
+
+    // Listen for thought-tracking events
+    window.addEventListener('thought-tracking:organization-complete', handleOrganizationComplete)
+    window.addEventListener('thought-tracking:organization-error', handleOrganizationError)
+
+    return () => {
+      window.removeEventListener('thought-tracking:organization-complete', handleOrganizationComplete)
+      window.removeEventListener('thought-tracking:organization-error', handleOrganizationError)
+    }
+  }, [pages]) // Keep pages dependency since we use it for folder highlighting
+
   const handleManualSync = async () => {
     try {
       const pendingPages = superMemorySyncService.getPendingSyncPages(pages)
@@ -182,12 +247,14 @@ export default function DashboardSidebarProvider({ children }: { children: React
       if (freshPages) {
         // Replace all pages with fresh data from database
         setPages(freshPages)
+        console.log('🔄 Pages state updated with fresh data')
         
         // Update active page if it exists in the fresh data
         if (activePage) {
           const updatedActivePage = freshPages.find(p => p.uuid === activePage.uuid)
           if (updatedActivePage) {
             setActivePage(updatedActivePage)
+            console.log('🔄 Active page updated with fresh data')
           }
         }
       }
