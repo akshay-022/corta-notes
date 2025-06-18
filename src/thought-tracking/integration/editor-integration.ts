@@ -220,13 +220,13 @@ async function trackAllLinesInEditor(editor: Editor, pageUuid: string, tracker: 
          paragraphMetadata: lineUpdate.metadata
        })
 
-      console.log(`🧠 Tracked ${lineUpdate.editType} for line:`, {
-        lineId: lineUpdate.lineId,
-        contentPreview: lineUpdate.content.substring(0, 50) + (lineUpdate.content.length > 50 ? '...' : ''),
-        pageUuid,
-        position: lineUpdate.position,
-        timestamp: new Date().toISOString()
-      })
+      // console.log(`🧠 Tracked ${lineUpdate.editType} for line:`, {
+      //   lineId: lineUpdate.lineId,
+      //   contentPreview: lineUpdate.content.substring(0, 50) + (lineUpdate.content.length > 50 ? '...' : ''),
+      //   pageUuid,
+      //   position: lineUpdate.position,
+      //   timestamp: new Date().toISOString()
+      // })
 
     } catch (error) {
       console.error('Error tracking line update:', error)
