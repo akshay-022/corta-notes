@@ -5,7 +5,7 @@ export const runtime = 'edge';
 
 interface ParagraphEdit {
   id: string;
-  paragraphId: string;
+  lineId: string;
   pageId: string;
   content: string;
   timestamp: number;
@@ -137,11 +137,11 @@ export async function POST(request: NextRequest) {
         const destPage = pathToPage.get(mapping.path)
         if (!destPage) return
 
-        const edit = edits.find(e => e.id === mapping.editId)
+        const edit = edits.find(e => e.lineId === mapping.editId)
         if (!edit) return
 
         if (!pageSources[destPage.uuid]) pageSources[destPage.uuid] = []
-        pageSources[destPage.uuid].push({ pageId: edit.pageId, paragraphId: edit.paragraphId })
+        pageSources[destPage.uuid].push({ pageId: edit.pageId, paragraphId: edit.lineId })
       }
     })
 
@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
       updatedPages: results.updatedPages,
       newPages: results.newPages,
       summary: `Successfully organized ${edits.length} edits into ${results.updatedPages.length + results.newPages.length} pages`,
-      processedEditIds: edits.map(edit => edit.id),
+      processedEditIds: edits.map(edit => edit.lineId),
       fileHistory: fileHistoryItems
     })
 
@@ -194,10 +194,10 @@ async function mapEditsToFilePaths(edits: ParagraphEdit[], organizedPages: Organ
   
   // Prepare edits for AI analysis
   const editsContent = edits.map((edit, index) => 
-    `${index + 1}. ID: ${edit.id}
+    `${index + 1}. ID: ${edit.lineId}
    Content: "${edit.content}"
    Page: ${edit.pageId}
-   Paragraph ID: ${edit.paragraphId}
+   Paragraph ID: ${edit.lineId}
    Type: ${edit.editType}
    Timestamp: ${new Date(edit.timestamp).toLocaleDateString()}`
   ).join('\n\n')
@@ -416,7 +416,7 @@ function validateAndProcessMappings(mappings: EditMapping[], existingFilePaths: 
   }
   
   // Handle any unmapped edits with fallback logic
-  const unmappedEdits = edits.filter(edit => !processedEditIds.has(edit.id))
+  const unmappedEdits = edits.filter(edit => !processedEditIds.has(edit.lineId))
   if (unmappedEdits.length > 0) {
     console.log(`Handling ${unmappedEdits.length} unmapped edits with fallback logic`)
     const fallbackMappings = createIntelligentFallbackMappings(unmappedEdits, organizedPages)
@@ -443,7 +443,7 @@ function createIntelligentFallbackMappings(edits: ParagraphEdit[], organizedPage
         mappings.push({
           content: edit.content,
           path: getFullPath(bestMatch, organizedPages),
-          editId: edit.id,
+          editId: edit.lineId,
           action: 'update_existing',
           reasoning: 'Fallback: Added to most similar existing file',
           integrationStrategy: 'append'
@@ -455,7 +455,7 @@ function createIntelligentFallbackMappings(edits: ParagraphEdit[], organizedPage
           mappings.push({
             content: edit.content,
             path: `/${fileName}`,
-            editId: edit.id,
+            editId: edit.lineId,
             action: 'create_file',
             reasoning: 'Fallback: Created new file for substantial unique content',
             integrationStrategy: 'append'
@@ -469,7 +469,7 @@ function createIntelligentFallbackMappings(edits: ParagraphEdit[], organizedPage
             mappings.push({
               content: edit.content,
               path: getFullPath(mostRecentFile, organizedPages),
-              editId: edit.id,
+              editId: edit.lineId,
               action: 'update_existing',
               reasoning: 'Fallback: Short content added to most recent file',
               integrationStrategy: 'append'
@@ -479,7 +479,7 @@ function createIntelligentFallbackMappings(edits: ParagraphEdit[], organizedPage
             mappings.push({
               content: edit.content,
               path: '/Quick Notes',
-              editId: edit.id,
+              editId: edit.lineId,
               action: 'create_file',
               reasoning: 'Fallback: Created Quick Notes file as no existing files found',
               integrationStrategy: 'append'
@@ -513,7 +513,7 @@ function createIntelligentFallbackMappings(edits: ParagraphEdit[], organizedPage
           mappings.push({
             content: edit.content,
             path: getFullPath(bestMatch!, organizedPages),
-            editId: edit.id,
+            editId: edit.lineId,
             action: 'update_existing',
             reasoning: 'Fallback: Grouped similar edits into existing file',
             integrationStrategy: 'append'
@@ -526,7 +526,7 @@ function createIntelligentFallbackMappings(edits: ParagraphEdit[], organizedPage
           mappings.push({
             content: edit.content,
             path: `/${fileName}`,
-            editId: edit.id,
+            editId: edit.lineId,
             action: 'create_file',
             reasoning: 'Fallback: Created new file for grouped similar content',
             integrationStrategy: 'append'
@@ -546,19 +546,19 @@ function groupEditsBySimilarity(edits: ParagraphEdit[]): ParagraphEdit[][] {
   const processed = new Set<string>()
   
   for (const edit of edits) {
-    if (processed.has(edit.id)) continue
+    if (processed.has(edit.lineId)) continue
     
     const group = [edit]
-    processed.add(edit.id)
+    processed.add(edit.lineId)
     
     // Find similar edits
     for (const otherEdit of edits) {
-      if (processed.has(otherEdit.id)) continue
+      if (processed.has(otherEdit.lineId)) continue
       
       const similarity = calculateSimpleTextSimilarity(edit.content, otherEdit.content)
       if (similarity > 0.4) { // 40% similarity threshold for grouping
         group.push(otherEdit)
-        processed.add(otherEdit.id)
+        processed.add(otherEdit.lineId)
       }
     }
     
