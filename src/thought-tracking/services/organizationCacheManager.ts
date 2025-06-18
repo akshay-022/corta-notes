@@ -1,5 +1,5 @@
-import { Page, PageUpdate, PageInsert } from '@/lib/supabase/types';
-import { OrganizedPage, OrganizationResult } from '../types';
+import { Page } from '@/lib/supabase/types';
+import { OrganizationResult } from '../types';
 import { createClient } from '@/lib/supabase/supabase-client';
 
 export interface CacheUpdateEvent {

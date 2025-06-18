@@ -9,7 +9,7 @@ import {
 import { calculateTextSimilarity, generateId } from '../utils/helpers';
 import { ORGANIZATION_DEFAULTS, API_ENDPOINTS } from '../constants';
 import { createClient } from '@/lib/supabase/supabase-client';
-import { Page, PageUpdate, PageInsert } from '@/lib/supabase/types';
+import { PageUpdate, PageInsert } from '@/lib/supabase/types';
 import { organizationCacheManager, OrganizationCacheManager } from '../services/organizationCacheManager';
 
 export class OrganizationManager {
