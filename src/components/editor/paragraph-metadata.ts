@@ -423,6 +423,8 @@ export async function updateMetadataByParagraphIdInDB(
       const nid = block.attrs?.id || block.attrs?.metadata?.id
       if (nid !== paragraphId) return block
 
+      if (!block.attrs) return block
+
       const current = block.attrs?.metadata || {}
       const newMeta = { ...current, ...updates }
 
