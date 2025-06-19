@@ -55,7 +55,7 @@ export const STORAGE_KEYS = {
 
 export const SUPABASE_DEFAULTS = {
   tableName: 'pages',
-  brainStateKey: 'thought_tracking_brain_state',
+  brainStateKey: 'thought-tracking:brain-state',
 } as const;
 
 // =============================================================================
