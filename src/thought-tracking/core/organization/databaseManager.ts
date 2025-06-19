@@ -37,6 +37,31 @@ export class DatabaseManager {
   }
 
   /**
+   * Load existing unorganized pages from database
+   */
+  async loadUnorganizedPages(): Promise<OrganizedPage[]> {
+    try {
+      const { data, error } = await this.supabase
+        .from('pages')
+        .select('*')
+        .eq('user_id', this.userId)
+        .eq('organized', false)
+        .eq('is_deleted', false)
+        .order('updated_at', { ascending: false });
+
+      if (error) {
+        console.error('Error loading unorganized pages:', error);
+        return [];
+      }
+
+      return data.map(this.mapDatabasePageToOrganizedPage);
+    } catch (error) {
+      console.error('Error loading unorganized pages:', error);
+      return [];
+    }
+  }
+
+  /**
    * Create a new file in the database
    */
   async createNewFile(

@@ -105,12 +105,15 @@ export class OrganizationManager {
       const existingPages = await this.storageManager.loadOrganizedPages();
       const fileTree = this.inputProcessor.buildFileTree(this.convertToNewOrganizedPages(existingPages));
       
+      // Load unorganized pages for content lookup
+      const unorganizedPages = await this.storageManager.loadUnorganizedPages();
+      
       // Convert edits to new format
       const convertedEdits = this.convertToNewLineEdits(edits);
       
       // Get full page content for the first edit's page (assuming all edits are from same page)
       const pageId = edits[0]?.pageId || '';
-      const fullPageContent = await this.getFullPageContent(pageId, existingPages);
+      const fullPageContent = await this.getFullPageContent(pageId, unorganizedPages);
       
       // Prepare organization input
       const organizationInput: OrganizationInput = {

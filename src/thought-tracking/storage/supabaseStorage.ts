@@ -231,6 +231,27 @@ export class SupabaseStorageManager implements StorageManager {
     }
   }
 
+  async loadUnorganizedPages(): Promise<OrganizedPage[]> {
+    try {
+      const { data, error } = await this.supabase
+        .from(this.config.tableName)
+        .select('*')
+        .eq('user_id', this.userId)
+        .eq('organized', false)
+        .eq('is_deleted', false)
+        .order('updated_at', { ascending: false });
+
+      if (error) {
+        throw new Error(`Failed to load unorganized pages: ${error.message}`);
+      }
+
+      return (data || []).map(this.mapDatabasePageToOrganizedPage);
+    } catch (error) {
+      console.error('Error loading unorganized pages:', error);
+      return [];
+    }
+  }
+
   private mapDatabasePageToOrganizedPage(dbPage: DatabasePage): OrganizedPage {
     const thoughtTracking = dbPage.metadata?.thoughtTracking || {};
     

@@ -55,6 +55,46 @@ class ApiStorageManager implements StorageManager {
     }
   }
 
+  async loadUnorganizedPages() {
+    try {
+      const { data, error } = await this.supabase
+        .from('pages')
+        .select('*')
+        .eq('user_id', this.userId)
+        .eq('organized', false)
+        .eq('is_deleted', false)
+        .order('updated_at', { ascending: false });
+
+      if (error) {
+        console.error('Error loading unorganized pages:', error);
+        return [];
+      }
+
+      return data.map((page: any) => ({
+        uuid: page.uuid,
+        title: page.title,
+        content: page.content,
+        content_text: page.content_text,
+        organized: page.organized,
+        type: page.type,
+        parent_uuid: page.parent_uuid,
+        emoji: page.emoji,
+        description: page.description,
+        visible: page.visible,
+        is_deleted: page.is_deleted,
+        metadata: page.metadata,
+        created_at: page.created_at,
+        updated_at: page.updated_at,
+        tags: page.tags,
+        category: page.category,
+        relatedPages: []
+      }));
+    } catch (error) {
+      console.error('Error loading unorganized pages:', error);
+      return [];
+    }
+  }
+
   async saveOrganizedPages() {
     // No-op for API - OrganizationManager handles direct database operations
     return Promise.resolve();

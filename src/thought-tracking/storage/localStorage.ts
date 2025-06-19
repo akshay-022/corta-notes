@@ -124,6 +124,19 @@ export class LocalStorageManager implements StorageManager {
     }
   }
 
+  async loadUnorganizedPages(): Promise<OrganizedPage[]> {
+    try {
+      const stored = localStorage.getItem(this.getOrganizedPagesKey());
+      if (!stored) return [];
+      
+      const allPages = JSON.parse(stored) as OrganizedPage[];
+      return allPages.filter(page => !page.organized);
+    } catch (error) {
+      console.error('Error loading unorganized pages:', error);
+      return [];
+    }
+  }
+
   async getPageByUuid(uuid: string): Promise<OrganizedPage | null> {
     try {
       const pages = await this.loadOrganizedPages();
