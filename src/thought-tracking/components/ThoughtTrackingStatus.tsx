@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useThoughtTracker } from '../hooks/useThoughtTracker';
+import { ThoughtTracker } from '../core/thoughtTracker';
 import { Brain, Clock, FileText, Zap } from 'lucide-react';
 
 interface ThoughtTrackingStatusProps {
@@ -11,6 +12,15 @@ export function ThoughtTrackingStatus({
   pageUuid, 
   className = '' 
 }: ThoughtTrackingStatusProps) {
+  // Create a ThoughtTracker instance
+  const tracker = useMemo(() => {
+    return new ThoughtTracker(
+      undefined, // use default storage manager
+      '/api/summarize', // summaryApiEndpoint
+      '/api/organize-note' // organizationApiEndpoint
+    );
+  }, []);
+
   const {
     brainState,
     organizedPages,
@@ -21,7 +31,7 @@ export function ThoughtTrackingStatus({
     error,
     isOrganizing,
     triggerOrganization,
-  } = useThoughtTracker('/api/summarize', '/api/organize-note');
+  } = useThoughtTracker({ tracker });
 
   const [showDetails, setShowDetails] = useState(false);
 
@@ -43,7 +53,10 @@ export function ThoughtTrackingStatus({
     );
   }
 
-  const totalEdits = brainState?.edits.length || 0;
+  // Calculate total edits from lineMap
+  const totalEdits = brainState?.lineMap 
+    ? Object.values(brainState.lineMap).reduce((total, edits) => total + edits.length, 0)
+    : 0;
   const unorganizedCount = unorganizedEdits.length;
   const organizedCount = organizedPages.length;
   const recentCount = recentEdits.length;
@@ -124,7 +137,16 @@ export function ThoughtTrackingStatus({
 
 // Mini version for toolbar/status bar
 export function ThoughtTrackingMini({ className = '' }: { className?: string }) {
-  const { brainState, unorganizedEdits, isOrganizing, triggerOrganization } = useThoughtTracker();
+  // Create a ThoughtTracker instance for mini component
+  const tracker = useMemo(() => {
+    return new ThoughtTracker(
+      undefined, // use default storage manager
+      '/api/summarize', // summaryApiEndpoint
+      '/api/organize-note' // organizationApiEndpoint
+    );
+  }, []);
+
+  const { brainState, unorganizedEdits, isOrganizing, triggerOrganization } = useThoughtTracker({ tracker });
   
   const unorganizedCount = unorganizedEdits.length;
   const maxEdits = brainState?.config.maxEditsBeforeOrganization || 20;

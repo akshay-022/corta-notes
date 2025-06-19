@@ -33,6 +33,7 @@ export interface UseThoughtTrackerReturn {
   brainState: BrainState | null;
   unorganizedEdits: LineEdit[];
   organizedPages: OrganizedPage[];
+  recentEdits: LineEdit[];
   
   // Analysis methods
   getLineHistory: (lineId: string) => Promise<LineEdit[]>;
@@ -46,6 +47,7 @@ export interface UseThoughtTrackerReturn {
   
   // Status
   isLoading: boolean;
+  isOrganizing: boolean;
   error: string | null;
   
   // Statistics
@@ -63,7 +65,9 @@ export function useThoughtTracker({
   const [brainState, setBrainState] = useState<BrainState | null>(null);
   const [unorganizedEdits, setUnorganizedEdits] = useState<LineEdit[]>([]);
   const [organizedPages, setOrganizedPages] = useState<OrganizedPage[]>([]);
+  const [recentEdits, setRecentEdits] = useState<LineEdit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isOrganizing, setIsOrganizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<any>(null);
 
@@ -93,6 +97,23 @@ export function useThoughtTracker({
       setUnorganizedEdits(unorganizedEditsData);
       setOrganizedPages(organizedPagesData);
       setStats(statsData);
+      
+      // Get recent edits from the last 24 hours or last 10 edits
+      const recentEditsCutoff = Date.now() - (24 * 60 * 60 * 1000); // 24 hours ago
+      const allEdits: LineEdit[] = [];
+      
+      // Extract all edits from the lineMap
+      if (brainStateData?.lineMap) {
+        Object.values(brainStateData.lineMap).forEach(edits => {
+          allEdits.push(...edits);
+        });
+      }
+      
+      const recentEditsData = allEdits
+        .filter((edit: LineEdit) => edit.timestamp > recentEditsCutoff)
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, 10); // Take last 10 recent edits
+      setRecentEdits(recentEditsData);
 
     } catch (err) {
       console.error('Error loading thought tracker data:', err);
@@ -207,14 +228,15 @@ export function useThoughtTracker({
 
   const triggerOrganization = useCallback(async (): Promise<void> => {
     try {
-      setIsLoading(true);
+      setIsOrganizing(true);
+      setError(null);
       await trackerRef.current.triggerManualOrganization();
       // Data will be refreshed via event listeners
     } catch (err) {
       console.error('Error triggering organization:', err);
       setError(err instanceof Error ? err.message : 'Failed to trigger organization');
     } finally {
-      setIsLoading(false);
+      setIsOrganizing(false);
     }
   }, []);
 
@@ -241,6 +263,7 @@ export function useThoughtTracker({
     brainState,
     unorganizedEdits,
     organizedPages,
+    recentEdits,
     
     // Analysis
     getLineHistory,
@@ -254,6 +277,7 @@ export function useThoughtTracker({
     
     // Status
     isLoading,
+    isOrganizing,
     error,
     
     // Statistics
@@ -266,11 +290,13 @@ export function useThoughtTracker({
     brainState,
     unorganizedEdits,
     organizedPages,
+    recentEdits,
     getLineHistory,
     getLinesByPage,
     triggerOrganization,
     updateConfig,
     isLoading,
+    isOrganizing,
     error,
     stats,
     refresh,

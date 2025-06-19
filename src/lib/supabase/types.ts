@@ -424,9 +424,19 @@ export const Constants = {
   },
 } as const
 
-// Convenience type aliases
+// Convenience type exports for easier imports
 export type Page = Tables<'pages'>
-export type PageUpdate = TablesUpdate<'pages'>
 export type PageInsert = TablesInsert<'pages'>
+export type PageUpdate = TablesUpdate<'pages'>
+
 export type Conversation = Tables<'conversations'>
+export type ConversationInsert = TablesInsert<'conversations'>
+export type ConversationUpdate = TablesUpdate<'conversations'>
+
 export type ChatMessage = Tables<'chat_messages'>
+export type ChatMessageInsert = TablesInsert<'chat_messages'>
+export type ChatMessageUpdate = TablesUpdate<'chat_messages'>
+
+export type Profile = Tables<'profiles'>
+export type ProfileInsert = TablesInsert<'profiles'>
+export type ProfileUpdate = TablesUpdate<'profiles'>
