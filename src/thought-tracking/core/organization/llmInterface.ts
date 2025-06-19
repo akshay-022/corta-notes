@@ -26,7 +26,6 @@ export class LLMInterface {
       throw new Error(`Failed to get LLM recommendations: ${error}`);
     }
   }
-
   private buildPrompt(context: {
     editsContext: string;
     fileTreeContext: string;
@@ -58,6 +57,20 @@ RULES:
 - Preserve all original information while improving clarity
 - Group similar edits together to avoid file fragmentation
 
+FILE PATH REQUIREMENTS:
+- All paths must start with "/" (root)
+- For existing files: Use the exact path shown in the file tree (e.g., "/Documents/Notes/meeting-notes.md")
+- For new files: Ensure the parent folder exists in the file tree or is "/" (root)
+- Parent folders must be marked as [DIR] in the file tree or be "/" for root level
+- File names should be descriptive and use kebab-case (e.g., "project-notes.md", "meeting-summary.md")
+- Only create new folders when absolutely necessary for organization
+
+VALIDATION CHECKLIST:
+- Does the targetFilePath exist in the file tree? If not, does its parent folder exist?
+- Is the parent folder actually a [DIR] type in the file tree?
+- If creating a new file, is the parent path valid and accessible?
+- Are you using the correct file path format from the existing tree?
+
 RESPONSE FORMAT:
 Respond with ONLY a valid JSON object in this exact format:
 {
@@ -74,7 +87,7 @@ Respond with ONLY a valid JSON object in this exact format:
   ],
 }
 
-Focus on logical organization and content improvement while preserving all information.`;
+Focus on logical organization and content improvement while preserving all information and ensuring valid file paths.`;
   }
 
   private async callOpenAI(prompt: string): Promise<string> {
