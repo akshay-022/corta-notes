@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import dynamic from 'next/dynamic';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -11,6 +12,10 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
+
+// Dynamically import the client-side brain-state loader to avoid
+// making RootLayout itself a client component.
+const BrainStateLoader = dynamic(() => import('@/thought-tracking/components/BrainStateLoader'), { ssr: false });
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -34,7 +39,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <BrainStateLoader>{children}</BrainStateLoader>
       </body>
     </html>
   );

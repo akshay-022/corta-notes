@@ -361,7 +361,7 @@ export function setNewParagraphIds(editor: Editor, pageUuid: string): void {
  * Update metadata of a paragraph by its unique id (searches entire document)
  */
 export function updateMetadataByParagraphId(
-  editor: Editor,
+  editor: Editor, 
   paragraphId: string,
   updates: Partial<ParagraphMetadata>
 ): boolean {

@@ -40,6 +40,20 @@ export class LocalStorageManager implements StorageManager {
   async saveBrainState(state: BrainState): Promise<void> {
     try {
       localStorage.setItem(this.getBrainStateKey(), JSON.stringify(state));
+
+      // Additionally persist to Supabase profile if userId is available
+      if (this.userId) {
+        try {
+          const { createClient } = await import('@/lib/supabase/supabase-client');
+          const supabase = createClient();
+          await supabase
+            .from('profiles')
+            .update({ brain_state: state, updated_at: new Date().toISOString() })
+            .eq('user_id', this.userId);
+        } catch (dbErr) {
+          console.warn('Failed to sync brain state to Supabase:', dbErr);
+        }
+      }
     } catch (error) {
       console.error('Error saving brain state:', error);
       throw new Error('Failed to save brain state to localStorage');
@@ -48,7 +62,31 @@ export class LocalStorageManager implements StorageManager {
 
   async loadBrainState(): Promise<BrainState | null> {
     try {
-      const stored = localStorage.getItem(this.getBrainStateKey());
+      // Try to get from Supabase first if we have a userId
+      let stored = null;
+      if (this.userId) {
+        try {
+          const { createClient } = await import('@/lib/supabase/supabase-client');
+          const supabase = createClient();
+          const { data } = await supabase
+            .from('profiles')
+            .select('brain_state')
+            .eq('user_id', this.userId)
+            .single();
+          
+          if (data?.brain_state) {
+            stored = JSON.stringify(data.brain_state);
+          }
+        } catch (err) {
+          console.warn('Failed to load brain state from Supabase:', err);
+        }
+      }
+
+      // Fall back to localStorage if no Supabase data
+      if (!stored) {
+        stored = localStorage.getItem(this.getBrainStateKey());
+      }
+      
       if (!stored) return null;
       
       const state = JSON.parse(stored) as BrainState;
