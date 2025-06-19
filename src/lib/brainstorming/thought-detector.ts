@@ -57,33 +57,36 @@ function extractTextFromTipTap(content: any): string {
  */
 export function detectLastThought(editor: any): string {
   try {
-    if (!editor) return ''
-
-    // Get all content blocks with their metadata
-    const contentBlocks: Array<{content: string, timestamp: Date, index: number}> = []
+    // Get brain state from lineMap instead of editor nodes
+    const { getBrainState } = require('@/lib/thought-tracking/brain-state')
+    const brainState = getBrainState()
     
-    editor.state.doc.content.content.forEach((node: { type: { name: string }, textContent: string, attrs: { lastUpdated?: string } }, index: number) => {
-      // Get content from any node that has text
-      const content = node.textContent.trim()
-      if (content && node.attrs.lastUpdated) {
-        const timestamp = new Date(node.attrs.lastUpdated)
-        contentBlocks.push({ content, timestamp, index })
-      }
-    })
+    if (!brainState?.lineMap) return ''
 
-    // Sort by timestamp (most recent first), then by reverse index for same timestamps
-    const recentContent = contentBlocks
-      .sort((a, b) => {
-        const timeDiff = b.timestamp.getTime() - a.timestamp.getTime()
-        if (timeDiff !== 0) return timeDiff
-        // If timestamps are the same, sort by reverse index (later positions first)
-        return b.index - a.index
-      })
-      .slice(0, 5)
-      .map(p => p.content)
-      .join('\n\n')
+         // Get all latest line edits from lineMap
+     const recentEdits: Array<{content: string, timestamp: number, lineId: string}> = []
+     
+     for (const [lineId, lineEdits] of Object.entries(brainState.lineMap)) {
+       if (Array.isArray(lineEdits) && lineEdits.length > 0) {
+         // Get the latest edit for this line
+         const latestEdit = lineEdits[lineEdits.length - 1]
+         if (latestEdit && latestEdit.content && latestEdit.content.trim()) {
+           recentEdits.push({
+             content: latestEdit.content.trim(),
+             timestamp: latestEdit.timestamp,
+             lineId
+           })
+         }
+       }
+     }
 
-    return 'MOST RECENT TO SLIGHTLY LESS RECENT ORDER : \n' + recentContent || ''
+         // Take top 5 most recent edits (already in chronological order)
+     const recentContent = recentEdits
+       .slice(0, 5)
+       .map(edit => edit.content)
+       .join('\n\n')
+
+    return recentContent ? 'MOST RECENT TO SLIGHTLY LESS RECENT ORDER : \n' + recentContent : ''
   } catch (error) {
     console.error('Error detecting last thought:', error)
     return ''
@@ -172,18 +175,13 @@ export function createThoughtContext(
     context += '\n\n'
   }
   
-  // Get organized brain state categories as a clean JSON
+  // Get brain state summary
   try {
     const { getBrainState } = require('@/lib/thought-tracking/brain-state')
     const brainState = getBrainState()
-    // Build a clean object: { category: [thoughtContent, ...] }
-    const cleanCategories: Record<string, string[]> = {}
-    for (const category of Object.keys(brainState.categories)) {
-      cleanCategories[category] = brainState.categories[category]
-        .map((thought: any) => thought.content)
+    if (brainState?.summary) {
+      context += `Here is a summary of the user's brain state until now:\n${brainState.summary}\n\n\n\n`
     }
-    // Stringify for LLM
-    context += `CLEANED THOUGHTS (JSON):\n${JSON.stringify(cleanCategories, null, 2)}\n\n\n\n`
   } catch (error) {
     console.error('Error getting brain state for context:', error)
   }
