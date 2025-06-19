@@ -130,8 +130,8 @@ Page Length: ${input.fullPageContent.length} characters
   private serializeFileTree(nodes: FileTreeNode[], level: number = 0): string {
     const indent = '  '.repeat(level);
     return nodes.map(node => {
-      const icon = node.type === 'folder' ? '📁' : '📄';
-      const result = `${indent}${icon} ${node.title}`;
+      const prefix = node.type === 'folder' ? '[DIR]' : '[FILE]';
+      const result = `${indent}${prefix} ${node.title}`;
       
       if (node.children && node.children.length > 0) {
         return result + '\n' + this.serializeFileTree(node.children, level + 1);
