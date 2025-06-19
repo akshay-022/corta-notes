@@ -12,6 +12,15 @@ import { createClient } from '@/lib/supabase/supabase-client';
 import { PageUpdate, PageInsert } from '@/lib/supabase/types';
 import { organizationCacheManager, OrganizationCacheManager } from '../services/organizationCacheManager';
 import { updateMetadataByParagraphIdInDB } from '@/components/editor/paragraph-metadata';
+import { OrganizationOrchestrator } from './organization/organizationOrchestrator';
+import { InputProcessor } from './organization/inputProcessor';
+import { 
+  OrganizationInput, 
+  FileTreeNode,
+  LineEdit as NewLineEdit,
+  OrganizedPage as NewOrganizedPage,
+  OrganizationResult as NewOrganizationResult
+} from './organization/types';
 
 export class OrganizationManager {
   private storageManager: StorageManager;
@@ -20,11 +29,15 @@ export class OrganizationManager {
   private supabase: any;
   private userId?: string;
   private cacheManager: OrganizationCacheManager;
+  private orchestrator?: OrganizationOrchestrator;
+  private inputProcessor: InputProcessor;
+  private openAIKey?: string;
 
   constructor(
     storageManager: StorageManager, 
     apiEndpoint: string = API_ENDPOINTS.ORGANIZATION,
-    userId?: string
+    userId?: string,
+    openAIKey?: string
   ) {
     this.storageManager = storageManager;
     this.apiEndpoint = apiEndpoint;
@@ -32,10 +45,17 @@ export class OrganizationManager {
     this.supabase = createClient();
     this.userId = userId;
     this.cacheManager = organizationCacheManager;
+    this.inputProcessor = new InputProcessor();
+    this.openAIKey = openAIKey;
     
     // Set userId in cache manager
     if (userId) {
       this.cacheManager.setUserId(userId);
+    }
+
+    // Initialize orchestrator if we have the required parameters
+    if (userId && openAIKey) {
+      this.orchestrator = new OrganizationOrchestrator(userId, openAIKey);
     }
   }
 
@@ -64,30 +84,299 @@ export class OrganizationManager {
       // Start organization process
       this.cacheManager.startOrganization();
       
-      // Load existing organized pages
-      const existingPages = await this.storageManager.loadOrganizedPages();
-      
-      // Prepare organization request
-      const request = this.prepareOrganizationRequest(edits, existingPages);
-      
-      // Call organization API
-      const result = await this.callOrganizationAPI(request);
-      
-      // Update original paragraph metadata with organization info
-      await this.updateOrganizeMetadata(result);
-      
-      // Process and save results
-      await this.processOrganizationResult(result);
-      
-      // Complete organization with cache updates
-      await this.cacheManager.completeOrganization(result);
-      
-      return result;
+      // Use new orchestrator if available, otherwise fallback to old method
+      if (this.orchestrator) {
+        return await this.organizeWithOrchestrator(edits);
+      } else {
+        console.warn('OrganizationOrchestrator not available, using fallback method');
+        return await this.organizeWithFallback(edits);
+      }
     } catch (error) {
       console.error('Error organizing content:', error);
       
       // Fallback organization
       return this.performFallbackOrganization(edits);
+    }
+  }
+
+  private async organizeWithOrchestrator(edits: LineEdit[]): Promise<OrganizationResult> {
+    try {
+      // Load existing organized pages to build file tree
+      const existingPages = await this.storageManager.loadOrganizedPages();
+      const fileTree = this.inputProcessor.buildFileTree(this.convertToNewOrganizedPages(existingPages));
+      
+      // Convert edits to new format
+      const convertedEdits = this.convertToNewLineEdits(edits);
+      
+      // Get full page content for the first edit's page (assuming all edits are from same page)
+      const pageId = edits[0]?.pageId || '';
+      const fullPageContent = await this.getFullPageContent(pageId, existingPages);
+      
+      // Prepare organization input
+      const organizationInput: OrganizationInput = {
+        edits: convertedEdits,
+        fullPageContent,
+        pageId,
+        existingFileTree: fileTree
+      };
+
+      // Call orchestrator to get organization plan (no database operations)
+      const organizationPlan = await this.orchestrator!.organizeContent(organizationInput);
+      
+      // Execute the organization plan by actually creating/updating pages
+      const actualResult = await this.executeOrganizationPlan(organizationPlan, existingPages);
+      
+      // Convert result back to old format
+      const convertedResult = this.convertToOldOrganizationResult(actualResult);
+      
+      // Update original paragraph metadata with organization info
+      await this.updateOrganizeMetadata(convertedResult);
+      
+      // Process and save results using existing methods
+      await this.processOrganizationResult(convertedResult);
+      
+      // Complete organization with cache updates
+      await this.cacheManager.completeOrganization(convertedResult);
+      
+      return convertedResult;
+    } catch (error) {
+      console.error('Error in orchestrator organization:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Execute the organization plan by actually creating/updating pages in the database
+   */
+  private async executeOrganizationPlan(
+    organizationPlan: NewOrganizationResult,
+    existingPages: OrganizedPage[]
+  ): Promise<NewOrganizationResult> {
+    const updatedPages: NewOrganizedPage[] = [];
+    const newPages: NewOrganizedPage[] = [];
+
+    // Handle new pages
+    for (const plannedPage of organizationPlan.newPages) {
+      if (plannedPage.uuid === '') {
+        // Generate UUID for new page
+        plannedPage.uuid = generateId();
+      }
+
+      // Create the page in database via Supabase directly
+      if (this.userId) {
+        try {
+          const insertData = {
+            uuid: plannedPage.uuid,
+            user_id: this.userId,
+            title: plannedPage.title,
+            content: plannedPage.content,
+            content_text: plannedPage.content_text,
+            organized: plannedPage.organized,
+            type: plannedPage.type,
+            parent_uuid: plannedPage.parent_uuid,
+            visible: plannedPage.visible,
+            is_deleted: plannedPage.is_deleted,
+            metadata: plannedPage.metadata,
+          };
+
+          const { data, error } = await this.supabase
+            .from('pages')
+            .insert(insertData)
+            .select('*')
+            .single();
+
+          if (error) {
+            console.error('Error creating new page:', error);
+            continue;
+          }
+
+          // Add to new pages list
+          newPages.push({
+            ...plannedPage,
+            uuid: data.uuid,
+            created_at: data.created_at,
+            updated_at: data.updated_at
+          });
+        } catch (error) {
+          console.error('Error creating new page:', error);
+          continue;
+        }
+      } else {
+        // No userId, just add to list (for testing or fallback scenarios)
+        newPages.push(plannedPage);
+      }
+    }
+
+    // Handle updated pages
+    for (const plannedPage of organizationPlan.updatedPages) {
+      if (this.userId && plannedPage.uuid) {
+        try {
+          const updateData = {
+            title: plannedPage.title,
+            content: plannedPage.content,
+            content_text: plannedPage.content_text,
+            updated_at: new Date().toISOString(),
+            metadata: plannedPage.metadata,
+          };
+
+          const { data, error } = await this.supabase
+            .from('pages')
+            .update(updateData)
+            .eq('uuid', plannedPage.uuid)
+            .eq('user_id', this.userId)
+            .select('*')
+            .single();
+
+          if (error) {
+            console.error('Error updating page:', error);
+            continue;
+          }
+
+          // Add to updated pages list
+          updatedPages.push({
+            ...plannedPage,
+            updated_at: data.updated_at
+          });
+        } catch (error) {
+          console.error('Error updating page:', error);
+          continue;
+        }
+      } else {
+        // No userId or uuid, just add to list (for testing or fallback scenarios)
+        updatedPages.push(plannedPage);
+      }
+    }
+
+    return {
+      updatedPages,
+      newPages,
+      summary: organizationPlan.summary,
+      processedEditIds: organizationPlan.processedEditIds,
+      errors: organizationPlan.errors
+    };
+  }
+
+  private async organizeWithFallback(edits: LineEdit[]): Promise<OrganizationResult> {
+    // Load existing organized pages
+    const existingPages = await this.storageManager.loadOrganizedPages();
+    
+    // Prepare organization request
+    const request = this.prepareOrganizationRequest(edits, existingPages);
+    
+    // Call organization API
+    const result = await this.callOrganizationAPI(request);
+    
+    // Update original paragraph metadata with organization info
+    await this.updateOrganizeMetadata(result);
+    
+    // Process and save results
+    await this.processOrganizationResult(result);
+    
+    // Complete organization with cache updates
+    await this.cacheManager.completeOrganization(result);
+    
+    return result;
+  }
+
+  private convertToNewLineEdits(oldEdits: LineEdit[]): NewLineEdit[] {
+    return oldEdits.map(edit => ({
+      lineId: edit.lineId,
+      pageId: edit.pageId,
+      content: edit.content,
+      timestamp: edit.timestamp,
+      organized: edit.organized,
+      version: edit.version || 1,
+      editType: 'update' as const, // Default to update, could be inferred from context
+      metadata: {
+        wordCount: edit.content.split(/\s+/).length,
+        charCount: edit.content.length
+      }
+    }));
+  }
+
+  private convertToOldOrganizedPage(newPage: NewOrganizedPage): OrganizedPage {
+    return {
+      uuid: newPage.uuid,
+      title: newPage.title,
+      content: newPage.content,
+      content_text: newPage.content_text,
+      organized: newPage.organized,
+      type: newPage.type, // Both types are compatible now
+      parent_uuid: newPage.parent_uuid,
+      emoji: newPage.emoji,
+      description: newPage.description,
+      tags: newPage.tags,
+      category: newPage.category,
+      updated_at: newPage.updated_at,
+      created_at: newPage.created_at,
+      visible: newPage.visible,
+      is_deleted: newPage.is_deleted,
+      metadata: newPage.metadata,
+      relatedPages: [], // Add any missing fields that exist in old format
+    };
+  }
+
+  private convertToNewOrganizedPages(oldPages: OrganizedPage[]): NewOrganizedPage[] {
+    return oldPages.map(page => ({
+      uuid: page.uuid,
+      title: page.title,
+      content: page.content,
+      content_text: page.content_text,
+      organized: page.organized,
+      type: page.type || 'file', // Default to 'file' if not specified
+      parent_uuid: page.parent_uuid,
+      emoji: page.emoji,
+      description: page.description,
+      tags: page.tags,
+      category: page.category,
+      updated_at: page.updated_at,
+      created_at: page.created_at,
+      visible: page.visible,
+      is_deleted: page.is_deleted,
+      metadata: page.metadata,
+    }));
+  }
+
+  private convertToOldOrganizationResult(newResult: NewOrganizationResult): OrganizationResult {
+    return {
+      updatedPages: newResult.updatedPages.map(page => this.convertToOldOrganizedPage(page)),
+      newPages: newResult.newPages.map(page => this.convertToOldOrganizedPage(page)),
+      summary: newResult.summary,
+      processedEditIds: newResult.processedEditIds,
+      // Note: Original OrganizationResult doesn't have errors field
+    };
+  }
+
+  private async getFullPageContent(pageId: string, existingPages?: OrganizedPage[]): Promise<string> {
+    if (!pageId) {
+      return '';
+    }
+
+    // First, try to find the page in the existing pages if provided
+    if (existingPages) {
+      const sourcePage = existingPages.find(page => page.uuid === pageId);
+      if (sourcePage) {
+        return sourcePage.content_text || '';
+      }
+    }
+
+    // If not found in existing pages or not provided, fetch from database
+    if (!this.userId) {
+      return '';
+    }
+
+    try {
+      const { data: page } = await this.supabase
+        .from('pages')
+        .select('content_text')
+        .eq('uuid', pageId)
+        .eq('user_id', this.userId)
+        .single();
+
+      return page?.content_text || '';
+    } catch (error) {
+      console.error('Error fetching page content:', error);
+      return '';
     }
   }
 
@@ -677,6 +966,20 @@ Return a structured response indicating for each edit:
     // Update storage manager if it supports it
     if (this.storageManager.setUserId) {
       this.storageManager.setUserId(userId);
+    }
+
+    // Re-initialize orchestrator if we have OpenAI key
+    if (this.openAIKey) {
+      this.orchestrator = new OrganizationOrchestrator(userId, this.openAIKey);
+    }
+  }
+
+  setOpenAIKey(openAIKey: string): void {
+    this.openAIKey = openAIKey;
+    
+    // Re-initialize orchestrator if we have userId
+    if (this.userId) {
+      this.orchestrator = new OrganizationOrchestrator(this.userId, openAIKey);
     }
   }
 
