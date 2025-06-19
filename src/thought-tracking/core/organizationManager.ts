@@ -149,107 +149,38 @@ export class OrganizationManager {
   }
 
   /**
-   * Execute the organization plan by actually creating/updating pages in the database
+   * Execute the organization plan by preparing the result and using processOrganizationResult
    */
   private async executeOrganizationPlan(
     organizationPlan: NewOrganizationResult,
     existingPages: OrganizedPage[]
   ): Promise<NewOrganizationResult> {
-    const updatedPages: NewOrganizedPage[] = [];
-    const newPages: NewOrganizedPage[] = [];
+    // Generate UUIDs for new pages that don't have them
+    const newPages = organizationPlan.newPages.map(page => ({
+      ...page,
+      uuid: page.uuid || generateId(),
+      created_at: page.created_at || new Date().toISOString(),
+      updated_at: page.updated_at || new Date().toISOString()
+    }));
 
-    // Handle new pages
-    for (const plannedPage of organizationPlan.newPages) {
-      if (plannedPage.uuid === '') {
-        // Generate UUID for new page
-        plannedPage.uuid = generateId();
-      }
+    // Ensure updated pages have updated timestamps
+    const updatedPages = organizationPlan.updatedPages.map(page => ({
+      ...page,
+      updated_at: new Date().toISOString()
+    }));
 
-      // Create the page in database via Supabase directly
-      if (this.userId) {
-        try {
-          const insertData = {
-            uuid: plannedPage.uuid,
-            user_id: this.userId,
-            title: plannedPage.title,
-            content: plannedPage.content,
-            content_text: plannedPage.content_text,
-            organized: plannedPage.organized,
-            type: plannedPage.type,
-            parent_uuid: plannedPage.parent_uuid,
-            visible: plannedPage.visible,
-            is_deleted: plannedPage.is_deleted,
-            metadata: plannedPage.metadata,
-          };
+    // Convert to old format for processOrganizationResult
+    const result: OrganizationResult = {
+      updatedPages: updatedPages.map(page => this.convertToOldOrganizedPage(page)),
+      newPages: newPages.map(page => this.convertToOldOrganizedPage(page)),
+      summary: organizationPlan.summary,
+      processedEditIds: organizationPlan.processedEditIds
+    };
 
-          const { data, error } = await this.supabase
-            .from('pages')
-            .insert(insertData)
-            .select('*')
-            .single();
+    // Use the existing processOrganizationResult method to handle all saves
+    await this.processOrganizationResult(result);
 
-          if (error) {
-            console.error('Error creating new page:', error);
-            continue;
-          }
-
-          // Add to new pages list
-          newPages.push({
-            ...plannedPage,
-            uuid: data.uuid,
-            created_at: data.created_at,
-            updated_at: data.updated_at
-          });
-        } catch (error) {
-          console.error('Error creating new page:', error);
-          continue;
-        }
-      } else {
-        // No userId, just add to list (for testing or fallback scenarios)
-        newPages.push(plannedPage);
-      }
-    }
-
-    // Handle updated pages
-    for (const plannedPage of organizationPlan.updatedPages) {
-      if (this.userId && plannedPage.uuid) {
-        try {
-          const updateData = {
-            title: plannedPage.title,
-            content: plannedPage.content,
-            content_text: plannedPage.content_text,
-            updated_at: new Date().toISOString(),
-            metadata: plannedPage.metadata,
-          };
-
-          const { data, error } = await this.supabase
-            .from('pages')
-            .update(updateData)
-            .eq('uuid', plannedPage.uuid)
-            .eq('user_id', this.userId)
-            .select('*')
-            .single();
-
-          if (error) {
-            console.error('Error updating page:', error);
-            continue;
-          }
-
-          // Add to updated pages list
-          updatedPages.push({
-            ...plannedPage,
-            updated_at: data.updated_at
-          });
-        } catch (error) {
-          console.error('Error updating page:', error);
-          continue;
-        }
-      } else {
-        // No userId or uuid, just add to list (for testing or fallback scenarios)
-        updatedPages.push(plannedPage);
-      }
-    }
-
+    // Return the new format result
     return {
       updatedPages,
       newPages,
@@ -509,10 +440,6 @@ Return a structured response indicating for each edit:
           updated_at: new Date().toISOString(),
         };
 
-        if (page.description) updateData.description = page.description;
-        if (page.emoji) updateData.emoji = page.emoji;
-        if (page.parent_uuid) updateData.parent_uuid = page.parent_uuid;
-
         const updatePromise = this.supabase
           .from('pages')
           .update(updateData)
@@ -547,11 +474,6 @@ Return a structured response indicating for each edit:
           ...page.metadata
         },
       };
-
-      if (page.description) insertData.description = page.description;
-      if (page.emoji) insertData.emoji = page.emoji;
-      if (page.parent_uuid) insertData.parent_uuid = page.parent_uuid;
-      if (page.uuid) insertData.uuid = page.uuid;
 
       const insertPromise = this.supabase
         .from('pages')

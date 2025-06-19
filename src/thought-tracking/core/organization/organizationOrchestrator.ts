@@ -220,16 +220,18 @@ export class OrganizationOrchestrator {
    * Find page by path in the file tree
    */
   private findPageByPath(filePath: string, fileTree: any[]): OrganizedPage | null {
-    // Build path map
+    // Build path map using the existing path property
     const pathMap = new Map<string, any>();
     
-    const buildPathMap = (nodes: any[], currentPath = '') => {
+    const buildPathMap = (nodes: any[]) => {
       nodes.forEach(node => {
-        const nodePath = currentPath ? `${currentPath}/${node.name}` : node.name;
-        pathMap.set(nodePath, node);
+        // Use the existing path property directly
+        if (node.path) {
+          pathMap.set(node.path, node);
+        }
         
         if (node.children && node.children.length > 0) {
-          buildPathMap(node.children, nodePath);
+          buildPathMap(node.children);
         }
       });
     };
@@ -241,7 +243,7 @@ export class OrganizationOrchestrator {
       // Convert file tree node back to OrganizedPage format
       return {
         uuid: node.uuid,
-        title: node.name,
+        title: node.title,
         content: node.content || { type: "doc", content: [] },
         content_text: node.content_text || '',
         organized: true,
