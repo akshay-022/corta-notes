@@ -55,7 +55,7 @@ export class OrganizationManager {
 
     // Initialize orchestrator if we have the required parameters
     if (userId && openAIKey) {
-      this.orchestrator = new OrganizationOrchestrator(userId, openAIKey);
+      this.orchestrator = new OrganizationOrchestrator(userId, openAIKey, storageManager);
     }
   }
 
@@ -135,10 +135,7 @@ export class OrganizationManager {
       // Update original paragraph metadata with organization info
       await this.updateOrganizeMetadata(convertedResult);
       
-      // Process and save results using existing methods
-      await this.processOrganizationResult(convertedResult);
-      
-      // Complete organization with cache updates
+      // Complete organization with cache updates (processOrganizationResult already called in executeOrganizationPlan)
       await this.cacheManager.completeOrganization(convertedResult);
       
       return convertedResult;
@@ -895,7 +892,7 @@ Return a structured response indicating for each edit:
 
     // Re-initialize orchestrator if we have OpenAI key
     if (this.openAIKey) {
-      this.orchestrator = new OrganizationOrchestrator(userId, this.openAIKey);
+      this.orchestrator = new OrganizationOrchestrator(userId, this.openAIKey, this.storageManager);
     }
   }
 
@@ -904,7 +901,7 @@ Return a structured response indicating for each edit:
     
     // Re-initialize orchestrator if we have userId
     if (this.userId) {
-      this.orchestrator = new OrganizationOrchestrator(this.userId, openAIKey);
+      this.orchestrator = new OrganizationOrchestrator(this.userId, openAIKey, this.storageManager);
     }
   }
 
