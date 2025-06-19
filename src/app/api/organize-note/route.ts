@@ -193,6 +193,31 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Enhance edits with page titles for better LLM context
+    const uniquePageIds = [...new Set(edits.map(edit => edit.pageId))]
+    console.log(`Fetching titles for ${uniquePageIds.length} unique pages...`)
+    
+    const { data: pages, error: pagesError } = await supabase
+      .from('pages')
+      .select('uuid, title')
+      .in('uuid', uniquePageIds)
+      .eq('user_id', user.id)
+    
+    if (pagesError) {
+      console.error('Error fetching page titles:', pagesError)
+    }
+    
+    // Create page ID to title mapping
+    const pageTitleMap = new Map(pages?.map(p => [p.uuid, p.title]) || [])
+    
+    // Enhance edits with page titles
+    const enhancedEdits = edits.map(edit => ({
+      ...edit,
+      pageTitle: pageTitleMap.get(edit.pageId) || 'Unknown Page'
+    }))
+    
+    console.log(`Enhanced ${enhancedEdits.length} edits with page titles`)
+
     // Create storage manager
     const storageManager = new ApiStorageManager(supabase, user.id);
 
@@ -204,8 +229,8 @@ export async function POST(request: NextRequest) {
       process.env.OPENAI_API_KEY!
     );
 
-    // Execute organization - this handles all database operations
-    const result = await organizationManager.organizeContent(edits);
+    // Execute organization with enhanced edits - this handles all database operations
+    const result = await organizationManager.organizeContent(enhancedEdits);
 
     // Create file history items for frontend
     const fileHistoryItems = [

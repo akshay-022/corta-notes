@@ -106,6 +106,7 @@ export class InputProcessor {
   } {
     const editsContext = input.edits.map((edit, index) => 
       `${index + 1}. Paragraph ID: ${edit.lineId}
+         Page Title: "${edit.pageTitle || 'Unknown Page'}"
          Content: "${edit.content}"
          Type: ${edit.editType}`
     ).join('\n\n');

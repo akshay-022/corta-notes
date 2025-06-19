@@ -3,6 +3,7 @@
 export interface LineEdit {
   lineId: string; // Unique identifier for the line (paragraph metadata ID)
   pageId: string; // Page UUID from Supabase
+  pageTitle?: string; // Title of the source page for LLM context
   content: string; // Current content of the line
   timestamp: number; // When this version was created
   organized: boolean; // Whether this version has been organized
