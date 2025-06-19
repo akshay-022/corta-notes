@@ -3,8 +3,10 @@ import {
   OrganizationResult, 
   LLMOrganizationResponse,
   LineEdit,
-  OrganizedPage
+  OrganizedPage,
+  FileTreeNode
 } from './types';
+import { StorageManager } from '../../types';
 import { InputProcessor } from './inputProcessor';
 import { LLMInterface } from './llmInterface';
 import { FilePathValidator } from './filePathValidator';
@@ -15,12 +17,14 @@ export class OrganizationOrchestrator {
   private llmInterface: LLMInterface;
   private filePathValidator: FilePathValidator;
   private contentProcessor: ContentProcessor;
+  private storageManager: StorageManager;
 
-  constructor(userId: string, openAIKey: string) {
+  constructor(userId: string, openAIKey: string, storageManager: StorageManager) {
     this.inputProcessor = new InputProcessor();
     this.llmInterface = new LLMInterface(openAIKey);
     this.filePathValidator = new FilePathValidator();
     this.contentProcessor = new ContentProcessor();
+    this.storageManager = storageManager;
   }
 
   /**
@@ -67,7 +71,7 @@ export class OrganizationOrchestrator {
       }
 
       // Step 5: Build organization plan (no database operations)
-      const organizationPlan = this.buildOrganizationPlan(
+      const organizationPlan = await this.buildOrganizationPlan(
         llmResponse,
         contentResult.refinedContent,
         input.edits,
@@ -144,13 +148,13 @@ export class OrganizationOrchestrator {
   /**
    * Build organization plan without executing database operations
    */
-  private buildOrganizationPlan(
+  private async buildOrganizationPlan(
     llmResponse: LLMOrganizationResponse,
     refinedContent: string,
     edits: LineEdit[],
     parentUuid?: string,
     fileTree?: any[]
-  ): { targetPage: OrganizedPage | null; isNewPage: boolean } {
+  ): Promise<{ targetPage: OrganizedPage | null; isNewPage: boolean }> {
     const fileName = this.filePathValidator.getFileName(llmResponse.targetFilePath);
     
     if (llmResponse.shouldCreateNewFile) {
@@ -181,7 +185,7 @@ export class OrganizationOrchestrator {
       return { targetPage: plannedPage, isNewPage: true };
     } else {
       // Plan to update existing file - find the existing page and plan the update
-      const existingPage = this.findPageByPath(llmResponse.targetFilePath, fileTree || []);
+      const existingPage = await this.findPageByPath(llmResponse.targetFilePath, fileTree || []);
       
       if (!existingPage) {
         throw new Error(`Could not find existing page: ${llmResponse.targetFilePath}`);
@@ -217,13 +221,13 @@ export class OrganizationOrchestrator {
   }
 
   /**
-   * Find page by path in the file tree
+   * Find page by path in the file tree and load the full organized page
    */
-  private findPageByPath(filePath: string, fileTree: any[]): OrganizedPage | null {
+  private async findPageByPath(filePath: string, fileTree: FileTreeNode[]): Promise<OrganizedPage | null> {
     // Build path map using the existing path property
     const pathMap = new Map<string, any>();
     
-    const buildPathMap = (nodes: any[]) => {
+    const buildPathMap = (nodes: FileTreeNode[]) => {
       nodes.forEach(node => {
         // Use the existing path property directly
         if (node.path) {
@@ -239,25 +243,46 @@ export class OrganizationOrchestrator {
     buildPathMap(fileTree);
     const node = pathMap.get(filePath);
     
-    if (node && node.type === 'file') {
-      // Convert file tree node back to OrganizedPage format
-      return {
-        uuid: node.uuid,
-        title: node.title,
-        content: node.content || { type: "doc", content: [] },
-        content_text: node.content_text || '',
-        organized: true,
-        type: 'file',
-        parent_uuid: node.parent_uuid,
-        visible: true,
-        is_deleted: false,
-        created_at: node.created_at || new Date().toISOString(),
-        updated_at: node.updated_at || new Date().toISOString(),
-        metadata: node.metadata || {}
-      };
+    if (node && node.type === 'file' && node.uuid) {
+      // Load the full organized page from storage
+      try {
+        const fullPage = await this.storageManager.getPageByUuid(node.uuid);
+        if (fullPage) {
+          // Convert from main types to organization types
+          return this.convertToOrganizationPage(fullPage);
+        }
+      } catch (error) {
+        console.error(`Error loading page by UUID ${node.uuid}:`, error);
+      }
+      // Fallback: convert file tree node to OrganizedPage format if loading fails
+      return node as OrganizedPage;
     }
     
     return null;
+  }
+
+  /**
+   * Convert from main StorageManager OrganizedPage type to organization OrganizedPage type
+   */
+  private convertToOrganizationPage(page: import('../../types').OrganizedPage): OrganizedPage {
+    return {
+      uuid: page.uuid,
+      title: page.title,
+      content: page.content,
+      content_text: page.content_text,
+      organized: page.organized,
+      type: page.type || 'file', // Default to 'file' if undefined
+      parent_uuid: page.parent_uuid,
+      emoji: page.emoji,
+      description: page.description,
+      tags: page.tags,
+      category: page.category,
+      created_at: page.created_at,
+      updated_at: page.updated_at,
+      visible: page.visible,
+      is_deleted: page.is_deleted,
+      metadata: page.metadata
+    };
   }
 
   /**
