@@ -477,7 +477,7 @@ function createIntelligentFallbackMappings(edits: ParagraphEdit[], organizedPage
           } else {
             // No existing files - create a Quick Notes file
             mappings.push({
-              content: edit.content,
+        content: edit.content,
               path: '/Quick Notes',
               editId: edit.lineId,
               action: 'create_file',
@@ -524,7 +524,7 @@ function createIntelligentFallbackMappings(edits: ParagraphEdit[], organizedPage
         const fileName = generateFileNameFromContent(combinedContent)
         group.forEach(edit => {
           mappings.push({
-            content: edit.content,
+        content: edit.content,
             path: `/${fileName}`,
             editId: edit.lineId,
             action: 'create_file',
@@ -668,9 +668,9 @@ async function executeEditMappings(
     const existingPage = organizedPages.find(page => getFullPath(page, organizedPages) === path)
     
     if (existingPage) {
-      // Combine all content for this path
-      const combinedContent = pathMappings.map(m => m.content).join('\n\n')
-      
+    // Combine all content for this path
+    const combinedContent = pathMappings.map(m => m.content).join('\n\n')
+    
       // Determine integration strategy
       const integrationStrategy = pathMappings.some(m => m.integrationStrategy === 'integrate') 
         ? 'integrate' 
