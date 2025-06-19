@@ -342,6 +342,8 @@ export default function DashboardSidebarProvider({ children }: { children: React
       if (!isFolder) {
         setActivePage(data)
         setSidebarOpen(false)
+        // Navigate to the newly created page
+        router.push(`/dashboard/page/${data.uuid}`)
       }
       if (parentId) setExpandedFolders(prev => new Set([...prev, parentId]))
       
