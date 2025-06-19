@@ -57,11 +57,8 @@ export default function DashboardPageByUuid() {
           }}
         />
       ) : (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <FileText size={32} className="text-gray-600 mx-auto mb-3" />
-            <p className="text-gray-500 text-sm">Page not found or you do not have access.</p>
-          </div>
+        <div className="flex-1 flex items-center justify-center h-full min-h-screen">
+          <p className="text-gray-400 text-sm">Click on a page to get started!</p>
         </div>
       )}
     </div>
