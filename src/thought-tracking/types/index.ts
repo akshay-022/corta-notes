@@ -113,6 +113,7 @@ export interface StorageManager {
   loadBrainState(): Promise<BrainState | null>;
   saveOrganizedPages(pages: OrganizedPage[]): Promise<void>;
   loadOrganizedPages(): Promise<OrganizedPage[]>;
+  loadUnorganizedPages(): Promise<OrganizedPage[]>;
   getPageByUuid(uuid: string): Promise<OrganizedPage | null>;
   setUserId?(userId: string): void;
   getUserId?(): string | undefined;

@@ -89,12 +89,12 @@ export class BrainStateManager {
       };
       latestEdit.paragraphMetadata = paragraphMetadata;
       
-      console.log('🧠 Updated existing unorganized line:', {
-        lineId,
-        version: latestEdit.version,
-        editType,
-        contentPreview: content.substring(0, 50) + (content.length > 50 ? '...' : ''),
-      });
+      // console.log('🧠 Updated existing unorganized line:', {
+      //   lineId,
+      //   version: latestEdit.version,
+      //   editType,
+      //   contentPreview: content.substring(0, 50) + (content.length > 50 ? '...' : ''),
+      // });
     } else {
       // Create a new version if the latest edit is organized or if this is the first edit
       const newVersion = lineEdits.length + 1;
