@@ -48,10 +48,9 @@ export class SupabaseStorageManager implements StorageManager {
         const { error } = await this.supabase
           .from('profiles')
           .update({ 
-            brain_state: state,
-            updated_at: new Date().toISOString()
+            brain_state: state
           })
-          .eq('id', this.userId);
+          .eq('user_id', this.userId);
 
         if (error) {
           console.warn('Failed to save brain state to database:', error.message);
@@ -73,7 +72,7 @@ export class SupabaseStorageManager implements StorageManager {
         const { data, error } = await this.supabase
           .from('profiles')
           .select('brain_state')
-          .eq('id', this.userId)
+          .eq('user_id', this.userId)
           .single();
 
         if (error) {
@@ -98,6 +97,11 @@ export class SupabaseStorageManager implements StorageManager {
           }
           
           return state;
+        } else {
+          // No brain state found, create default and save it
+          const defaultState = this.createDefaultBrainState();
+          await this.saveBrainState(defaultState);
+          return defaultState;
         }
       }
       
@@ -106,6 +110,15 @@ export class SupabaseStorageManager implements StorageManager {
       console.error('Error loading brain state:', error);
       return null;
     }
+  }
+
+  private createDefaultBrainState(): BrainState {
+    return {
+      lineMap: {},
+      summary: '',
+      lastUpdated: Date.now(),
+      config: this.getDefaultConfig(),
+    };
   }
 
   async saveOrganizedPages(pages: OrganizedPage[]): Promise<void> {
