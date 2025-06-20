@@ -94,12 +94,7 @@ export function getParagraphMetadata(editor: Editor, position: number): Paragrap
   try {
     const resolvedPos = editor.state.doc.resolve(position)
     const node = resolvedPos.node()
-    
-    if (node.type.name === 'paragraph') {
-      return node.attrs.metadata || null
-    }
-    
-    return null
+    return node.attrs.metadata || null
   } catch (error) {
     console.error('Error getting paragraph metadata:', error)
     return null

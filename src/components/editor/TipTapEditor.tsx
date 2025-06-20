@@ -10,7 +10,7 @@ import { Page, PageUpdate } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/supabase-client'
 import { Calendar, Minus, Info, Edit2, Save, X, FileText, Eye } from 'lucide-react'
 import ChatPanel, { ChatPanelHandle } from '../right-sidebar/ChatPanel'
-import { setupThoughtTracking } from '@/thought-tracking/integration/editor-integration'
+import { setupAutoOrganization } from '@/lib/auto-organization/organized-file-updates'
 import { ThoughtParagraph } from '@/thought-tracking/extensions/paragraph-extension'
 import logger from '@/lib/logger'
 
@@ -360,31 +360,22 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     }
   }
 
-  // Setup thought tracking when editor is ready
+  // Setup auto-organization triggers when editor is ready
   useEffect(() => {
     let cleanup: (() => void) | undefined
 
-    const setupTracking = async () => {
-      if (editor) {
-        // Clean up any existing tracking first
-        if (cleanup) {
-          cleanup()
-        }
-        
-        cleanup = await setupThoughtTracking(editor, page.uuid, allPagesRef.current, pageRefreshCallbackRef.current)
-        console.log('🧠 Thought tracking initialized for editor with page:', page.uuid)
-      }
+    if (editor) {
+      // Clean up previous listeners if any
+      if (cleanup) cleanup()
+
+      cleanup = setupAutoOrganization(editor, page.uuid, page.title)
+      logger.info('⚡ Auto-organization initialized for page', { pageUuid: page.uuid })
     }
 
-    setupTracking()
-
-    // Return cleanup function
     return () => {
-      if (cleanup) {
-        cleanup()
-      }
+      if (cleanup) cleanup()
     }
-  }, [editor, page.uuid]) // Removed allPages and pageRefreshCallback dependencies - using refs instead
+  }, [editor, page.uuid, page.title])
 
   // Update editor content when page changes or toggle changes
   useEffect(() => {
