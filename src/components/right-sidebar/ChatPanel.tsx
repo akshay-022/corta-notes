@@ -433,7 +433,8 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
           conversationHistory,
           currentMessage: userMessageContent,
           thoughtContext, // Separate thought context
-          selections: selections.length > 0 ? selections : undefined
+          selections: selections.length > 0 ? selections : undefined,
+          currentPageUuid: currentPage?.uuid
         }),
       })
 

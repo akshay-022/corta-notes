@@ -82,7 +82,7 @@ export async function organizePage({ editor, pageUuid, pageTitle }: OrganizePage
 
     let routingResponse: any[] = []
     try {
-      routingResponse = await callLLM(routingPrompt)
+       routingResponse = await callLLM(routingPrompt)
     } catch (e) {
       logger.error('Routing LLM call failed', { e })
       routingResponse = []
@@ -136,33 +136,62 @@ function buildPrompt(pageTitle: string, paragraphs: ParagraphInfo[]): string {
 }
 
 async function callLLM(prompt: string): Promise<LLMOrganizationChunk[]> {
-  const res = await fetch('/api/llm', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt }),
-  })
+  // Try o3 variants first, fallback to gpt-4o if they fail
+  const models = ['o3-mini', 'gpt-4o']
+  
+  for (const model of models) {
+    try {
+      const res = await fetch('/api/llm', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          prompt,
+          model
+        }),
+      })
 
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`LLM API error: ${res.status} – ${text}`)
+      if (!res.ok) {
+        const text = await res.text()
+        if (model === 'o3') {
+          logger.warn(`o3 model failed (${res.status}), trying fallback: ${text}`)
+          console.log(`⚠️ Organization LLM: o3 failed (${res.status}), trying gpt-4o fallback`)
+          continue // Try next model
+        }
+        throw new Error(`LLM API error: ${res.status} – ${text}`)
+      }
+
+      const data = await res.json()
+      const raw = data.response || ''
+
+      // Log the raw response for debugging
+      if (model === 'o3-mini') {
+        console.log(`🔍 o3-mini raw response:`, { raw: raw.substring(0, 200), fullLength: raw.length })
+      }
+
+      // Clean up possible markdown code fences
+      const cleaned = raw
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim()
+
+      const result = JSON.parse(cleaned) as LLMOrganizationChunk[]
+      logger.info(`Organization completed successfully with model: ${model}`)
+      console.log(`🤖 Organization LLM: Successfully used ${model} model`)
+      return result
+      
+    } catch (err) {
+      if (model === 'o3') {
+        logger.warn(`o3 model failed, trying fallback:`, err)
+        console.log(`⚠️ Organization LLM: o3 parsing failed, trying gpt-4o fallback`)
+        continue // Try next model
+      }
+      logger.error('Failed to parse LLM JSON', { cleaned: err })
+      throw err
+    }
   }
-
-  const data = await res.json()
-  const raw = data.response || ''
-
-  // Clean up possible markdown code fences
-  const cleaned = raw
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/```\s*$/i, '')
-    .trim()
-
-  try {
-    return JSON.parse(cleaned) as LLMOrganizationChunk[]
-  } catch (err) {
-    logger.error('Failed to parse LLM JSON', { cleaned })
-    throw err
-  }
+  
+  throw new Error('All LLM models failed')
 }
 
 async function getFileTreeContext() {
@@ -202,7 +231,36 @@ function buildRoutingPrompt(
   fullPageText: string,
 ) {
   const list = paragraphs.map((p, i) => `${i + 1}. ${p.content}`).join('\n')
-  return `You are an intelligent content router. You MUST MUST MUST either route to a [FILE] or create a [FILE] inside dir and route to that. You MUST NOT route to DIRs. \n\nPAGE TITLE: "${pageTitle}"\n\nFULL PAGE CONTENT (for topical context):\n"""\n${fullPageText.slice(0, 1200)}\n"""\n(Note: content truncated to 1200 chars to keep prompt short.)\n\nCURRENT FILE TREE:\n${fileTreeContext}\n\nUNORGANIZED PARAGRAPHS (to route):\n${list}\n\nTASK:\n1. Decide which file each paragraph should live in given the current tree and page context.\n2. For each paragraph, merge/refine as needed and group paragraphs that belong together in the same destination.\n3. For each destination return an object with:\n   { \"targetFilePath\": \"/Path/To/Location\", \"relevance\": 0.0-1.0, \"content\": \"(refined text to put in there (DO NOT miss any key information the user wrote!!!))\" }\n4. Respond ONLY with a JSON array (no markdown fences, no extra prose).`
+  return `You are an intelligent content router. You MUST MUST MUST either route to a [FILE] or create a [FILE] inside dir and route to that. You MUST NOT route to DIRs.
+
+PAGE TITLE: "${pageTitle}"
+
+FULL PAGE CONTENT (for topical context):
+"""
+${fullPageText.slice(0, 1200)}
+"""
+(Note: content truncated to 1200 chars to keep prompt short.)
+
+CURRENT FILE TREE:
+${fileTreeContext}
+
+UNORGANIZED PARAGRAPHS (to route):
+${list}
+
+TASK:
+1. Decide which file each paragraph should live in given the current tree and page context.
+2. For each paragraph, merge/refine as needed and group paragraphs that belong together in the same destination.
+3. For each destination return an object with:
+   { "targetFilePath": "/Path/To/Location", "relevance": 0.0-1.0, "content": "(refined text to put in there (DO NOT miss any key information the user wrote!!!!))" }
+4. Respond ONLY with a JSON array (no markdown fences, no extra prose).
+
+Now listen, this is VERY IMPORTANT. When you're adding a new section to a page, you should organize it very very well. Make it super readable. 
+So give it a very clear and concise title. 
+Then make sure you add lines etc correctly so that user can read it easily. 
+Two line breaks (\n\n) in your current response content for a given page will determine that a line break happens there when content actually gets added to that relevant page. 
+
+`
+
 }
 
 // Simple wrapper when we need raw text back
@@ -210,7 +268,7 @@ async function callLLMText(prompt: string): Promise<string> {
   const res = await fetch('/api/llm', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({ prompt, model: 'o3-mini' }),
   })
   if (!res.ok) {
     throw new Error(`LLM api err ${res.status}`)

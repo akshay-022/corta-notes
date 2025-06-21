@@ -24,7 +24,7 @@ const openai = new OpenAIApi(
 export async function POST(req: Request) {
   console.log('OPENAI key present?', { hasKey: !!process.env.OPENAI_API_KEY, keyStart: process.env.OPENAI_API_KEY?.slice(0,5) });
   try {
-    const { conversationHistory, currentMessage, thoughtContext, selections } = await req.json();
+    const { conversationHistory, currentMessage, thoughtContext, selections, currentPageUuid } = await req.json();
 
     if (!currentMessage) {
       return NextResponse.json({ error: 'currentMessage is required' }, { status: 400 });
@@ -40,9 +40,9 @@ export async function POST(req: Request) {
     // Use currentMessage as the user's instruction
     let userInstruction = currentMessage;
 
-    // Search memory for relevant context using new brainstorming function
+    // Search memory for relevant context using new brainstorming function with current page context
     if (userInstruction) {
-      relevantDocuments = await getRelevantMemories(userInstruction, 5);
+      relevantDocuments = await getRelevantMemories(userInstruction, 5, currentPageUuid);
     }
 
     // Build the final messages array

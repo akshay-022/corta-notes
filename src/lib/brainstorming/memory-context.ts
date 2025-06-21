@@ -12,53 +12,92 @@ export interface RelevantMemory {
 }
 
 /**
- * Build focused search query using only current category context
+ * Get current page context and recent unorganized pages
  */
-async function buildEnhancedSearchQuery(userQuestion: string): Promise<string> {
+async function getCurrentPageContext(currentPageUuid?: string): Promise<string> {
   try {
-    // Import brain state (using require to avoid circular dependencies)
-    const { getBrainState } = require('@/lib/thought-tracking/brain-state')
-    const brainState = getBrainState()
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
     
-    let enhancedQuery = userQuestion
+    if (authError || !user) {
+      return ''
+    }
+
+    let contextText = ''
+
+    // Get current page if we have the UUID
+    if (currentPageUuid) {
+      const { data: currentPage } = await supabase
+        .from('pages')
+        .select('uuid, title, content_text, updated_at')
+        .eq('uuid', currentPageUuid)
+        .eq('user_id', user.id)
+        .eq('is_deleted', false)
+        .single()
+
+      if (currentPage) {
+        contextText += `CURRENT PAGE (HIGHEST PRIORITY - especially focus on what's at the end):\n`
+        contextText += `Title: ${currentPage.title}\n`
+        contextText += `Content: ${currentPage.content_text}\n\n`
+        contextText += `^^^ FOCUS HEAVILY ON THE END OF THIS CURRENT PAGE CONTENT ^^^\n\n`
+      }
+    }
+
+    // Get 2 most recent unorganized pages (excluding current page)
+    const { data: recentPages } = await supabase
+      .from('pages')
+      .select('uuid, title, content_text, updated_at')
+      .eq('user_id', user.id)
+      .eq('is_deleted', false)
+      .eq('organized', false)
+      .neq('uuid', currentPageUuid || '')
+      .order('updated_at', { ascending: false })
+      .limit(2)
+
+    if (recentPages && recentPages.length > 0) {
+      contextText += `RECENT UNORGANIZED PAGES (for additional context only):\n\n`
+      recentPages.forEach((page, index) => {
+        contextText += `${index + 1}. ${page.title}\n`
+        contextText += `${page.content_text.slice(0, 500)}...\n\n`
+      })
+    }
+
+    return contextText
+
+  } catch (error) {
+    console.error('Error getting current page context:', error)
+    return ''
+  }
+}
+
+/**
+ * Build enhanced search query with current page context
+ */
+async function buildEnhancedSearchQuery(userQuestion: string, currentPageUuid?: string): Promise<string> {
+  try {
+    const pageContext = await getCurrentPageContext(currentPageUuid)
     
-    // Only add context from the current active category
-    if (brainState.currentContext.relatedCategory && brainState.currentContext.activeThought) {
-      const currentCategory = brainState.currentContext.relatedCategory
-      const currentThought = brainState.currentContext.activeThought
-      
-      // Add current category context
-      enhancedQuery += ` Current category: ${currentCategory}`
-      
-      // Add the specific thought process for this category
-      enhancedQuery += ` Current thought: ${currentThought.slice(0, 150)}`
-      
-             // Add all thoughts from the same category
-       const categoryThoughts = brainState.thoughtCategories[currentCategory]
-       if (categoryThoughts && categoryThoughts.length > 1) {
-         const allCategoryThoughts = categoryThoughts
-           .map((thought: any) => thought.content.slice(0, 100))
-           .join('; ')
-         enhancedQuery += ` All ${currentCategory} thoughts: ${allCategoryThoughts}`
-       }
+    if (pageContext) {
+      return `${userQuestion}\n\nCONTEXT:\n${pageContext}`
     }
     
-    return enhancedQuery
+    return userQuestion
     
   } catch (error) {
     console.error('Error building enhanced search query:', error)
-    return userQuestion // Fallback to original question
+    return userQuestion
   }
 }
 
 /**
  * Retrieves relevant documents from SuperMemory based on current thought/question
- * Enhanced with brain state context for better relevance
+ * Enhanced with current page context for better relevance
  * Filters out low-confidence results (below 30%)
  */
 export async function getRelevantMemories(
   userQuestion: string,
-  maxResults: number = 5
+  maxResults: number = 5,
+  currentPageUuid?: string
 ): Promise<RelevantMemory[]> {
   try {
     // Check if memory service is configured
@@ -78,9 +117,9 @@ export async function getRelevantMemories(
       return []
     }
 
-    // Enhanced search query with brain state context
-    const enhancedQuery = await buildEnhancedSearchQuery(userQuestion)
-    console.log('Enhanced search query:', enhancedQuery)
+    // Enhanced search query with current page context
+    const enhancedQuery = await buildEnhancedSearchQuery(userQuestion, currentPageUuid)
+    console.log('Enhanced search query with current page context')
 
     // Search SuperMemory for relevant documents
     const searchResults = await memoryService.search(enhancedQuery, user.id, maxResults)
@@ -131,8 +170,9 @@ export function formatMemoryContext(memories: RelevantMemory[]): string {
  */  
 export async function createMemoryContext(
   userQuestion: string,
-  maxResults: number = 5
+  maxResults: number = 5,
+  currentPageUuid?: string
 ): Promise<string> {
-  const memories = await getRelevantMemories(userQuestion, maxResults)
+  const memories = await getRelevantMemories(userQuestion, maxResults, currentPageUuid)
   return formatMemoryContext(memories)
 } 

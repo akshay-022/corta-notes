@@ -126,14 +126,13 @@ async function generateUpdatedSummary(
   const prompt = createSummaryUpdatePrompt(diff, currentSummary)
   
   const response = await fetch('/api/llm', {
-    method: 'POST',
+    method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       prompt,
-      maxTokens: 500,
-      temperature: 0.3
+      model: 'o3-mini'
     }),
   })
 
@@ -143,13 +142,13 @@ async function generateUpdatedSummary(
 
   const result = await response.json()
   
-  if (!result.content) {
-    throw new Error('No content returned from LLM API')
+  if (!result.response) {
+    throw new Error('No response returned from LLM API')
   }
 
   // Parse the LLM response as TipTap JSON
   try {
-    return JSON.parse(result.content)
+    return JSON.parse(result.response)
   } catch (parseError) {
     logger.warn('Failed to parse LLM response as JSON, creating simple summary')
     // Fallback: create simple TipTap structure
@@ -161,7 +160,7 @@ async function generateUpdatedSummary(
           content: [
             {
               type: 'text',
-              text: result.content
+              text: result.response
             }
           ]
         }

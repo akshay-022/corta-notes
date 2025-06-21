@@ -578,7 +578,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                       </div>
                     </div>
                   )}
-
+                  
                   {/* ID */}
                   <div className="p-2 bg-[#1a1a1a] rounded">
                     <div className="text-gray-400">
@@ -601,13 +601,13 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
 
                       {/* Last Updated */}
                       {selectedParagraphMetadata.metadata.lastUpdated && (
-                        <div className="p-2 bg-[#1a1a1a] rounded">
-                          <div className="text-gray-400">
-                            Last Updated: <span className="text-gray-200">
+                      <div className="p-2 bg-[#1a1a1a] rounded">
+                        <div className="text-gray-400">
+                          Last Updated: <span className="text-gray-200">
                               {new Date(selectedParagraphMetadata.metadata.lastUpdated).toLocaleString()}
-                            </span>
-                          </div>
+                          </span>
                         </div>
+                      </div>
                       )}
 
                       {/* Where Organized */}
@@ -646,8 +646,8 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                                   <span className="text-gray-200 break-all">
                                     {typeof value === 'object' ? JSON.stringify(value) : String(value)}
                                   </span>
-                                </div>
-                              ))}
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}

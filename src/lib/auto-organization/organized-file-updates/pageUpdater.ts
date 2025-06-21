@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/supabase-client'
 import { ContentProcessor } from '@/lib/auto-organization/organized-file-updates/helpers/contentProcessor'
+import { ensureMetadataMarkedOrganized } from '@/lib/auto-organization/organized-file-updates/helpers/organized-file-metadata'
 import logger from '@/lib/logger'
 import { Page } from '@/lib/supabase/types'
 import { postFileHistoryUpdate, FileHistoryItem } from '@/components/left-sidebar/fileHistoryUtils'
@@ -110,8 +111,17 @@ export async function applyOrganizationChunks(chunks: OrganizedChunk[]): Promise
         newContentJSON = contentProcessor.createTipTapContent(chunk.content)
         newContentText = chunk.content
       } else {
-        newContentJSON = contentProcessor.mergeIntoTipTapContent(page.content, chunk.content)
+        newContentJSON = await contentProcessor.smartMergeTipTapContent(page.content, chunk.content, page.uuid)
         newContentText = (page.content_text || '') + '\n\n' + chunk.content
+      }
+
+      // Mark all content as organized after processing
+      if (newContentJSON?.content) {
+        newContentJSON.content = ensureMetadataMarkedOrganized(newContentJSON.content, page.uuid)
+        logger.info('Applied ensureMetadataMarkedOrganized to content', { 
+          pageUuid: page.uuid, 
+          nodeCount: newContentJSON.content.length 
+        })
       }
 
       const { error: upErr } = await supabase

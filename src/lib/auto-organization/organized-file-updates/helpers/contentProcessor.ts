@@ -118,4 +118,99 @@ export class ContentProcessor {
       return '';
     }).join('\n\n');
   }
+
+  /**
+   * Smart merge using LLM: takes recent (<=24h) paragraphs + new text and asks LLM to integrate
+   */
+  async smartMergeTipTapContent(existingContent: any, newText: string, pageUuid: string): Promise<any> {
+    try {
+      const { ensureParagraphMetadata } = require('./organized-file-metadata')
+      const allNodes = ensureParagraphMetadata(existingContent?.content || [], pageUuid)
+
+      // Collect paragraph nodes after ensuring IDs
+      const paragraphNodes = allNodes.filter((n: any) => n.type === 'paragraph')
+      const recentNodes = paragraphNodes.length <= 30 ? paragraphNodes : paragraphNodes.slice(-30)
+
+      const recentBlockText = recentNodes
+        .map((node: any) => {
+          const pid = node.attrs.id || node.attrs.metadata.id
+          const text = (node.content || []).map((n: any) => n.text || '').join('')
+          return `Paragraph ${pid}: ${text}`
+        })
+        .join('\n')
+
+      const prompt = `You are helping merge new content into an existing page that is sorted by recency.
+
+EXISTING RECENT PARAGRAPHS (with IDs):
+${recentBlockText}
+
+NEW CONTENT TO INTEGRATE:
+${newText}
+
+TASK: Decide ABOVE WHICH paragraph ID the merged content should be inserted (that paragraph and everything after it stay below).
+Create one cohesive, well-formatted section that combines both the recent paragraphs (you may rewrite them) and the new content.
+Add a clear concise title if appropriate, use clean formatting (bullets, line breaks).
+
+Respond ONLY with valid JSON of the form:
+{
+  "insertAboveParagraphId": "<paragraphId>",
+  "mergedText": "<your merged section text>"
+}
+
+Keep this in mind, you must be CONCISE, and NOT REPEAT THE SAME CONTENT AGAIN AND AGAIN. Don't miss important information but do NOT have redundancy, verboseness. 
+Sometimes the user will write something in a strong tone, caps etc to motivate themselves. Don't change the intensity of the user's writing in such cases. 
+
+`
+
+      const res = await fetch('/api/llm', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, model: 'o3-mini' }),
+      })
+      if (!res.ok) throw new Error('LLM merge failed')
+      const data = await res.json()
+      const cleaned = (data.response || '')
+        .replace(/```json\s*/i, '')
+        .replace(/```/g, '')
+        .trim()
+
+      const parsed = JSON.parse(cleaned)
+      const insertId: string = parsed.insertAboveParagraphId
+      const mergedText: string = parsed.mergedText
+      if (!insertId || !mergedText) throw new Error('LLM missing fields')
+
+      const mergedJSON = this.createTipTapContent(mergedText)
+      const mergedNodesWithMeta = ensureParagraphMetadata(mergedJSON.content, pageUuid)
+
+      // Build new content array
+      const newContentArray: any[] = []
+      let inserted = false
+      for (const node of allNodes) {
+        const nid = node.attrs?.id || node.attrs?.metadata?.id
+        if (!inserted && nid === insertId) {
+          // Insert merged section before this node
+          newContentArray.push(...mergedNodesWithMeta)
+          inserted = true
+        }
+        if (inserted) {
+          // Keep the rest of the nodes as-is
+          newContentArray.push(node)
+        }
+      }
+
+      // If insertId not found, prepend merged section
+      if (!inserted) {
+        newContentArray.unshift(...mergedNodesWithMeta)
+      }
+
+      return {
+        ...(existingContent || { type: 'doc' }),
+        content: newContentArray,
+      }
+    } catch (err) {
+      console.error('smartMergeTipTapContent fallback', err)
+      // fallback to simple append
+      return this.mergeIntoTipTapContent(existingContent, newText)
+    }
+  }
 } 

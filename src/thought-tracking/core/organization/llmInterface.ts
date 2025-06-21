@@ -98,7 +98,7 @@ Focus on logical organization and content improvement while preserving all infor
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'o3',
         messages: [
           {
             role: 'system',
@@ -125,6 +125,7 @@ Focus on logical organization and content improvement while preserving all infor
       throw new Error('No response from OpenAI');
     }
 
+    console.log(`🤖 Thought-tracking LLM: Successfully used o3 model`);
     return content;
   }
 

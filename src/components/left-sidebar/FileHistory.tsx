@@ -4,13 +4,13 @@ import { useState, useEffect } from 'react'
 import { FileText, ChevronDown, ChevronUp } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { FileHistoryItem } from './fileHistoryUtils'
+import { createClient } from '@/lib/supabase/supabase-client'
 
 interface FileHistoryProps {
   isMobile?: boolean
   setSidebarOpen: (open: boolean) => void
 }
 
-const FILE_HISTORY_KEY = 'corta-file-history'
 const MAX_HISTORY_ITEMS = 10
 const DISPLAY_ITEMS = 3
 
@@ -20,17 +20,27 @@ export default function FileHistory({ isMobile, setSidebarOpen }: FileHistoryPro
   const [animatingItems, setAnimatingItems] = useState<Set<string>>(new Set())
   const router = useRouter()
 
-  // Load history from localStorage on mount
+  // Load history from Supabase profile metadata on mount
   useEffect(() => {
-    const savedHistory = localStorage.getItem(FILE_HISTORY_KEY)
-    if (savedHistory) {
+    const init = async () => {
       try {
-        const parsed = JSON.parse(savedHistory)
-        setHistory(parsed)
-      } catch (error) {
-        console.error('Error parsing file history:', error)
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user?.id) return
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('metadata')
+          .eq('user_id', user.id)
+          .single()
+        const remoteHistory: FileHistoryItem[] | undefined = profile?.metadata?.fileHistory
+        if (remoteHistory && Array.isArray(remoteHistory)) {
+          setHistory(remoteHistory)
+        }
+      } catch (err) {
+        console.error('Failed to load file history from Supabase', err)
       }
     }
+    init()
   }, [])
 
   // Listen for file history updates
@@ -45,6 +55,22 @@ export default function FileHistory({ isMobile, setSidebarOpen }: FileHistoryPro
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
   }, [])
+
+  const saveToSupabase = async (updatedHistory: FileHistoryItem[]) => {
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user?.id) return
+      await supabase
+        .from('profiles')
+        .update({ metadata: { fileHistory: updatedHistory } })
+        .eq('user_id', user.id)
+    } catch (err) {
+      console.error('Failed to save file history to Supabase', err)
+    }
+  }
 
   const addToHistory = (newItems: FileHistoryItem[]) => {
     setHistory(prevHistory => {
@@ -61,8 +87,8 @@ export default function FileHistory({ isMobile, setSidebarOpen }: FileHistoryPro
         .sort((a, b) => b.timestamp - a.timestamp)
         .slice(0, MAX_HISTORY_ITEMS)
       
-      // Save to localStorage
-      localStorage.setItem(FILE_HISTORY_KEY, JSON.stringify(updatedHistory))
+      // Persist to Supabase (fire and forget)
+      saveToSupabase(updatedHistory)
       
       // Trigger animation for new items
       const newUuids = new Set(newItems.map(item => item.uuid))
