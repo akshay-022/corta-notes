@@ -31,7 +31,7 @@ export class LLMInterface {
     fileTreeContext: string;
     pageContext: string;
   }): string {
-    return `You are an intelligent content organizer. Your task is to organize paragraph edits into a coherent file structure.
+    return `You are organizing personal notes and thoughts into a coherent file structure.
 
 CONTEXT:
 ${`\`\`\`\n${context.pageContext}\n\`\`\``}
@@ -43,36 +43,34 @@ PARAGRAPH EDITS TO ORGANIZE:
 ${`\`\`\`\n${context.editsContext}\n\`\`\``}
 
 INSTRUCTIONS:
-1. Analyze the content of each paragraph edit
-2. Determine the best file location for each edit (existing file or new file/folder)
-3. Provide refined versions of the content (improve clarity, fix grammar, but preserve meaning)
-4. Ensure file paths are logical and follow the existing structure
-5. Group related edits into the same file when it makes sense
+1. Analyze each paragraph edit and determine the best file location
+2. Group related edits into the same file when logical
+3. Refine content while preserving the user's authentic voice and meaning
+4. Ensure file paths follow the existing structure
 
-RULES:
+CONTENT REFINEMENT RULES:
+• Write like PERSONAL NOTES - keep it conversational and authentic
+• Preserve the user's original voice, tone, and urgency - don't sanitize
+• NO corporate speak, NO "Overview/Summary" sections, NO repetitive content
+• BE CONCISE - eliminate fluff and redundancy
+• Focus on actionable insights, not descriptions  
+• Keep strong emotions, caps, urgency from original text
+• Use simple formatting - basic bullets or lists, not complex structures
+• Combine similar ideas into single, clear statements
+
+FILE ORGANIZATION RULES:
 - Use existing files when content is related
-- Create new files only when content represents a distinct topic
-- Create folders only when organizing multiple related files
-- File paths must be logical and follow the existing structure
-- Preserve all original information while improving clarity
-- Group similar edits together to avoid file fragmentation
+- Create new files only for distinct topics that don't fit elsewhere
+- File paths must start with "/" and follow existing structure
+- For new files: ensure parent folder exists in file tree
+- Use descriptive, kebab-case file names
+- Only create folders when absolutely necessary
 
-FILE PATH REQUIREMENTS:
-- All paths must start with "/" (root)
-- For existing files: Use the exact path shown in the file tree (e.g., "/Documents/Notes/meeting-notes.md")
-- For new files: Ensure the parent folder exists in the file tree or is "/" (root)
-- Parent folders must be marked as [DIR] in the file tree or be "/" for root level
-- File names should be descriptive and use kebab-case (e.g., "project-notes.md", "meeting-summary.md")
-- Only create new folders when absolutely necessary for organization
-
-VALIDATION CHECKLIST:
-- Does the targetFilePath exist in the file tree? If not, does its parent folder exist?
-- Is the parent folder actually a [DIR] type in the file tree?
-- If creating a new file, is the parent path valid and accessible?
-- Are you using the correct file path format from the existing tree?
+BAD REFINEMENT: "Overview: This section provides a comprehensive analysis of the user's annotation requirements..."
+GOOD REFINEMENT: "Need annotation feature - users want control over where content goes. Critical for user lock-in."
 
 RESPONSE FORMAT:
-Respond with ONLY a valid JSON object in this exact format:
+Respond with ONLY a valid JSON object:
 {
   "targetFilePath": "/path/to/target/file",
   "shouldCreateNewFile": false,
@@ -82,12 +80,13 @@ Respond with ONLY a valid JSON object in this exact format:
     {
       "paragraphId": "paragraph-id",
       "originalContent": "original text",
-      "refinedContent": "improved text with better clarity"
+      "refinedContent": "improved text preserving authentic voice"
     }
   ],
+  "reasoning": "brief explanation of organization decision"
 }
 
-Focus on logical organization and content improvement while preserving all information and ensuring valid file paths.`;
+Remember: These are PERSONAL NOTES. Keep them authentic, direct, and useful.`;
   }
 
   private async callOpenAI(prompt: string): Promise<string> {

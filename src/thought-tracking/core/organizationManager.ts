@@ -360,7 +360,7 @@ export class OrganizationManager {
 
   private getOrganizationInstructions(): string {
     return `
- You are an intelligent content organizer. Your task is to organize edits into a coherent file structure.
+You are organizing personal notes and thoughts into a coherent file structure.
 
 CORE PRINCIPLE: Group N edits into M files where N >= M (multiple edits can go to the same file when they're related).
 
@@ -369,6 +369,15 @@ ORGANIZATION STRATEGY:
 2. USE EXISTING FILES: Prefer adding to existing relevant files when content fits
 3. CREATE NEW FILES: Only when content represents a distinct new topic that doesn't fit existing files
 4. BE EFFICIENT: Don't create unnecessary files - group related content together
+
+CONTENT REFINEMENT APPROACH:
+• Write like PERSONAL NOTES - conversational, direct, authentic
+• Preserve the user's original voice, tone, and urgency - don't sanitize
+• NO corporate speak, NO "Overview/Summary" sections, NO repetitive content
+• BE CONCISE - eliminate fluff and redundancy
+• Focus on actionable insights, not descriptions
+• Keep strong emotions, caps, urgency from original text
+• Use simple formatting - basic bullets or lists, not complex structures
 
 DECISION PROCESS:
 - If edits relate to existing file content: add to that file
@@ -379,17 +388,11 @@ DECISION PROCESS:
 QUALITY ASSURANCE:
 - Preserve all information from the edits
 - Ensure all edits are incorporated somewhere
-- Maintain readability and coherent narrative
+- Maintain authentic voice and readability
 - Keep related information accessible
 - Focus on content similarity and logical grouping
 
-RESPONSE FORMAT:
-Return a structured response indicating for each edit:
-- Whether to update an existing file or create new file
-- The target location (path)  
-- How to integrate the content
-- Reasoning for the decision
-- Group similar edits efficiently rather than creating many separate files
+Remember: These are PERSONAL NOTES, not business documents. Keep them authentic and useful.
 `;
   }
 

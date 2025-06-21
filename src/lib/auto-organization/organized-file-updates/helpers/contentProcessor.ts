@@ -149,19 +149,26 @@ ${newText}
 
 TASK: Decide ABOVE WHICH paragraph ID the merged content should be inserted (that paragraph and everything after it stay below).
 Create one cohesive, well-formatted section that combines both the recent paragraphs (you may rewrite them) and the new content.
-Add a clear concise title if appropriate, use clean formatting (bullets, line breaks).
+
+CRITICAL REQUIREMENTS:
+• Write like PERSONAL NOTES, not formal documents
+• Keep the user's original voice and tone - if they write urgently, keep it urgent
+• NO corporate speak, NO "Overview/Summary" sections, NO repetitive bullet points  
+• BE CONCISE - eliminate all redundancy and fluff
+• Focus on WHAT MATTERS - actionable insights, not descriptions
+• Use natural, conversational language like talking to yourself
+• Preserve strong emotions, caps, urgency - don't sanitize the user's voice
+• Combine similar ideas into single, clear statements
+• Use simple formatting - basic bullets or numbered lists, not complex structures
+
+BAD EXAMPLE: "Overview: This section delivers a cohesive view of..." 
+GOOD EXAMPLE: "Need to add annotation feature - users want control over where stuff goes"
 
 Respond ONLY with valid JSON of the form:
 {
   "insertAboveParagraphId": "<paragraphId>",
   "mergedText": "<your merged section text>"
 }
-
-Keep this in mind, you must be CONCISE, and NOT REPEAT THE SAME CONTENT AGAIN AND AGAIN. Don't miss important information but do NOT have redundancy, verboseness. 
-Sometimes the user will write something in a strong tone, caps etc to motivate themselves. Don't change the intensity of the user's writing in such cases. 
-
-AS MUCH AS POSSIBLE, instead of using paragraphs, use lists, bullets, etc to make the content more readable. 
-Add ample \n\n to make the content more readable, especially when topics are changing. 
 
 `
 

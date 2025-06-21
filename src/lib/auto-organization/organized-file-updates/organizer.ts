@@ -231,33 +231,43 @@ function buildRoutingPrompt(
   fullPageText: string,
 ) {
   const list = paragraphs.map((p, i) => `${i + 1}. ${p.content}`).join('\n')
-  return `You are an intelligent content router. You MUST MUST MUST either route to a [FILE] or create a [FILE] inside dir and route to that. You MUST NOT route to DIRs.
+  return `You are organizing personal notes. You MUST route to existing [FILE]s or create new [FILE]s inside directories. NEVER route to [DIR]s.
 
 PAGE TITLE: "${pageTitle}"
 
-FULL PAGE CONTENT (for topical context):
+FULL PAGE CONTENT (for context):
 """
 ${fullPageText.slice(0, 1200)}
 """
-(Note: content truncated to 1200 chars to keep prompt short.)
 
 CURRENT FILE TREE:
 ${fileTreeContext}
 
-UNORGANIZED PARAGRAPHS (to route):
+UNORGANIZED PARAGRAPHS:
 ${list}
 
 TASK:
-1. Decide which file each paragraph should live in given the current tree and page context.
-2. For each paragraph, merge/refine as needed and group paragraphs that belong together in the same destination.
-3. For each destination return an object with:
-   { "targetFilePath": "/Path/To/Location", "relevance": 0.0-1.0, "content": "(refined text to put in there (DO NOT miss any key information the user wrote!!!!))" }
-4. Respond ONLY with a JSON array (no markdown fences, no extra prose).
+1. Route each paragraph to the best file location based on content and context
+2. Group related paragraphs together in the same destination  
+3. For each destination return:
+   { "targetFilePath": "/Path/To/Location", "relevance": 0.0-1.0, "content": "(organized content)" }
+4. Respond ONLY with JSON array (no markdown, no extra text)
 
-Now listen, this is VERY IMPORTANT. When you're adding a new section to a page, you should organize it very very well. Make it super readable. 
-So give it a very clear and concise title. 
-Then make sure you add lines etc correctly so that user can read it easily. 
-Two line breaks (\n\n) in your current response content for a given page will determine that a line break happens there when content actually gets added to that relevant page. 
+CRITICAL CONTENT REQUIREMENTS:
+• Write like PERSONAL NOTES - conversational, direct, authentic
+• Keep the user's original voice and urgency - don't sanitize their tone
+• NO corporate speak, NO "Overview/Summary" sections, NO repetitive content
+• BE CONCISE - eliminate fluff and redundancy 
+• Focus on actionable insights, not descriptions
+• Preserve strong emotions, caps, urgency from original text
+• Use simple formatting - basic bullets or lists, not complex structures
+• Add clear, concise titles when organizing new sections
+• Use \n\n for proper line breaks between topics
+
+BAD: "Overview: This section provides a comprehensive analysis of..."
+GOOD: "Need annotation feature - users want control over routing"
+
+Remember: These are PERSONAL NOTES, not business documents. Keep them authentic and useful.
 
 `
 
