@@ -91,14 +91,19 @@ export function convertPositionToParagraphNumber(editor: Editor, position: numbe
 export function getParagraphMetadata(editor: Editor, position: number): ParagraphMetadata | null {
   if (!editor) return null
 
-  try {
-    const resolvedPos = editor.state.doc.resolve(position)
-    const node = resolvedPos.node()
-    return node.attrs.metadata || null
-  } catch (error) {
-    console.error('Error getting paragraph metadata:', error)
-    return null
-  }
+  const { doc } = editor.state
+  let paragraphNode: any | null = null
+
+  // Walk the document once and grab the paragraph that spans `position`
+  doc.descendants((node, pos) => {
+    if (position >= pos && position < pos + node.nodeSize) {
+      paragraphNode = node as ProseMirrorNode
+      return false // stop traversal once found
+    }
+    return true
+  })
+
+  return (paragraphNode?.attrs?.metadata as ParagraphMetadata) || null
 }
 
 /**
@@ -121,26 +126,35 @@ export function setParagraphMetadata(
 ): boolean {
   if (!editor) return false
 
-  try {
-    const resolvedPos = editor.state.doc.resolve(position)
-    const node = resolvedPos.node()
-    
-      const currentMetadata = node.attrs.metadata || {}
-    const newMetadata = { 
-    ...currentMetadata, 
-    ...metadata,
-    lastUpdated: new Date().toISOString() // Always update timestamp
+  // Locate the paragraph node that spans the given position
+  let paragraphPos: number | null = null
+  let paragraphNode: any | null = null
+
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name === 'paragraph' && position >= pos && position < pos + node.nodeSize) {
+      paragraphPos = pos
+      paragraphNode = node
+      return false // stop
     }
-    
-      
-      editor.chain()
-        .focus()
-        .setNodeSelection(resolvedPos.pos - resolvedPos.parentOffset)
-        .updateAttributes('paragraph', { metadata: newMetadata })
-        .run()
-      
-      return true
-    
+    return true
+  })
+
+  if (paragraphPos === null || !paragraphNode) return false
+
+  const currentMetadata = paragraphNode.attrs?.metadata || {}
+  const newMetadata = {
+    ...currentMetadata,
+    ...metadata,
+    lastUpdated: new Date().toISOString(),
+  }
+
+  try {
+    const tr = editor.state.tr.setNodeMarkup(paragraphPos, undefined, {
+      ...paragraphNode.attrs,
+      metadata: newMetadata,
+    })
+    editor.view.dispatch(tr)
+    return true
   } catch (error) {
     console.error('Error setting paragraph metadata:', error)
     return false

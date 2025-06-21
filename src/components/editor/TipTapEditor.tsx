@@ -29,7 +29,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   const [isUserEditingTitle, setIsUserEditingTitle] = useState(false) // Track title editing specifically
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [selections, setSelections] = useState<Array<{id: string, text: string, startLine: number, endLine: number}>>([])
-  const [selectedParagraphMetadata, setSelectedParagraphMetadata] = useState<{id: string, metadata: any, pos?: number} | null>(null)
+  const [selectedParagraphMetadata, setSelectedParagraphMetadata] = useState<{id: string, metadata: any, pos?: number, nodeType?: string} | null>(null)
   const [isEditingMetadata, setIsEditingMetadata] = useState(false)
   const [metadataEditValue, setMetadataEditValue] = useState('')
   const [showSummary, setShowSummary] = useState(false) // Toggle between content and summary
@@ -222,37 +222,39 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     }
   }, [editor])
 
-  // Function to get paragraph metadata from current selection
-  const getSelectedParagraphMetadata = useCallback(() => {
+  // Function to get node metadata from current selection (any node type)
+  const getSelectedNodeMetadata = useCallback(() => {
     if (!editor) return null
 
     const { from, to } = editor.state.selection
     
-    // Find the paragraph node that contains the selection
-    let paragraphNode: any = null
-    let paragraphPos = -1
+    // Find any node that contains the selection and has metadata
+    let selectedNode: any = null
+    let selectedPos = -1
 
     editor.state.doc.nodesBetween(from, to, (node, pos) => {
-      if (node.type.name === 'paragraph' && !paragraphNode) {
-        paragraphNode = node
-        paragraphPos = pos
-        return false // Stop traversal
+      // Check any node type that has attributes and metadata
+      if (node.attrs && (node.attrs.metadata || node.attrs.id)) {
+        selectedNode = node
+        selectedPos = pos
+        return false // Stop traversal - take the first node with metadata
       }
     })
 
-    if (paragraphNode && paragraphNode.attrs) {
+    if (selectedNode && selectedNode.attrs) {
       return {
-        id: paragraphNode.attrs.id,
-        metadata: paragraphNode.attrs.metadata,
-        pos: paragraphPos
+        id: selectedNode.attrs.id,
+        metadata: selectedNode.attrs.metadata,
+        pos: selectedPos,
+        nodeType: selectedNode.type.name
       }
     }
 
     return null
   }, [editor])
 
-  // Function to update paragraph metadata
-  const updateParagraphMetadata = useCallback((newMetadata: any) => {
+  // Function to update node metadata (any node type)
+  const updateNodeMetadata = useCallback((newMetadata: any) => {
     if (!editor || selectedParagraphMetadata?.pos === undefined) return
 
     try {
@@ -296,7 +298,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     if (!editor) return
 
     const updateSelection = () => {
-      const metadata = getSelectedParagraphMetadata()
+      const metadata = getSelectedNodeMetadata()
       // console.log('Selection updated, metadata:', metadata) // Disabled to reduce noise
       setSelectedParagraphMetadata(metadata)
     }
@@ -306,7 +308,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     return () => {
       editor.off('selectionUpdate', updateSelection)
     }
-  }, [editor]) // Removed getSelectedParagraphMetadata dependency to prevent loop
+  }, [editor]) // Removed getSelectedNodeMetadata dependency to prevent loop
 
   // Command+K keyboard shortcut to open chat
   useEffect(() => {
@@ -364,13 +366,13 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   useEffect(() => {
     let cleanup: (() => void) | undefined
 
-    if (editor) {
+      if (editor) {
       // Clean up previous listeners if any
       if (cleanup) cleanup()
 
       cleanup = setupAutoOrganization(editor, page.uuid, page.title)
       logger.info('⚡ Auto-organization initialized for page', { pageUuid: page.uuid })
-    }
+      }
 
     return () => {
       if (cleanup) cleanup()
@@ -561,8 +563,22 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
             <div className="text-xs text-gray-300">
               {selectedParagraphMetadata ? (
                 <div className="space-y-2">
-                  <div className="text-gray-400 font-medium mb-2">Paragraph Metadata</div>
+                  <div className="text-gray-400 font-medium mb-2">
+                    {selectedParagraphMetadata.nodeType ? 
+                      `${selectedParagraphMetadata.nodeType.charAt(0).toUpperCase() + selectedParagraphMetadata.nodeType.slice(1)} Metadata` : 
+                      'Node Metadata'
+                    }
+                  </div>
                   
+                  {/* Node Type */}
+                  {selectedParagraphMetadata.nodeType && (
+                    <div className="p-2 bg-[#1a1a1a] rounded">
+                      <div className="text-gray-400">
+                        Type: <span className="text-blue-400 font-medium">{selectedParagraphMetadata.nodeType}</span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* ID */}
                   <div className="p-2 bg-[#1a1a1a] rounded">
                     <div className="text-gray-400">
@@ -572,17 +588,27 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
 
                   {selectedParagraphMetadata.metadata && (
                     <>
-                      {/* Last Updated */}
-                      <div className="p-2 bg-[#1a1a1a] rounded">
-                        <div className="text-gray-400">
-                          Last Updated: <span className="text-gray-200">
-                            {selectedParagraphMetadata.metadata.lastUpdated 
-                              ? new Date(selectedParagraphMetadata.metadata.lastUpdated).toLocaleString()
-                              : 'Never'
-                            }
-                          </span>
+                      {/* Organization Status */}
+                      {selectedParagraphMetadata.metadata.isOrganized !== undefined && (
+                        <div className="p-2 bg-[#1a1a1a] rounded">
+                          <div className="text-gray-400">
+                            Organized: <span className={`font-medium ${selectedParagraphMetadata.metadata.isOrganized ? 'text-green-400' : 'text-yellow-400'}`}>
+                              {selectedParagraphMetadata.metadata.isOrganized ? 'Yes' : 'No'}
+                            </span>
+                          </div>
                         </div>
-                      </div>
+                      )}
+
+                      {/* Last Updated */}
+                      {selectedParagraphMetadata.metadata.lastUpdated && (
+                        <div className="p-2 bg-[#1a1a1a] rounded">
+                          <div className="text-gray-400">
+                            Last Updated: <span className="text-gray-200">
+                              {new Date(selectedParagraphMetadata.metadata.lastUpdated).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Where Organized */}
                       {selectedParagraphMetadata.metadata.whereOrganized && 
@@ -604,6 +630,27 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                           </div>
                         </div>
                       )}
+
+                      {/* All Other Metadata Fields */}
+                      {Object.entries(selectedParagraphMetadata.metadata).filter(([key]) => 
+                        !['isOrganized', 'lastUpdated', 'whereOrganized', 'organizationStatus'].includes(key)
+                      ).length > 0 && (
+                        <div className="p-2 bg-[#1a1a1a] rounded">
+                          <div className="text-gray-400 mb-1">Other Metadata:</div>
+                          <div className="space-y-1 max-h-32 overflow-y-auto">
+                            {Object.entries(selectedParagraphMetadata.metadata)
+                              .filter(([key]) => !['isOrganized', 'lastUpdated', 'whereOrganized', 'organizationStatus'].includes(key))
+                              .map(([key, value]) => (
+                                <div key={key} className="text-xs">
+                                  <span className="text-gray-400">{key}:</span>{' '}
+                                  <span className="text-gray-200 break-all">
+                                    {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                  </span>
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+                      )}
                     </>
                   )}
 
@@ -612,9 +659,17 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                       <div className="text-gray-500 italic">No metadata available</div>
                     </div>
                   )}
+
+                  {/* Edit Metadata Button */}
+                  <button
+                    onClick={startEditingMetadata}
+                    className="w-full mt-2 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
+                  >
+                    Edit Metadata
+                  </button>
                 </div>
               ) : (
-                <div className="text-gray-500 italic">No paragraph metadata</div>
+                <div className="text-gray-500 italic">No node metadata found</div>
               )}
             </div>
           </div>

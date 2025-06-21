@@ -1,6 +1,7 @@
 'use client';
 import { ReactNode } from 'react';
 import { useBrainStateSync } from '@/thought-tracking/hooks/useBrainStateSync';
+import SupabaseAuthListener from '@/lib/supabase/SupabaseAuthListener';
 
 interface Props {
   children: ReactNode;
@@ -8,5 +9,10 @@ interface Props {
 
 export default function BrainStateLoader({ children }: Props) {
   useBrainStateSync();
-  return <>{children}</>;
+  return (
+    <>
+      <SupabaseAuthListener />
+      {children}
+    </>
+  );
 } 

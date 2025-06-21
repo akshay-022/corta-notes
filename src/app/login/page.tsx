@@ -42,17 +42,17 @@ export default function LoginPage() {
       } else {
         logger.info('Login successful!', { userId: data?.user?.id })
         
-        // Small delay to ensure auth state is updated
-        await new Promise(resolve => setTimeout(resolve, 100))
+        // Longer delay to ensure auth state is fully updated and navigation won't be interrupted
+        await new Promise(resolve => setTimeout(resolve, 500))
         
         // Redirect directly to last opened page or dashboard
         const lastOpened = typeof window !== 'undefined' ? localStorage.getItem('lastOpenedPageUuid') : null
         if (lastOpened) {
           logger.info('Redirecting to last opened page', { pageUuid: lastOpened })
-          router.push(`/dashboard/page/${lastOpened}`)
+          router.replace(`/dashboard/page/${lastOpened}`)
         } else {
           logger.info('Redirecting to dashboard')
-          router.push('/dashboard')
+          router.replace('/dashboard')
         }
       }
     } catch (error: any) {

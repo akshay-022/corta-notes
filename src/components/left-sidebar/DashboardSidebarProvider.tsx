@@ -81,13 +81,26 @@ export default function DashboardSidebarProvider({ children }: { children: React
         // 1. Check user authentication with timeout
         const authPromise = supabase.auth.getUser()
         const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Auth check timeout')), 5000)
+          setTimeout(() => reject(new Error('Auth check timeout')), 10000)
         })
         
         const { data: { user }, error } = await Promise.race([authPromise, timeoutPromise]) as any
         
-        if (error || !user) {
-          logger.info('No user found or auth failed, redirecting to login', { error })
+        if (error) {
+          logger.error('Auth check failed:', error)
+          // Only redirect on actual auth errors, not timeouts
+          if (error.message !== 'Auth check timeout') {
+            logger.info('Auth error detected, redirecting to login')
+            router.push('/login')
+            return
+          } else {
+            logger.warn('Auth check timed out, but continuing...')
+            // Continue without redirect on timeout - might be slow network
+          }
+        }
+        
+        if (!user) {
+          logger.info('No user found, redirecting to login')
           router.push('/login')
           return
         }
@@ -119,6 +132,12 @@ export default function DashboardSidebarProvider({ children }: { children: React
 
         setLoading(false)
       } catch (error) {
+        // Ignore HMR-related errors in development
+        if (error instanceof Error && error.message.includes('no longer runnable')) {
+          logger.warn('Dashboard initialization interrupted by HMR, ignoring...', { error: error.message })
+          return
+        }
+        
         logger.error('Error initializing dashboard:', error)
         router.push('/login')
       }
@@ -141,8 +160,8 @@ export default function DashboardSidebarProvider({ children }: { children: React
         if (currentPage && currentPage.uuid !== activePage?.uuid) {
           logger.info('Setting active page from URL:', { pageId: currentPage.uuid })
           setActivePage(currentPage)
-          // Save to localStorage
-          if (typeof window !== 'undefined') {
+          // Save to localStorage only when not on any login page
+          if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
             localStorage.setItem('lastOpenedPageUuid', pageUuid)
           }
         }

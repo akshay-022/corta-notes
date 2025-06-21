@@ -61,7 +61,7 @@ export class ContentProcessor {
   ): { isValid: boolean; reason?: string } {
     const originalWords = original.toLowerCase().split(/\s+/)
     const refinedWords = refined.toLowerCase().split(/\s+/)
-
+    
     const common = originalWords.filter((w) => refinedWords.includes(w))
     const similarity = common.length / Math.max(originalWords.length, refinedWords.length)
     if (similarity < 0.4) {
