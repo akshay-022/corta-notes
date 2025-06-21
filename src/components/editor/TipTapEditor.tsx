@@ -8,9 +8,10 @@ import Typography from '@tiptap/extension-typography'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Page, PageUpdate } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/supabase-client'
-import { Calendar, Minus, Info, Edit2, Save, X, FileText, Eye } from 'lucide-react'
+import { Calendar, Minus, Info, Edit2, Save, X, FileText, Eye, Edit3, Zap } from 'lucide-react'
 import ChatPanel, { ChatPanelHandle } from '../right-sidebar/ChatPanel'
 import { setupAutoOrganization } from '@/lib/auto-organization/organized-file-updates'
+import { organizeCurrentPage } from '@/lib/auto-organization/organize-current-page'
 import { ThoughtParagraph } from '@/thought-tracking/extensions/paragraph-extension'
 import logger from '@/lib/logger'
 
@@ -33,6 +34,9 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   const [isEditingMetadata, setIsEditingMetadata] = useState(false)
   const [metadataEditValue, setMetadataEditValue] = useState('')
   const [showSummary, setShowSummary] = useState(false) // Toggle between content and summary
+  const [isOrganizationRulesOpen, setIsOrganizationRulesOpen] = useState(false)
+  const [organizationRules, setOrganizationRules] = useState('')
+  const [isOrganizing, setIsOrganizing] = useState(false)
   
   const titleInputRef = useRef<HTMLInputElement>(null)
   const currentPageRef = useRef(page.uuid)
@@ -185,6 +189,82 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       .setHorizontalRule()
       .insertContent(`<h2>${today}</h2>`)
       .run()
+  }
+
+  // Initialize organization rules from page metadata
+  useEffect(() => {
+    const pageMetadata = page.metadata as any
+    const rules = pageMetadata?.organizationRules || ''
+    setOrganizationRules(rules)
+  }, [page.metadata])
+
+  // Open organization rules dialog
+  const openOrganizationRules = () => {
+    setIsOrganizationRulesOpen(true)
+  }
+
+  // Save organization rules to page metadata
+  const saveOrganizationRules = async () => {
+    try {
+      const currentMetadata = (page.metadata as any) || {}
+      const updatedMetadata = {
+        ...currentMetadata,
+        organizationRules: organizationRules.trim()
+      }
+
+      const { data, error } = await supabase
+        .from('pages')
+        .update({ 
+          metadata: updatedMetadata,
+          updated_at: new Date().toISOString()
+        })
+        .eq('uuid', page.uuid)
+        .select()
+        .single()
+
+      if (data) {
+        onUpdate(data)
+        logger.info('Organization rules saved', { pageUuid: page.uuid })
+        setIsOrganizationRulesOpen(false)
+      } else if (error) {
+        logger.error('Error saving organization rules:', error)
+      }
+    } catch (error) {
+      logger.error('Exception saving organization rules:', error)
+    }
+  }
+
+  // Organize the entire page
+  const handleOrganizePage = async () => {
+    if (!editor || isOrganizing) return
+    
+    setIsOrganizing(true)
+    try {
+      logger.info('🚀 Starting page organization', { pageUuid: page.uuid, pageTitle: page.title })
+      
+      // Call the organize current page function
+      await organizeCurrentPage({
+        editor,
+        pageUuid: page.uuid,
+        pageTitle: page.title
+      })
+      
+      logger.info('✅ Page organization completed successfully', { pageUuid: page.uuid })
+      
+      // Refresh the page data if callback is available
+      if (pageRefreshCallbackRef.current) {
+        logger.info('🔄 Refreshing page data after organization', { pageUuid: page.uuid })
+        await pageRefreshCallbackRef.current()
+        logger.info('✅ Page data refresh completed', { pageUuid: page.uuid })
+      }
+      
+    } catch (error) {
+      logger.error('❌ Error organizing page:', error)
+      // You might want to show a toast notification here
+    } finally {
+      logger.info('🏁 Organization process finished, clearing loading state', { pageUuid: page.uuid })
+      setIsOrganizing(false)
+    }
   }
 
   // Capture current selection when opening chat (only when Command+K is pressed)
@@ -484,6 +564,35 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
           >
             <Calendar size={14} />
           </button>
+          
+          <div className="w-px h-4 bg-gray-600" />
+          
+          {/* Organization Rules Button */}
+          <button
+            onClick={openOrganizationRules}
+            className="p-1.5 text-gray-400 hover:text-white hover:bg-[#3a3a3a] rounded transition-colors"
+            title="Edit Organization Rules"
+          >
+            <Edit3 size={14} />
+          </button>
+          
+          {/* Organize Page Button */}
+          <button
+            onClick={handleOrganizePage}
+            disabled={isOrganizing}
+            className={`p-1.5 rounded transition-colors ${
+              isOrganizing 
+                ? 'text-blue-400 bg-blue-500/20 cursor-not-allowed' 
+                : 'text-gray-400 hover:text-white hover:bg-[#3a3a3a]'
+            }`}
+            title={isOrganizing ? "Organizing page..." : "Organize This Page"}
+          >
+            {isOrganizing ? (
+              <div className="w-3 h-3 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
+            ) : (
+              <Zap size={14} />
+            )}
+          </button>
         </div>
       </div>
 
@@ -491,6 +600,16 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       {isSaving && (
         <div className="absolute top-4 left-4 md:left-6 z-10">
           <span className="text-gray-500 text-xs">Saving...</span>
+        </div>
+      )}
+
+      {/* Organizing indicator */}
+      {isOrganizing && (
+        <div className="absolute top-4 left-4 md:left-6 z-10">
+          <div className="flex items-center gap-2 bg-blue-500/20 border border-blue-500/30 rounded-lg px-3 py-1">
+            <div className="w-3 h-3 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
+            <span className="text-blue-300 text-xs font-medium">Organizing page...</span>
+          </div>
         </div>
       )}
 
@@ -689,6 +808,51 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
             </div>
           </div>
         </BubbleMenu>
+      )}
+
+      {/* Organization Rules Dialog */}
+      {isOrganizationRulesOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-[#2a2a2a] border border-gray-600 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Organization Rules</h3>
+              <button
+                onClick={() => setIsOrganizationRulesOpen(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-300 mb-3">
+                Define how this page should be organized. These rules will guide the AI when organizing content from this page.
+              </p>
+              
+              <textarea
+                value={organizationRules}
+                onChange={(e) => setOrganizationRules(e.target.value)}
+                placeholder="e.g., 'Group similar ideas together', 'Keep urgent items at the top', 'Separate technical notes from personal thoughts'..."
+                className="w-full h-40 bg-[#1a1a1a] border border-gray-600 rounded p-3 text-gray-200 text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none"
+              />
+            </div>
+            
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setIsOrganizationRulesOpen(false)}
+                className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveOrganizationRules}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+              >
+                Save Rules
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Chat Panel */}

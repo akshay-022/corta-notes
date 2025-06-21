@@ -111,7 +111,11 @@ export async function applyOrganizationChunks(chunks: OrganizedChunk[]): Promise
         newContentJSON = contentProcessor.createTipTapContent(chunk.content)
         newContentText = chunk.content
       } else {
-        newContentJSON = await contentProcessor.smartMergeTipTapContent(page.content, chunk.content, page.uuid)
+        // Get organization rules from page metadata
+        const pageMetadata = page.metadata as any
+        const organizationRules = pageMetadata?.organizationRules || ''
+        
+        newContentJSON = await contentProcessor.smartMergeTipTapContent(page.content, chunk.content, page.uuid, organizationRules)
         newContentText = (page.content_text || '') + '\n\n' + chunk.content
       }
 

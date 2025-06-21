@@ -122,7 +122,7 @@ export class ContentProcessor {
   /**
    * Smart merge using LLM: takes recent (<=24h) paragraphs + new text and asks LLM to integrate
    */
-  async smartMergeTipTapContent(existingContent: any, newText: string, pageUuid: string): Promise<any> {
+  async smartMergeTipTapContent(existingContent: any, newText: string, pageUuid: string, organizationRules?: string): Promise<any> {
     try {
       const { ensureParagraphMetadata } = require('./organized-file-metadata')
       const allNodes = ensureParagraphMetadata(existingContent?.content || [], pageUuid)
@@ -139,13 +139,19 @@ export class ContentProcessor {
         })
         .join('\n')
 
+      const organizationRulesSection = organizationRules?.trim() ? 
+        `\n\nORGANIZATION RULES FOR THIS PAGE:
+${organizationRules}
+
+Follow these rules when organizing and merging content.\n` : ''
+
       const prompt = `You are helping merge new content into an existing page that is sorted by recency.
 
 EXISTING RECENT PARAGRAPHS (with IDs):
 ${recentBlockText}
 
 NEW CONTENT TO INTEGRATE:
-${newText}
+${newText}${organizationRulesSection}
 
 TASK: Decide ABOVE WHICH paragraph ID the merged content should be inserted (that paragraph and everything after it stay below).
 Create one cohesive, well-formatted section that combines both the recent paragraphs (you may rewrite them) and the new content.

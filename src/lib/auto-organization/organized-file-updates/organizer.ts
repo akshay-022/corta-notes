@@ -78,11 +78,27 @@ export async function organizePage({ editor, pageUuid, pageTitle }: OrganizePage
 
     const { fileTreeContext } = await getFileTreeContext()
     const fullPageText = editor.getText()
-    const routingPrompt = buildRoutingPrompt(pageTitle, paragraphs, fileTreeContext, fullPageText)
+    
+    // Get organization rules from page metadata
+    const supabase = createClient()
+    const { data: page } = await supabase
+      .from('pages')
+      .select('metadata')
+      .eq('uuid', pageUuid)
+      .single()
+    
+    const pageMetadata = page?.metadata as any
+    const organizationRules = pageMetadata?.organizationRules || ''
+    
+    if (organizationRules) {
+      logger.info('Using page organization rules', { pageUuid, rules: organizationRules })
+    }
+    
+    const routingPrompt = buildRoutingPrompt(pageTitle, paragraphs, fileTreeContext, fullPageText, organizationRules)
 
     let routingResponse: any[] = []
     try {
-       routingResponse = await callLLM(routingPrompt)
+      routingResponse = await callLLM(routingPrompt)
     } catch (e) {
       logger.error('Routing LLM call failed', { e })
       routingResponse = []
@@ -229,8 +245,16 @@ function buildRoutingPrompt(
   paragraphs: ParagraphInfo[],
   fileTreeContext: string,
   fullPageText: string,
+  organizationRules?: string,
 ) {
   const list = paragraphs.map((p, i) => `${i + 1}. ${p.content}`).join('\n')
+  
+  const organizationRulesSection = organizationRules?.trim() ? 
+    `\n\nORGANIZATION RULES FOR THIS PAGE:
+${organizationRules}
+
+Follow these rules when organizing content.\n` : ''
+
   return `You are organizing personal notes. You MUST route to existing [FILE]s or create new [FILE]s inside directories. NEVER route to [DIR]s.
 
 PAGE TITLE: "${pageTitle}"
@@ -244,7 +268,7 @@ CURRENT FILE TREE:
 ${fileTreeContext}
 
 UNORGANIZED PARAGRAPHS:
-${list}
+${list}${organizationRulesSection}
 
 TASK:
 1. Route each paragraph to the best file location based on content and context
