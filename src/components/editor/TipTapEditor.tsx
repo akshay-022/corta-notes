@@ -189,22 +189,24 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
 
   // Capture current selection when opening chat (only when Command+K is pressed)
   const captureCurrentSelection = useCallback(() => {
+    console.log('🔍 captureCurrentSelection called', { hasEditor: !!editor })
+    
     if (!editor) {
-      console.log('No editor available for capturing selection')
+      console.log('❌ No editor available for capturing selection')
       return
     }
     
     const { from, to } = editor.state.selection
-    console.log('Selection range:', { from, to })
+    console.log('📍 Selection range:', { from, to })
     
     if (from === to) {
-      // No selection, clear selections
+      console.log('🔄 No selection found, clearing existing selections')
       setSelections([])
       return
     }
 
     const selectedText = editor.state.doc.textBetween(from, to)
-    console.log('Selected text:', selectedText)
+    console.log('📝 Selected text:', { text: selectedText, length: selectedText.length })
     
     if (selectedText.trim()) {
       const selectionId = `selection-${Date.now()}`
@@ -214,13 +216,18 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
         startLine: 1, // TipTap doesn't have line numbers, so we use 1
         endLine: 1
       }
-      console.log('Adding selection to context:', newSelection)
-      setSelections(prev => [...prev, newSelection]) // Append to existing selections
+      console.log('✅ Adding selection to context:', newSelection)
+      setSelections(prev => {
+        console.log('📊 Previous selections count:', prev.length)
+        const updated = [...prev, newSelection]
+        console.log('📊 Updated selections count:', updated.length)
+        return updated
+      })
     } else {
-      console.log('Selected text is empty after trimming')
+      console.log('⚠️ Selected text is empty after trimming')
       // Don't clear existing selections if current selection is empty
     }
-  }, [editor])
+  }, [editor, setSelections])
 
   // Function to get node metadata from current selection (any node type)
   const getSelectedNodeMetadata = useCallback(() => {
@@ -315,22 +322,30 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.metaKey && e.key === 'k') {
         e.preventDefault()
-        console.log('Command+K pressed, capturing selection...')
+        console.log('🚀 Command+K pressed! Opening chat and capturing selection...')
         
         // Capture current selection when opening chat
         captureCurrentSelection()
         
+        console.log('💬 Setting chat open to true')
         setIsChatOpen(true)
+        
         // Focus chat input after a short delay to allow panel to render
         setTimeout(() => {
+          console.log('🎯 Attempting to focus chat input')
           chatPanelRef.current?.focusInput()
         }, 100)
       }
     }
 
+    console.log('🎮 Setting up Command+K event listener')
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, []) // Remove captureCurrentSelection dependency to prevent multiple event listeners
+    
+    return () => {
+      console.log('🧹 Cleaning up Command+K event listener')
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [captureCurrentSelection]) // Include captureCurrentSelection dependency so it captures fresh state
 
 
   // Apply AI response to editor

@@ -160,6 +160,9 @@ Respond ONLY with valid JSON of the form:
 Keep this in mind, you must be CONCISE, and NOT REPEAT THE SAME CONTENT AGAIN AND AGAIN. Don't miss important information but do NOT have redundancy, verboseness. 
 Sometimes the user will write something in a strong tone, caps etc to motivate themselves. Don't change the intensity of the user's writing in such cases. 
 
+AS MUCH AS POSSIBLE, instead of using paragraphs, use lists, bullets, etc to make the content more readable. 
+Add ample \n\n to make the content more readable, especially when topics are changing. 
+
 `
 
       const res = await fetch('/api/llm', {
