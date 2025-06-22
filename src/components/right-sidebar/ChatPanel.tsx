@@ -759,18 +759,19 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                             <div className="prose prose-invert prose-xs max-w-none">
                               <ReactMarkdown 
                                 components={{
-                                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                                p: ({ children }) => <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>,
                                 strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
                                 em: ({ children }) => <em className="italic">{children}</em>,
-                                ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
-                                ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-                                li: ({ children }) => <li className="text-[#cccccc]">{children}</li>,
+                                ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1.5">{children}</ul>,
+                                ol: ({ children }) => <ol className="list-decimal list-inside mb-3 space-y-1.5">{children}</ol>,
+                                li: ({ children }) => <li className="text-[#cccccc] leading-relaxed">{children}</li>,
                                 code: ({ children }) => <code className="bg-[#2a2a2a] px-1 py-0.5 rounded text-[#60a5fa] text-[10px]">{children}</code>,
-                                pre: ({ children }) => <pre className="bg-[#2a2a2a] p-2 rounded overflow-x-auto text-[10px] mb-2">{children}</pre>,
-                                blockquote: ({ children }) => <blockquote className="border-l-2 border-[#60a5fa] pl-3 mb-2 italic text-[#969696]">{children}</blockquote>,
-                                h1: ({ children }) => <h1 className="text-sm font-bold mb-2 text-white">{children}</h1>,
-                                h2: ({ children }) => <h2 className="text-sm font-semibold mb-2 text-white">{children}</h2>,
-                                h3: ({ children }) => <h3 className="text-xs font-semibold mb-1 text-white">{children}</h3>,
+                                pre: ({ children }) => <pre className="bg-[#2a2a2a] p-2 rounded overflow-x-auto text-[10px] mb-3">{children}</pre>,
+                                blockquote: ({ children }) => <blockquote className="border-l-2 border-[#60a5fa] pl-3 mb-3 italic text-[#969696]">{children}</blockquote>,
+                                h1: ({ children }) => <h1 className="text-sm font-bold mb-3 mt-4 first:mt-0 text-white">{children}</h1>,
+                                h2: ({ children }) => <h2 className="text-sm font-semibold mb-2 mt-4 first:mt-0 text-white">{children}</h2>,
+                                h3: ({ children }) => <h3 className="text-xs font-semibold mb-2 mt-3 first:mt-0 text-white">{children}</h3>,
+                                hr: () => <hr className="my-6 border-t border-[#404040]" />,
                               }}
                                                         >
                                   {message.content}

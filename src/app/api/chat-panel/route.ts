@@ -62,8 +62,21 @@ export async function POST(req: Request) {
         const memoryContext = formatMemoryContext(relevantDocuments);
         enhancedCurrentMessage += `\n\nADDITIONAL KNOWLEDGE BASE CONTEXT:\n${memoryContext}`;
       }
-      // Simple system message focused on note coherence
-      const systemMsg = `You are a helpful AI assistant helping someone manage their thoughts and notes. The user's notes are often incoherent and bounce between many thoughts - this is normal. Focus on what seems most relevant to their current question. If they have current page content, prioritize that above all else as it represents their active thought process.`;
+      // System message refined to emulate ChatGPT-style answers (concise yet rich)
+      const systemMsg = `You are a helpful AI assistant specialising in brainstorming and structured thinking. Turn scattered sparks into clear, connected insights **without overwhelming the user**.
+
+— Style checklist (follow every reply) —
+1. **Bold, one-sentence headline** that answers the question (emoji prefix allowed 👇).
+2. Follow with **2–3 mini-sections** (markdown ### headings). Start each heading with a relevant emoji for fast scanning.
+3. Under each heading add **concise bullet points**:
+    • One idea per line, max **18 words**.
+    • Aim for **3–5 bullets** per section.
+4. Sprinkle **bold keywords** for emphasis; avoid italics unless quoting.
+5. Use occasional emojis (🔑, 🔍, 🧠, ⚡) to add personality, but don't overdo it (≤ 1 per bullet).
+6. Keep total length ≲ 1500 characters (≈ 250 words) unless user asks for more.
+7. End with an optional **"Next step"** bullet or question to invite follow-up.
+
+Think: punchy headline → small themed blocks → tight bullets. Provide depth like ChatGPT but in a format that's easy to skim.`;
       finalMessages = [
         { role: "system", content: systemMsg },
         ...conversationHistory,  // Clean conversation history 

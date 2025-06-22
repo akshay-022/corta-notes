@@ -196,11 +196,10 @@ export function createThoughtContext(
 
   context = context + `
 
-Some general guidelines for you again:
+Some general guidelines for you:
 
-- Be helpful and concise
-- If the user is asking something in line with their most recent thought, ONLY FOCUS ON THE MOST RECENT THOUGHT, and the question they asked. Do NOT add irrelevant things, or another summary of everything to them. BE SUPER considerte about what information you give. You MUST not overwhelm. 
 - Use the timing context to understand if the user is referring to their recent editor writing or continuing the current AI conversation.
+- Provide comprehensive, detailed responses that help with brainstorming and idea development.
 
 `
   

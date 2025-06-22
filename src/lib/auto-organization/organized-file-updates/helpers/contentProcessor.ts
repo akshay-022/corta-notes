@@ -175,6 +175,7 @@ ${newText}${organizationRulesSection}
 
 TASK: Decide ABOVE WHICH paragraph ID the merged content should be inserted (that paragraph and everything after it stay below).
 Create one cohesive, well-formatted section that combines both the recent paragraphs (you may rewrite them) and the new content.
+IMPORTANT: Do NOT output any standalone page title or heading at the very top. Start directly with the merged content section.
 
 CRITICAL REQUIREMENTS:
 • Write like PERSONAL NOTES, not formal documents

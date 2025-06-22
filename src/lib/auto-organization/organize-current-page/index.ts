@@ -51,7 +51,7 @@ export async function organizeCurrentPage({ editor, pageUuid, pageTitle }: Organ
       ? `\n\nORGANIZATION RULES (follow strictly, do NOT drop any important information):\n${organizationRules}`
       : ''
 
-    const prompt = `You are rewriting ONE personal note. Keep EVERY key detail, but remove redundancy and fluff.\n\nPAGE TITLE: "${pageTitle}"${rulesSection}\n\nORIGINAL NOTE:\n"""\n${fullText}\n"""\n\nTASK:\nRewrite the note to be clear, concise personal notes. Keep the author's authentic voice. Do NOT omit any important facts, dates, ideas, or action items. Use simple markdown formatting (headings, bullets) if helpful.\n\nRespond ONLY with the rewritten note (plain text, no JSON, no markdown fences).`
+    const prompt = `You are rewriting ONE personal note. Keep EVERY key detail, but remove redundancy and fluff.\n\nPAGE TITLE (for context, do NOT repeat it in your output): \"${pageTitle}\"${rulesSection}\n\nORIGINAL NOTE:\n"""\n${fullText}\n"""\n\nTASK:\nRewrite the note to be clear, concise personal notes. Keep the author's authentic voice. Do NOT omit any important facts, dates, ideas, or action items. Use simple markdown formatting (headings, bullets) if helpful.\n\nIMPORTANT: Do NOT output the page title again; start directly with the content.\n\nRespond ONLY with the rewritten note (plain text, no JSON, no markdown fences).`
 
     logger.info('🛰️  Sending rewrite prompt to LLM', { pageUuid, tokens: prompt.length })
 
