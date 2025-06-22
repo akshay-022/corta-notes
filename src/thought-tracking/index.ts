@@ -23,8 +23,7 @@ export { useThoughtTracker } from './hooks/useThoughtTracker'
 // Components
 export { ThoughtTrackingStatus, ThoughtTrackingMini } from './components/ThoughtTrackingStatus'
 
-// Extensions  
-export { ThoughtParagraph } from './extensions/paragraph-extension'
+// Removed ThoughtParagraph export – NodeMetadata handles metadata universally
 
 // Integration utilities
 export { 

@@ -15,6 +15,7 @@ import CodeBlock from '@tiptap/extension-code-block'
 import Code from '@tiptap/extension-code'
 import HardBreak from '@tiptap/extension-hard-break'
 import HorizontalRule from '@tiptap/extension-horizontal-rule'
+import { NodeMetadata } from '@/lib/tiptap/NodeMetadata'
 import { Markdown } from 'tiptap-markdown'
 
 // TipTap extensions for markdown parsing
@@ -33,6 +34,7 @@ const extensions = [
   Code,
   HardBreak,
   HorizontalRule,
+  NodeMetadata,
   Markdown.configure({
     html: false, // Don't allow HTML input
     transformPastedText: false,
@@ -119,7 +121,7 @@ export class ContentProcessor {
   }
 
   /** Create TipTap JSON from Markdown text using TipTap Markdown extension */
-  createTipTapContent(text: string): any {
+  createTipTapContent(text: string, pageUuid?: string): any {
     try {
       // Create a temporary editor to parse Markdown
       const editor = new Editor({
@@ -129,6 +131,13 @@ export class ContentProcessor {
       
       const json = editor.getJSON()
       editor.destroy() // Clean up
+      
+      // Add metadata to paragraphs if pageUuid is provided
+      if (pageUuid && json?.content) {
+        const { ensureParagraphMetadata } = require('./organized-file-metadata')
+        json.content = ensureParagraphMetadata(json.content, pageUuid)
+      }
+      
       return json
     } catch (error) {
       console.error('Error parsing markdown with TipTap:', error)
@@ -144,9 +153,9 @@ export class ContentProcessor {
   }
 
   /** Append new text to existing TipTap JSON using Markdown parsing */
-  mergeIntoTipTapContent(existingContent: any, newText: string): any {
+  mergeIntoTipTapContent(existingContent: any, newText: string, pageUuid?: string): any {
     // Use our Markdown parser to properly handle formatting
-    const newContentJSON = this.createTipTapContent(newText)
+    const newContentJSON = this.createTipTapContent(newText, pageUuid)
     
     return {
       ...existingContent,
@@ -249,8 +258,9 @@ Respond ONLY with valid JSON of the form:
       const mergedText: string = parsed.mergedText
       if (!insertId || !mergedText) throw new Error('LLM missing fields')
 
-      const mergedJSON = this.createTipTapContent(mergedText)
-      const mergedNodesWithMeta = ensureParagraphMetadata(mergedJSON.content, pageUuid)
+      const mergedJSON = this.createTipTapContent(mergedText, pageUuid)
+      // Metadata is already added by createTipTapContent, but ensure it's applied
+      const mergedNodesWithMeta = mergedJSON.content
 
       // Build new content array
       const newContentArray: any[] = []
@@ -280,7 +290,7 @@ Respond ONLY with valid JSON of the form:
     } catch (err) {
       console.error('smartMergeTipTapContent fallback', err)
       // fallback to simple append
-      return this.mergeIntoTipTapContent(existingContent, newText)
+      return this.mergeIntoTipTapContent(existingContent, newText, pageUuid)
     }
   }
 } 

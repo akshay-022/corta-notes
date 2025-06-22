@@ -12,9 +12,9 @@ import { Calendar, Minus, Info, Edit2, Save, X, FileText, Eye, Edit3, Zap } from
 import ChatPanel, { ChatPanelHandle } from '../right-sidebar/ChatPanel'
 import { setupAutoOrganization } from '@/lib/auto-organization/organized-file-updates'
 import { organizeCurrentPage } from '@/lib/auto-organization/organize-current-page'
-import { ThoughtParagraph } from '@/thought-tracking/extensions/paragraph-extension'
 import logger from '@/lib/logger'
 import { DateDividerPlugin } from '@/lib/organized-notes-formatting/dateDividerPlugin'
+import { NodeMetadata } from '@/lib/tiptap/NodeMetadata'
 
 interface TipTapEditorProps {
   page: Page
@@ -57,10 +57,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({
-        paragraph: false, // Disable default paragraph to use our custom one
-      }),
-      ThoughtParagraph, // Our custom paragraph with metadata
+      StarterKit,
       HorizontalRule.configure({
         HTMLAttributes: {
           class: 'my-6 border-gray-700',
@@ -71,6 +68,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       }),
       Typography,
       DateDividerPlugin,
+      NodeMetadata,
     ],
     content: currentContent as any,
     editorProps: {

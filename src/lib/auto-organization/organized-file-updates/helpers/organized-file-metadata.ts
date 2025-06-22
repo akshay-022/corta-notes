@@ -7,11 +7,9 @@ function randomHex(len = 8): string {
  * Returns a NEW array of nodes (does not mutate originals)
  */
 export function ensureParagraphMetadata(nodes: any[], pageUuid: string): any[] {
-  const blockNodeTypes = ['paragraph', 'heading', 'blockquote', 'bulletList', 'orderedList', 'listItem', 'codeBlock']
   const nowIso = new Date().toISOString()
 
   return nodes.map((node) => {
-    if (!blockNodeTypes.includes(node.type)) return node
 
     const existingId = node?.attrs?.id || node?.attrs?.metadata?.id
     const id = existingId || `${pageUuid}-${node.type}-${Date.now()}-${randomHex()}`
@@ -39,11 +37,20 @@ export function ensureParagraphMetadata(nodes: any[], pageUuid: string): any[] {
  * Returns a NEW array of nodes (does not mutate originals)
  */
 export function ensureMetadataMarkedOrganized(nodes: any[], pageUuid: string): any[] {
-  const blockNodeTypes = ['paragraph', 'heading', 'blockquote', 'bulletList', 'orderedList', 'listItem', 'codeBlock']
   const nowIso = new Date().toISOString()
 
+  console.log('🔍 DEBUG ensureMetadataMarkedOrganized received:', {
+    pageUuid,
+    nodesType: typeof nodes,
+    isArray: Array.isArray(nodes),
+    nodesKeys: nodes ? Object.keys(nodes) : 'null',
+    nodesLength: nodes?.length,
+    firstNode: nodes?.[0],
+    fullNodes: nodes
+  })
+
   return nodes.map((node) => {
-    if (!blockNodeTypes.includes(node.type)) return node
+    console.log('🔍 DEBUG inside map, processing node:', { node, nodeType: typeof node, nodeKeys: Object.keys(node || {}) })
 
     const existingId = node?.attrs?.id || node?.attrs?.metadata?.id
     const id = existingId || `${pageUuid}-${node.type}-${Date.now()}-${randomHex()}`

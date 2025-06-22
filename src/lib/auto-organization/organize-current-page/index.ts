@@ -63,6 +63,14 @@ export async function organizeCurrentPage({ editor, pageUuid, pageTitle }: Organ
     // 4️⃣  Convert rewritten text → TipTap JSON & add metadata
     const newContentJSON = contentProcessor.createTipTapContent(rewrittenText)
     if (newContentJSON?.content) {
+      logger.info('🔍 DEBUG: About to call ensureMetadataMarkedOrganized', { 
+        pageUuid,
+        contentType: typeof newContentJSON.content,
+        isArray: Array.isArray(newContentJSON.content),
+        contentKeys: Object.keys(newContentJSON.content),
+        firstItem: newContentJSON.content[0],
+        fullContent: newContentJSON.content
+      })
       newContentJSON.content = ensureMetadataMarkedOrganized(newContentJSON.content, pageUuid)
     }
 

@@ -14,6 +14,7 @@ import CodeBlock from '@tiptap/extension-code-block';
 import Code from '@tiptap/extension-code';
 import HardBreak from '@tiptap/extension-hard-break';
 import HorizontalRule from '@tiptap/extension-horizontal-rule';
+import { NodeMetadata } from '@/lib/tiptap/NodeMetadata'
 import { Markdown } from 'tiptap-markdown';
 
 // TipTap extensions for markdown parsing
@@ -32,6 +33,7 @@ const extensions = [
   Code,
   HardBreak,
   HorizontalRule,
+  NodeMetadata,
   Markdown.configure({
     html: false, // Don't allow HTML input
     transformPastedText: false,
@@ -149,7 +151,7 @@ export class ContentProcessor {
   /**
    * Create TipTap JSON from Markdown text using TipTap Markdown extension
    */
-  createTipTapContent(text: string): any {
+  createTipTapContent(text: string, pageUuid?: string): any {
     try {
       // Create a temporary editor to parse Markdown
       const editor = new Editor({
@@ -159,6 +161,13 @@ export class ContentProcessor {
       
       const json = editor.getJSON()
       editor.destroy() // Clean up
+      
+      // Add metadata to paragraphs if pageUuid is provided
+      if (pageUuid && json?.content) {
+        const { ensureParagraphMetadata } = require('../../../lib/auto-organization/organized-file-updates/helpers/organized-file-metadata')
+        json.content = ensureParagraphMetadata(json.content, pageUuid)
+      }
+      
       return json
     } catch (error) {
       console.error('Error parsing markdown with TipTap:', error)
@@ -176,9 +185,9 @@ export class ContentProcessor {
   /**
    * Merge content into existing TipTap structure using Markdown parsing
    */
-  mergeIntoTipTapContent(existingContent: any, newText: string): any {
+  mergeIntoTipTapContent(existingContent: any, newText: string, pageUuid?: string): any {
     // Use our Markdown parser to properly handle formatting
-    const newContentJSON = this.createTipTapContent(newText);
+    const newContentJSON = this.createTipTapContent(newText, pageUuid);
     
     return {
       ...existingContent,
