@@ -1,5 +1,44 @@
 import { RefinementItem, LineEdit } from '@/thought-tracking/core/organization/types'
 import { TIPTAP_FORMATTING_PROMPT } from '@/lib/promptTemplates'
+import { Editor } from '@tiptap/core'
+import Document from '@tiptap/extension-document'
+import Paragraph from '@tiptap/extension-paragraph'
+import Text from '@tiptap/extension-text'
+import Bold from '@tiptap/extension-bold'
+import Italic from '@tiptap/extension-italic'
+import BulletList from '@tiptap/extension-bullet-list'
+import OrderedList from '@tiptap/extension-ordered-list'
+import ListItem from '@tiptap/extension-list-item'
+import Heading from '@tiptap/extension-heading'
+import Blockquote from '@tiptap/extension-blockquote'
+import CodeBlock from '@tiptap/extension-code-block'
+import Code from '@tiptap/extension-code'
+import HardBreak from '@tiptap/extension-hard-break'
+import HorizontalRule from '@tiptap/extension-horizontal-rule'
+import { Markdown } from 'tiptap-markdown'
+
+// TipTap extensions for markdown parsing
+const extensions = [
+  Document,
+  Paragraph,
+  Text,
+  Bold,
+  Italic,
+  BulletList,
+  OrderedList,
+  ListItem,
+  Heading,
+  Blockquote,
+  CodeBlock,
+  Code,
+  HardBreak,
+  HorizontalRule,
+  Markdown.configure({
+    html: false, // Don't allow HTML input
+    transformPastedText: false,
+    transformCopiedText: false,
+  }),
+]
 
 // A lightweight copy of ContentProcessor to keep the organized-file-updates package self-contained
 // Original source: src/thought-tracking/core/organization/contentProcessor.ts
@@ -79,76 +118,39 @@ export class ContentProcessor {
     return { isValid: true }
   }
 
-  /** Create TipTap JSON from plain text while preserving single new-line breaks AND blank paragraphs */
+  /** Create TipTap JSON from Markdown text using TipTap Markdown extension */
   createTipTapContent(text: string): any {
-    // Replace HTML <br> tags with real newlines, then normalise line endings
-    const cleaned = text.replace(/<br\s*\/?\>/gi, '\n')
-    const normText = cleaned.replace(/\r\n/g, '\n')
-
-    // Split on two-or-more newlines BUT keep track of the breaks so we can insert explicit blank paragraphs
-    const rawBlocks = normText.split(/\n{2,}/)
-    const docContent: any[] = []
-
-    const makeParagraph = (block: string) => {
-      const lines = block.split(/\n/)
-      const nodes: any[] = []
-
-      const pushText = (text: string, bold = false) => {
-        if (!text) return
-        if (bold) {
-          nodes.push({ type: 'text', text, marks: [{ type: 'bold' }] })
-        } else {
-          nodes.push({ type: 'text', text })
-        }
-      }
-
-      const processLine = (line: string) => {
-        const parts = line.split(/(\*\*[^*]+\*\*)/)
-        parts.forEach(part => {
-          if (!part) return
-          const boldMatch = /^\*\*([^*]+)\*\*$/.exec(part)
-          if (boldMatch) {
-            pushText(boldMatch[1], true)
-          } else {
-            pushText(part)
-          }
-        })
-      }
-
-      lines.forEach((line, idx) => {
-        processLine(line)
-        if (idx !== lines.length - 1) nodes.push({ type: 'hardBreak' })
+    try {
+      // Create a temporary editor to parse Markdown
+      const editor = new Editor({
+        extensions,
+        content: text, // TipTap with Markdown extension will parse this as Markdown
       })
-
-      return { type: 'paragraph', content: nodes }
+      
+      const json = editor.getJSON()
+      editor.destroy() // Clean up
+      return json
+    } catch (error) {
+      console.error('Error parsing markdown with TipTap:', error)
+      // Fallback to simple paragraph structure
+      return {
+        type: 'doc',
+        content: [{
+          type: 'paragraph',
+          content: [{ type: 'text', text }]
+        }]
+      }
     }
-
-    rawBlocks.forEach((block, index) => {
-      if (block.trim().length > 0) {
-        docContent.push(makeParagraph(block))
-      }
-      // After every block *except the last* insert an empty paragraph to represent the blank line(s)
-      if (index !== rawBlocks.length - 1) {
-        docContent.push({ type: 'paragraph', content: [] })
-      }
-    })
-
-    return { type: 'doc', content: docContent }
   }
 
-  /** Append new text to existing TipTap JSON */
+  /** Append new text to existing TipTap JSON using Markdown parsing */
   mergeIntoTipTapContent(existingContent: any, newText: string): any {
-    const cleanedText = newText.replace(/<br\s*\/?\>/gi, '\n')
-    const newParagraphs = cleanedText
-      .split('\n\n')
-      .filter((p) => p.trim().length > 0)
-      .map((paragraph) => ({
-        type: 'paragraph',
-        content: [{ type: 'text', text: paragraph.trim() }],
-      }))
+    // Use our Markdown parser to properly handle formatting
+    const newContentJSON = this.createTipTapContent(newText)
+    
     return {
       ...existingContent,
-      content: [...(existingContent?.content || []), ...newParagraphs],
+      content: [...(existingContent?.content || []), ...(newContentJSON?.content || [])],
     }
   }
 

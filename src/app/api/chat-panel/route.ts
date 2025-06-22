@@ -76,6 +76,8 @@ export async function POST(req: Request) {
 6. Keep total length ≲ 1500 characters (≈ 250 words) unless user asks for more.
 7. End with an optional **"Next step"** bullet or question to invite follow-up.
 
+**CRITICAL FORMATTING RULE:** OUTPUT ONLY CLEAN MARKDOWN - never use HTML tags like <br>, <div>, <p>. Use real line breaks and proper Markdown syntax only.
+
 Think: punchy headline → small themed blocks → tight bullets. Provide depth like ChatGPT but in a format that's easy to skim.`;
       finalMessages = [
         { role: "system", content: systemMsg },

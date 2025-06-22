@@ -21,6 +21,7 @@
     "@tiptap/extension-horizontal-rule": "^2.14.0",
     "@tiptap/extension-placeholder": "^2.14.0",
     "@tiptap/extension-typography": "^2.14.0",
+    "@tiptap/html": "^2.22.3",
     "@tiptap/react": "^2.14.0",
     "@tiptap/starter-kit": "^2.14.0",
     "clsx": "^2.1.1",
@@ -31,7 +32,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
-    "supermemory": "^3.0.0-alpha.16"
+    "supermemory": "^3.0.0-alpha.16",
+    "tiptap-markdown": "^0.8.10"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

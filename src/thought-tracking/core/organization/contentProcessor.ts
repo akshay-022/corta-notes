@@ -1,4 +1,43 @@
 import { RefinementItem, LineEdit } from './types';
+import { Editor } from '@tiptap/core';
+import Document from '@tiptap/extension-document';
+import Paragraph from '@tiptap/extension-paragraph';
+import Text from '@tiptap/extension-text';
+import Bold from '@tiptap/extension-bold';
+import Italic from '@tiptap/extension-italic';
+import BulletList from '@tiptap/extension-bullet-list';
+import OrderedList from '@tiptap/extension-ordered-list';
+import ListItem from '@tiptap/extension-list-item';
+import Heading from '@tiptap/extension-heading';
+import Blockquote from '@tiptap/extension-blockquote';
+import CodeBlock from '@tiptap/extension-code-block';
+import Code from '@tiptap/extension-code';
+import HardBreak from '@tiptap/extension-hard-break';
+import HorizontalRule from '@tiptap/extension-horizontal-rule';
+import { Markdown } from 'tiptap-markdown';
+
+// TipTap extensions for markdown parsing
+const extensions = [
+  Document,
+  Paragraph,
+  Text,
+  Bold,
+  Italic,
+  BulletList,
+  OrderedList,
+  ListItem,
+  Heading,
+  Blockquote,
+  CodeBlock,
+  Code,
+  HardBreak,
+  HorizontalRule,
+  Markdown.configure({
+    html: false, // Don't allow HTML input
+    transformPastedText: false,
+    transformCopiedText: false,
+  }),
+];
 
 export class ContentProcessor {
   /**
@@ -108,54 +147,42 @@ export class ContentProcessor {
   }
 
   /**
-   * Create TipTap content structure from text
+   * Create TipTap JSON from Markdown text using TipTap Markdown extension
    */
   createTipTapContent(text: string): any {
-    const cleaned = text.replace(/<br\s*\/?>/gi, '\n');
-    const paragraphs = cleaned.split('\n\n').filter(p => p.trim().length > 0);
-    
-    const parseParagraph = (text: string) => {
-      const nodes: any[] = []
-      const push = (t: string, bold = false) => {
-        if (!t) return
-        nodes.push(bold ? { type: 'text', text: t, marks: [{ type: 'bold' }] } : { type: 'text', text: t })
-      }
-      const parts = text.split(/(\*\*[^*]+\*\*)/)
-      parts.forEach(part => {
-        if (!part) return
-        const m = /^\*\*([^*]+)\*\*$/.exec(part)
-        if (m) push(m[1], true)
-        else push(part)
+    try {
+      // Create a temporary editor to parse Markdown
+      const editor = new Editor({
+        extensions,
+        content: text, // TipTap with Markdown extension will parse this as Markdown
       })
-      return { type: 'paragraph', content: nodes }
-    }
-
-    return {
-      type: 'doc',
-      content: paragraphs.map(p => parseParagraph(p.trim()))
+      
+      const json = editor.getJSON()
+      editor.destroy() // Clean up
+      return json
+    } catch (error) {
+      console.error('Error parsing markdown with TipTap:', error)
+      // Fallback to simple paragraph structure
+      return {
+        type: 'doc',
+        content: [{
+          type: 'paragraph',
+          content: [{ type: 'text', text }]
+        }]
+      }
     }
   }
 
   /**
-   * Merge content into existing TipTap structure
+   * Merge content into existing TipTap structure using Markdown parsing
    */
   mergeIntoTipTapContent(existingContent: any, newText: string): any {
-    const cleanedText = newText.replace(/<br\s*\/?>/gi, '\n');
-    const newParagraphs = cleanedText.split('\n\n')
-      .filter(p => p.trim().length > 0)
-      .map(paragraph => ({
-        type: "paragraph",
-        content: [
-          {
-            type: "text",
-            text: paragraph.trim()
-          }
-        ]
-      }));
-
+    // Use our Markdown parser to properly handle formatting
+    const newContentJSON = this.createTipTapContent(newText);
+    
     return {
       ...existingContent,
-      content: [...(existingContent?.content || []), ...newParagraphs]
+      content: [...(existingContent?.content || []), ...(newContentJSON?.content || [])]
     };
   }
 
