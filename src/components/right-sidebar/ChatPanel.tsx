@@ -700,23 +700,12 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
       ) : (
         /* Chat View */
         <div 
-          className="relative flex flex-col"
-          style={{ 
-            height: isMobile ? 'calc(100vh - 48px)' : 'calc(100vh - 48px)',
-            // Use dynamic viewport height on mobile for Safari
-            ...(isMobile && {
-              height: 'calc(100dvh - 48px)'
-            })
-          }}
+          className="relative flex flex-col h-full max-h-[calc(100dvh-48px)] overflow-hidden"
         >
           {/* Chat Messages */}
           <div 
             ref={messagesContainerRef}
-            className={`overflow-y-auto ${isMobile ? 'pb-[180px]' : ''}`}
-            style={{ 
-              height: 'calc(100% - 120px)',
-              ...(isMobile ? {} : { paddingBottom: '150%' })
-            }}
+            className={`flex-1 overflow-y-auto min-h-full ${isMobile ? 'pb-32' : ''}`}
           >
             <div className="flex flex-col gap-3 p-4">
               {isLoadingHistory ? (
@@ -899,66 +888,62 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
               )}
             </div>
           </div>
-          {/* Input Area - Pinned to bottom */}
-          <div 
-            className="absolute left-0 right-0 border-t border-[#333333] bg-[#1e1e1e] p-4 z-10"
-            style={{ 
-              position: 'absolute',
-              bottom: isMobile ? 'max(55px, env(safe-area-inset-bottom, 0px) + 20px)' : '15px',
-              left: 0,
-              right: 0,
-              backgroundColor: '#1e1e1e'
-            }}
+          {/* Input Area */}
+          <div
+            className={`${isMobile ? 'fixed bottom-4 left-0 right-0 z-40' : 'sticky bottom-0 left-0 right-0 z-10'} border-t border-[#333333] bg-[#1e1e1e] px-4 pt-4 pb-6 md:pb-4 pb-[env(safe-area-inset-bottom)]`}
+            style={isMobile ? {
+              boxShadow: '0 16px 0 0 #1e1e1e'
+            } : undefined}
           >
-        {/* Display multiple selections */} 
-        {selections.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-1 justify-start">
-            {selections.map((sel) => (
-              <span key={sel.id} className="inline-flex items-center rounded bg-[#2a2a2a] px-1.5 py-0.5 text-[10px] text-[#969696]">
-                {(() => {
-                  const words = sel.text.split(/[\s\n]+/).filter(word => word.trim())
-                  if (words.length === 0) return ''
-                  if (words.length === 1) return words[0]
-                  return `${words[0]}...${words[words.length - 1]}`
-                })()}
-                <button 
-                  type="button"
-                  onClick={() => removeSelection(sel.id)}
-                  className="ml-1 text-[#969696] hover:text-[#cccccc]"
-                  aria-label="Remove selection"
-                >
-                  <XIcon size={10} />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-        {/* Chat Input */} 
-        <div className="flex items-center gap-2">
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={activeConversation ? "Type a message..." : "Create a conversation first"}
-            className="min-h-[36px] resize-none rounded bg-[#2a2a2a] border border-[#404040] text-xs px-3 py-2 text-[#cccccc] placeholder-[#969696] focus:outline-none focus:border-[#007acc] transition-colors flex-1"
-            rows={1}
-            disabled={isLoading || !activeConversation}
-          />
-          <button
-            onClick={(e) => handleSubmit(e)}
-            type="button"
-            className="shrink-0 h-8 w-8 rounded bg-[#2a2a2a] hover:bg-[#3a3a3a] disabled:bg-[#2a2a2a] disabled:opacity-50 flex items-center justify-center transition-colors"
-            disabled={isLoading || !activeConversation || !input.trim()}
-          >
-            {isLoading ? (
-              <span className="inline-block w-3 h-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            ) : (
-              <ArrowUp size={14} style={{ color: '#60a5fa' }} />
+            {/* Display multiple selections */} 
+            {selections.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1 justify-start">
+                {selections.map((sel) => (
+                  <span key={sel.id} className="inline-flex items-center rounded bg-[#2a2a2a] px-1.5 py-0.5 text-[10px] text-[#969696]">
+                    {(() => {
+                      const words = sel.text.split(/[\s\n]+/).filter(word => word.trim())
+                      if (words.length === 0) return ''
+                      if (words.length === 1) return words[0]
+                      return `${words[0]}...${words[words.length - 1]}`
+                    })()}
+                    <button 
+                      type="button"
+                      onClick={() => removeSelection(sel.id)}
+                      className="ml-1 text-[#969696] hover:text-[#cccccc]"
+                      aria-label="Remove selection"
+                    >
+                      <XIcon size={10} />
+                    </button>
+                  </span>
+                ))}
+              </div>
             )}
-          </button>
-        </div>
-      </div>
+            {/* Chat Input */} 
+            <div className="flex items-center gap-2">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={activeConversation ? "Type a message..." : "Create a conversation first"}
+                className="min-h-[36px] resize-none rounded bg-[#2a2a2a] border border-[#404040] text-xs px-3 py-2 text-[#cccccc] placeholder-[#969696] focus:outline-none focus:border-[#007acc] transition-colors flex-1"
+                rows={1}
+                disabled={isLoading || !activeConversation}
+              />
+              <button
+                onClick={(e) => handleSubmit(e)}
+                type="button"
+                className="shrink-0 h-8 w-8 rounded bg-[#2a2a2a] hover:bg-[#3a3a3a] disabled:bg-[#2a2a2a] disabled:opacity-50 flex items-center justify-center transition-colors"
+                disabled={isLoading || !activeConversation || !input.trim()}
+              >
+                {isLoading ? (
+                  <span className="inline-block w-3 h-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <ArrowUp size={14} style={{ color: '#60a5fa' }} />
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

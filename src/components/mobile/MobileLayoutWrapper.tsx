@@ -65,7 +65,7 @@ export default function MobileLayoutWrapper({
   return (
     <div className="h-screen flex flex-col bg-[#181818]">
       {/* Mobile Toggle Bar */}
-      <div className="flex bg-[#1e1e1e] border-b border-[#333333] p-2 md:hidden">
+      <div className="flex bg-[#1e1e1e] border-b border-[#333333] p-2 md:hidden sticky top-0 z-30">
         <button
           onClick={() => handleViewChange('sidebar')}
           className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm transition-colors ${

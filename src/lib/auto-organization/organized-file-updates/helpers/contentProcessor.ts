@@ -92,10 +92,34 @@ export class ContentProcessor {
     const makeParagraph = (block: string) => {
       const lines = block.split(/\n/)
       const nodes: any[] = []
+
+      const pushText = (text: string, bold = false) => {
+        if (!text) return
+        if (bold) {
+          nodes.push({ type: 'text', text, marks: [{ type: 'bold' }] })
+        } else {
+          nodes.push({ type: 'text', text })
+        }
+      }
+
+      const processLine = (line: string) => {
+        const parts = line.split(/(\*\*[^*]+\*\*)/)
+        parts.forEach(part => {
+          if (!part) return
+          const boldMatch = /^\*\*([^*]+)\*\*$/.exec(part)
+          if (boldMatch) {
+            pushText(boldMatch[1], true)
+          } else {
+            pushText(part)
+          }
+        })
+      }
+
       lines.forEach((line, idx) => {
-        nodes.push({ type: 'text', text: line })
+        processLine(line)
         if (idx !== lines.length - 1) nodes.push({ type: 'hardBreak' })
       })
+
       return { type: 'paragraph', content: nodes }
     }
 

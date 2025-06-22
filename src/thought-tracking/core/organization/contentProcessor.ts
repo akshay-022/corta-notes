@@ -114,18 +114,26 @@ export class ContentProcessor {
     const cleaned = text.replace(/<br\s*\/?>/gi, '\n');
     const paragraphs = cleaned.split('\n\n').filter(p => p.trim().length > 0);
     
+    const parseParagraph = (text: string) => {
+      const nodes: any[] = []
+      const push = (t: string, bold = false) => {
+        if (!t) return
+        nodes.push(bold ? { type: 'text', text: t, marks: [{ type: 'bold' }] } : { type: 'text', text: t })
+      }
+      const parts = text.split(/(\*\*[^*]+\*\*)/)
+      parts.forEach(part => {
+        if (!part) return
+        const m = /^\*\*([^*]+)\*\*$/.exec(part)
+        if (m) push(m[1], true)
+        else push(part)
+      })
+      return { type: 'paragraph', content: nodes }
+    }
+
     return {
-      type: "doc",
-      content: paragraphs.map(paragraph => ({
-        type: "paragraph",
-        content: [
-          {
-            type: "text",
-            text: paragraph.trim()
-          }
-        ]
-      }))
-    };
+      type: 'doc',
+      content: paragraphs.map(p => parseParagraph(p.trim()))
+    }
   }
 
   /**
