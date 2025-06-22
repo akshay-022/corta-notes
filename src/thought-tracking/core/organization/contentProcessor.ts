@@ -111,7 +111,8 @@ export class ContentProcessor {
    * Create TipTap content structure from text
    */
   createTipTapContent(text: string): any {
-    const paragraphs = text.split('\n\n').filter(p => p.trim().length > 0);
+    const cleaned = text.replace(/<br\s*\/?>/gi, '\n');
+    const paragraphs = cleaned.split('\n\n').filter(p => p.trim().length > 0);
     
     return {
       type: "doc",
@@ -131,7 +132,8 @@ export class ContentProcessor {
    * Merge content into existing TipTap structure
    */
   mergeIntoTipTapContent(existingContent: any, newText: string): any {
-    const newParagraphs = newText.split('\n\n')
+    const cleanedText = newText.replace(/<br\s*\/?>/gi, '\n');
+    const newParagraphs = cleanedText.split('\n\n')
       .filter(p => p.trim().length > 0)
       .map(paragraph => ({
         type: "paragraph",

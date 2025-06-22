@@ -14,6 +14,7 @@ import { setupAutoOrganization } from '@/lib/auto-organization/organized-file-up
 import { organizeCurrentPage } from '@/lib/auto-organization/organize-current-page'
 import { ThoughtParagraph } from '@/thought-tracking/extensions/paragraph-extension'
 import logger from '@/lib/logger'
+import { addDateDividers } from '@/lib/organized-notes-formatting/dateDivider'
 
 interface TipTapEditorProps {
   page: Page
@@ -52,7 +53,8 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   pageRefreshCallbackRef.current = pageRefreshCallback
 
   // Determine which content to show based on toggle
-  const currentContent = showSummary ? (page.page_summary || page.content) : page.content
+  const rawContent = showSummary ? (page.page_summary || page.content) : page.content
+  const currentContent = page.organized ? addDateDividers(rawContent as any) : rawContent
 
   const editor = useEditor({
     extensions: [

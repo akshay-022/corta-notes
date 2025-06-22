@@ -140,9 +140,9 @@ export async function applyOrganizationChunks(chunks: OrganizedChunk[]): Promise
       if (upErr) throw upErr
 
       if (isNewFile) {
-        created.push({ uuid: page.uuid, title: page.title, action: 'created', timestamp: Date.now() })
+        created.push({ uuid: page.uuid, title: page.title, action: 'created', timestamp: Date.now(), path: chunk.targetFilePath })
       } else {
-        updated.push({ uuid: page.uuid, title: page.title, action: 'updated', timestamp: Date.now() })
+        updated.push({ uuid: page.uuid, title: page.title, action: 'updated', timestamp: Date.now(), path: chunk.targetFilePath })
       }
 
       logger.info('Updated page with organized chunk', {

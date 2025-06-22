@@ -3,6 +3,7 @@ export interface FileHistoryItem {
   title: string
   action: 'updated' | 'created'
   timestamp: number
+  path?: string // full path for tooltip display
 }
 
 /**
@@ -23,20 +24,22 @@ export function postFileHistoryUpdate(items: FileHistoryItem[]): void {
 export function createFileHistoryItem(
   uuid: string,
   title: string,
-  action: 'updated' | 'created'
+  action: 'updated' | 'created',
+  path?: string
 ): FileHistoryItem {
   return {
     uuid,
     title,
     action,
-    timestamp: Date.now()
+    timestamp: Date.now(),
+    path,
   }
 }
 
 /**
  * Post a single file history update
  */
-export function postSingleFileUpdate(uuid: string, title: string, action: 'updated' | 'created'): void {
-  const item = createFileHistoryItem(uuid, title, action)
+export function postSingleFileUpdate(uuid: string, title: string, action: 'updated' | 'created', path?: string): void {
+  const item = createFileHistoryItem(uuid, title, action, path)
   postFileHistoryUpdate([item])
 } 

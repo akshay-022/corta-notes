@@ -1,4 +1,5 @@
 import { RefinementItem, LineEdit } from '@/thought-tracking/core/organization/types'
+import { TIPTAP_FORMATTING_PROMPT } from '@/lib/promptTemplates'
 
 // A lightweight copy of ContentProcessor to keep the organized-file-updates package self-contained
 // Original source: src/thought-tracking/core/organization/contentProcessor.ts
@@ -80,8 +81,9 @@ export class ContentProcessor {
 
   /** Create TipTap JSON from plain text while preserving single new-line breaks AND blank paragraphs */
   createTipTapContent(text: string): any {
-    // Normalise line endings
-    const normText = text.replace(/\r\n/g, '\n')
+    // Replace HTML <br> tags with real newlines, then normalise line endings
+    const cleaned = text.replace(/<br\s*\/?\>/gi, '\n')
+    const normText = cleaned.replace(/\r\n/g, '\n')
 
     // Split on two-or-more newlines BUT keep track of the breaks so we can insert explicit blank paragraphs
     const rawBlocks = normText.split(/\n{2,}/)
@@ -112,7 +114,8 @@ export class ContentProcessor {
 
   /** Append new text to existing TipTap JSON */
   mergeIntoTipTapContent(existingContent: any, newText: string): any {
-    const newParagraphs = newText
+    const cleanedText = newText.replace(/<br\s*\/?\>/gi, '\n')
+    const newParagraphs = cleanedText
       .split('\n\n')
       .filter((p) => p.trim().length > 0)
       .map((paragraph) => ({
@@ -166,6 +169,7 @@ ${organizationRules}
 Follow these rules when organizing and merging content.\n` : ''
 
       const prompt = `You are helping merge new content into an existing page that is sorted by recency.
+${TIPTAP_FORMATTING_PROMPT}
 
 EXISTING RECENT PARAGRAPHS (with IDs):
 ${recentBlockText}
@@ -182,11 +186,14 @@ CRITICAL REQUIREMENTS:
 • Keep the user's original voice and tone - if they write urgently, keep it urgent
 • NO corporate speak, NO "Overview/Summary" sections, NO repetitive bullet points  
 • BE CONCISE - eliminate all redundancy and fluff
+• DO NOT DROP any important detail – the merged section must include every key idea from both recent paragraphs and new text
 • Focus on WHAT MATTERS - actionable insights, not descriptions
 • Use natural, conversational language like talking to yourself
 • Preserve strong emotions, caps, urgency - don't sanitize the user's voice
 • Combine similar ideas into single, clear statements
 • Use simple formatting - basic bullets or numbered lists, not complex structures
+• Prefer bullet points and short lists; break complex ideas into concise bullets for easy scanning — **no walls of text**
+• Never output raw HTML tags like <br> – use real line breaks or Markdown only
 
 BAD EXAMPLE: "Overview: This section delivers a cohesive view of..." 
 GOOD EXAMPLE: "Need to add annotation feature - users want control over where stuff goes"

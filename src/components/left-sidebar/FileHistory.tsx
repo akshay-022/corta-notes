@@ -163,7 +163,10 @@ export default function FileHistory({ isMobile, setSidebarOpen }: FileHistoryPro
                 </div>
                 
                 <div className="flex-1 min-w-0 ml-1">
-                  <div className="text-[#cccccc] truncate text-sm font-normal">
+                  <div
+                    className="text-[#cccccc] truncate text-sm font-normal"
+                    title={item.path || item.title}
+                  >
                     {item.title}
                   </div>
                 </div>

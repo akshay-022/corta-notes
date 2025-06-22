@@ -30,9 +30,9 @@ class SuperMemorySyncService {
       return false
     }
     
-    // Don't sync pages with "soon" organize status
-    if (organizeStatus === 'soon') {
-      this.logger.log(`Skipping page with 'soon' status: ${page.title}`)
+    // Don't sync pages with organizeStatus 'soon' or if not marked organized
+    if (organizeStatus === 'soon' || !page.organized) {
+      this.logger.log(`Skipping unorganized page: ${page.title}`)
       return false
     }
     

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/supabase-client'
 import { ContentProcessor } from '@/lib/auto-organization/organized-file-updates/helpers/contentProcessor'
 import { ensureMetadataMarkedOrganized } from '@/lib/auto-organization/organized-file-updates/helpers/organized-file-metadata'
 import logger from '@/lib/logger'
+import { TIPTAP_FORMATTING_PROMPT } from '@/lib/promptTemplates'
 
 export interface OrganizeCurrentPageOptions {
   editor: Editor
@@ -128,7 +129,8 @@ ${organizationRules}
 
 Follow these rules when organizing content.\n` : ''
 
-  const prompt = `You are organizing personal notes. You MUST route to existing [FILE]s or create new [FILE]s inside directories. NEVER route to [DIR]s.
+  const prompt = `You are organizing personal notes. **Heavily prioritise routing paragraphs to EXISTING [FILE]s whenever they are relevant. Only create a new [FILE] if there is truly no suitable existing destination.** NEVER route to [DIR]s (you must always choose a file).
+${TIPTAP_FORMATTING_PROMPT}
 
 PAGE TITLE: "${pageTitle}"
 
@@ -147,6 +149,7 @@ CRITICAL CONTENT REQUIREMENTS:
 • Keep the user's original voice and urgency - don't sanitize their tone
 • NO corporate speak, NO "Overview/Summary" sections, NO repetitive content
 • BE CONCISE - eliminate fluff and redundancy 
+• DO NOT MISS OR DROP any important detail from any paragraph – everything the user wrote must appear in the organized result (possibly rewritten, but present)
 • Focus on actionable insights, not descriptions
 • Preserve strong emotions, caps, urgency from original text
 • Use simple formatting - basic bullets or lists, not complex structures
