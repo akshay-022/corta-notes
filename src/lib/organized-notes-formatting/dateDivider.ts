@@ -21,13 +21,15 @@ export function addDateDividers(doc: TipTapDoc): TipTapDoc {
     const day = dateIso ? fmt(dateIso) : null
 
     if (day && day !== previousDate) {
-      // Insert heading node
-      newContent.push({
-        type: 'heading',
-        attrs: { level: 3 },
-        content: [{ type: 'text', text: day }],
-      })
-      previousDate = day
+      // Insert heading only if we're moving back in time (newer-to-older order)
+      if (!previousDate || day < previousDate) {
+        newContent.push({
+          type: 'heading',
+          attrs: { level: 3 },
+          content: [{ type: 'text', text: day }],
+        })
+        previousDate = day
+      }
     }
 
     newContent.push(node)
