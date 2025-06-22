@@ -78,16 +78,36 @@ export class ContentProcessor {
     return { isValid: true }
   }
 
-  /** Create minimal TipTap JSON from plain text */
+  /** Create TipTap JSON from plain text while preserving single new-line breaks AND blank paragraphs */
   createTipTapContent(text: string): any {
-    const paragraphs = text.split('\n\n').filter((p) => p.trim().length > 0)
-    return {
-      type: 'doc',
-      content: paragraphs.map((paragraph) => ({
-        type: 'paragraph',
-        content: [{ type: 'text', text: paragraph.trim() }],
-      })),
+    // Normalise line endings
+    const normText = text.replace(/\r\n/g, '\n')
+
+    // Split on two-or-more newlines BUT keep track of the breaks so we can insert explicit blank paragraphs
+    const rawBlocks = normText.split(/\n{2,}/)
+    const docContent: any[] = []
+
+    const makeParagraph = (block: string) => {
+      const lines = block.split(/\n/)
+      const nodes: any[] = []
+      lines.forEach((line, idx) => {
+        nodes.push({ type: 'text', text: line })
+        if (idx !== lines.length - 1) nodes.push({ type: 'hardBreak' })
+      })
+      return { type: 'paragraph', content: nodes }
     }
+
+    rawBlocks.forEach((block, index) => {
+      if (block.trim().length > 0) {
+        docContent.push(makeParagraph(block))
+      }
+      // After every block *except the last* insert an empty paragraph to represent the blank line(s)
+      if (index !== rawBlocks.length - 1) {
+        docContent.push({ type: 'paragraph', content: [] })
+      }
+    })
+
+    return { type: 'doc', content: docContent }
   }
 
   /** Append new text to existing TipTap JSON */
