@@ -9,10 +9,11 @@ import Underline from '@tiptap/extension-underline'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Page, PageUpdate } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/supabase-client'
-import { Calendar, Minus, Info, Edit2, Save, X, FileText, Eye, Edit3, Zap } from 'lucide-react'
-import ChatPanel, { ChatPanelHandle } from '../right-sidebar/ChatPanel'
+import { Info, Edit2, Save, X, FileText, Eye, Edit3, Zap, MessageSquare } from 'lucide-react'
+
 import { setupAutoOrganization } from '@/lib/auto-organization/organized-file-updates'
 import { organizeCurrentPage } from '@/lib/auto-organization/organize-current-page'
+import { useNotes } from '@/components/left-sidebar/DashboardSidebarProvider'
 import logger from '@/lib/logger'
 import { DateDividerPlugin } from '@/lib/organized-notes-formatting/dateDividerPlugin'
 import { NodeMetadata } from '@/lib/tiptap/NodeMetadata'
@@ -26,13 +27,13 @@ interface TipTapEditorProps {
 }
 
 export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefreshCallback }: TipTapEditorProps) {
+  const notesCtx = useNotes()
   const [title, setTitle] = useState(page.title)
   const [isSaving, setIsSaving] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [isUserTyping, setIsUserTyping] = useState(false)
   const [isUserEditingTitle, setIsUserEditingTitle] = useState(false) // Track title editing specifically
-  const [isChatOpen, setIsChatOpen] = useState(false)
-  const [selections, setSelections] = useState<Array<{id: string, text: string, startLine: number, endLine: number}>>([])
+
   const [selectedParagraphMetadata, setSelectedParagraphMetadata] = useState<{id: string, metadata: any, pos?: number, nodeType?: string} | null>(null)
   const [isEditingMetadata, setIsEditingMetadata] = useState(false)
   const [metadataEditValue, setMetadataEditValue] = useState('')
@@ -43,7 +44,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   
   const titleInputRef = useRef<HTMLInputElement>(null)
   const currentPageRef = useRef(page.uuid)
-  const chatPanelRef = useRef<ChatPanelHandle>(null)
+
   const supabase = createClient()
 
   // Use refs to prevent unnecessary re-renders
@@ -76,7 +77,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     content: currentContent as any,
     editorProps: {
       attributes: {
-        class: 'prose prose-invert max-w-none focus:outline-none min-h-[calc(100vh-180px)] md:min-h-[calc(100vh-120px)] px-4 py-4 md:px-16 md:py-8 prose-sm md:prose-base text-sm md:text-base leading-relaxed',
+        class: 'prose prose-invert max-w-none focus:outline-none min-h-[calc(100vh-180px)] md:min-h-[calc(100vh-120px)] py-4 md:py-8 prose-sm md:prose-base text-sm md:text-base leading-relaxed',
       },
     },
     editable: !showSummary, // Make read-only when showing summary
@@ -175,24 +176,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     setTimeout(() => titleInputRef.current?.focus(), 0)
   }
 
-  const insertHorizontalRule = () => {
-    editor?.chain().focus().setHorizontalRule().run()
-  }
 
-  const insertDateDivider = () => {
-    const today = new Date().toLocaleDateString('en-US', { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    })
-    
-    editor?.chain()
-      .focus()
-      .setHorizontalRule()
-      .insertContent(`<h2>${today}</h2>`)
-      .run()
-  }
 
   // Initialize organization rules from page metadata
   useEffect(() => {
@@ -274,8 +258,8 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   const captureCurrentSelection = useCallback(() => {
     console.log('🔍 captureCurrentSelection called', { hasEditor: !!editor })
     
-    if (!editor) {
-      console.log('❌ No editor available for capturing selection')
+    if (!editor || !notesCtx) {
+      console.log('❌ No editor or context available for capturing selection')
       return
     }
     
@@ -284,7 +268,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     
     if (from === to) {
       console.log('🔄 No selection found, clearing existing selections')
-      setSelections([])
+      notesCtx.setSelections([])
       return
     }
 
@@ -300,17 +284,16 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
         endLine: 1
       }
       console.log('✅ Adding selection to context:', newSelection)
-      setSelections(prev => {
-        console.log('📊 Previous selections count:', prev.length)
-        const updated = [...prev, newSelection]
-        console.log('📊 Updated selections count:', updated.length)
-        return updated
-      })
+      const currentSelections = notesCtx.selections || []
+      console.log('📊 Previous selections count:', currentSelections.length)
+      const updated = [...currentSelections, newSelection]
+      console.log('📊 Updated selections count:', updated.length)
+      notesCtx.setSelections(updated)
     } else {
       console.log('⚠️ Selected text is empty after trimming')
       // Don't clear existing selections if current selection is empty
     }
-  }, [editor, setSelections])
+  }, [editor, notesCtx])
 
   // Function to get node metadata from current selection (any node type)
   const getSelectedNodeMetadata = useCallback(() => {
@@ -400,24 +383,24 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     }
   }, [editor]) // Removed getSelectedNodeMetadata dependency to prevent loop
 
-  // Command+K keyboard shortcut to open chat
+  // Command+K keyboard shortcut to toggle chat
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.metaKey && e.key === 'k') {
         e.preventDefault()
-        console.log('🚀 Command+K pressed! Opening chat and capturing selection...')
         
-        // Capture current selection when opening chat
-        captureCurrentSelection()
-        
-        console.log('💬 Setting chat open to true')
-        setIsChatOpen(true)
-        
-        // Focus chat input after a short delay to allow panel to render
-        setTimeout(() => {
-          console.log('🎯 Attempting to focus chat input')
-          chatPanelRef.current?.focusInput()
-        }, 100)
+        if (notesCtx) {
+          // Always capture current selection when Command+K is pressed
+          captureCurrentSelection()
+          
+          // Only open chat if it's not already open
+          if (!notesCtx.isChatOpen) {
+            console.log('🚀 Command+K pressed! Opening chat')
+            notesCtx.setIsChatOpen(true)
+          } else {
+            console.log('💬 Command+K pressed! Chat already open, selection captured')
+          }
+        }
       }
     }
 
@@ -453,7 +436,9 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       }
       
       // Clear selections after applying
-      setSelections([])
+      if (notesCtx) {
+        notesCtx.setSelections([])
+      }
     } catch (error) {
       console.error('Error applying AI response to editor:', error)
       throw error
@@ -521,8 +506,9 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       className="flex-1 bg-[#1a1a1a] flex flex-col overflow-hidden w-full"
       data-editor
     >
-      {/* Minimal toolbar - always visible */}
-      <div className="absolute top-4 right-4 md:right-6 z-10">
+      {/* Minimal toolbar - hidden when chat is open */}
+      {!notesCtx?.isChatOpen && (
+        <div className="absolute top-4 right-4 md:right-6 z-10">
         <div className="flex items-center gap-1 bg-[#2a2a2a] rounded-lg p-1 border border-gray-700">
           {/* Summary Toggle - show for organized pages */}
           {page.organized && (
@@ -552,24 +538,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
             </>
           )}
           
-          <button
-            onClick={insertHorizontalRule}
-            className="p-1.5 text-gray-400 hover:text-white hover:bg-[#3a3a3a] rounded transition-colors"
-            title="Divider"
-          >
-            <Minus size={14} />
-          </button>
-          
-          <button
-            onClick={insertDateDivider}
-            className="p-1.5 text-gray-400 hover:text-white hover:bg-[#3a3a3a] rounded transition-colors"
-            title="Date"
-          >
-            <Calendar size={14} />
-          </button>
-          
-          <div className="w-px h-4 bg-gray-600" />
-          
+
           {/* Organization Rules Button */}
           <button
             onClick={openOrganizationRules}
@@ -596,8 +565,33 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
               <Zap size={14} />
             )}
           </button>
+          
+          <div className="w-px h-4 bg-gray-600" />
+          
+          {/* Chat Toggle Button */}
+          <button
+            onClick={() => {
+              if (notesCtx) {
+                captureCurrentSelection()
+                const newChatState = !notesCtx.isChatOpen
+                console.log('💬 Chat button clicked, toggling:', newChatState)
+                notesCtx.setIsChatOpen(newChatState)
+                
+                // Note: captureCurrentSelection already handles adding selections to context
+              }
+            }}
+            className={`p-1.5 rounded transition-colors ${
+              notesCtx?.isChatOpen 
+                ? 'text-blue-400 bg-blue-500/20' 
+                : 'text-gray-400 hover:text-white hover:bg-[#3a3a3a]'
+            }`}
+            title={notesCtx?.isChatOpen ? "Close Chat" : "Open Chat (⌘K)"}
+          >
+            <MessageSquare size={14} />
+          </button>
         </div>
-      </div>
+        </div>
+      )}
 
       {/* Saving indicator */}
       {isSaving && (
@@ -618,9 +612,13 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
 
       {/* Editor container with independent scrolling */}
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto min-h-full">
+        <div className={`mx-auto min-h-full transition-all duration-[25ms] ${
+          notesCtx?.isChatOpen 
+            ? 'max-w-2xl px-8 md:px-12' 
+            : 'max-w-4xl px-4 md:px-16'
+        }`}>
           {/* Title - Notion style */}
-          <div className="px-4 pt-8 pb-2 md:px-16 md:pt-16">
+          <div className="pt-8 pb-2 md:pt-16">
             {isEditingTitle ? (
               <input
                 ref={titleInputRef}
@@ -857,18 +855,6 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
         </div>
       )}
 
-      {/* Chat Panel */}
-      <ChatPanel
-        ref={chatPanelRef}
-        isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
-        currentPage={page}
-        allPages={allPages}
-        selections={selections}
-        setSelections={setSelections}
-        onApplyAiResponseToEditor={handleApplyAiResponse}
-        editor={editor}
-      />
     </div>
   )
 } 

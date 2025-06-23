@@ -690,15 +690,16 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     }
   }, [handleSubmit, input, selections])
 
-  if (!isOpen) return null
+  // Don't unmount when closed - just hide to preserve state
+  // if (!isOpen) return null
 
   return (
     <div 
       className={`${
         isMobile 
           ? "w-full bg-[#1e1e1e]" 
-          : "fixed right-0 top-0 z-40 h-full w-[400px] border-l border-[#333333] bg-[#1e1e1e] shadow-lg"
-      } transition-all ease-out overflow-hidden`}
+          : "h-full w-full bg-[#1e1e1e]"
+      } transition-all ease-out overflow-hidden ${!isOpen ? 'pointer-events-none opacity-0' : ''}`}
       style={{ 
         touchAction: 'manipulation',
         height: isMobile ? '100vh' : '100vh',

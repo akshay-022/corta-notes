@@ -29,6 +29,10 @@ export const NotesContext = createContext<{
   setActivePage: (page: Page | null) => void
   updatePage: (updatedPage: Page) => void
   refreshOrganizedNotes: () => Promise<void>
+  isChatOpen: boolean
+  setIsChatOpen: (open: boolean) => void
+  selections: any[]
+  setSelections: (selections: any[]) => void
 } | null>(null)
 
 export function useNotes() {
@@ -576,7 +580,7 @@ export default function DashboardSidebarProvider({ children }: { children: React
   }
 
   return (
-    <NotesContext.Provider value={{ pages, activePage, setActivePage, updatePage, refreshOrganizedNotes }}>
+    <NotesContext.Provider value={{ pages, activePage, setActivePage, updatePage, refreshOrganizedNotes, isChatOpen, setIsChatOpen, selections, setSelections }}>
       {isMobile ? (
         <MobileLayoutWrapper
           sidebar={
@@ -660,9 +664,32 @@ export default function DashboardSidebarProvider({ children }: { children: React
               onClearNewlyCreatedItem={clearNewlyCreatedItem}
             />
           </div>
-          {/* Desktop Main content */}
-          <div className="flex-1 min-w-0 h-screen overflow-y-auto bg-[#181818]">
-            {children}
+          {/* Desktop Main content - adjust width based on chat panel state */}
+          <div className={`h-screen overflow-y-auto bg-[#181818] transition-all duration-75 ${
+            isChatOpen ? 'flex-1 min-w-0' : 'flex-1 min-w-0'
+          }`}>
+            <div className="h-full">
+              {children}
+            </div>
+          </div>
+          {/* Desktop Chat Panel - always mounted, hidden when closed */}
+          <div className={`h-screen border-l border-[#333333] bg-[#1e1e1e] relative z-50 transition-all duration-[25ms] ${
+            isChatOpen ? 'w-[400px] flex-shrink-0' : 'w-0 overflow-hidden'
+          }`}>
+            <div className="w-[400px] h-full">
+              <ChatPanel
+                ref={chatPanelRef}
+                isOpen={isChatOpen}
+                onClose={() => setIsChatOpen(false)}
+                currentPage={activePage || undefined}
+                allPages={pages}
+                selections={selections}
+                setSelections={setSelections}
+                onApplyAiResponseToEditor={undefined}
+                editor={null}
+                isMobile={false}
+              />
+            </div>
           </div>
         </div>
       )}
