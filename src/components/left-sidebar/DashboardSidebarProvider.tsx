@@ -14,6 +14,8 @@ import logger from '@/lib/logger'
 import MobileLayoutWrapper from '@/components/mobile/MobileLayoutWrapper'
 import ChatPanel, { ChatPanelHandle } from '../right-sidebar/ChatPanel'
 import { useFileTreeEvents } from '@/hooks/useFileTreeEvents'
+import { useResizablePanel } from '@/hooks/useResizablePanel'
+import { useResizableChatPanel } from '@/hooks/useResizableChatPanel'
 
 interface ContextMenu {
   x: number
@@ -33,6 +35,7 @@ export const NotesContext = createContext<{
   setIsChatOpen: (open: boolean) => void
   selections: any[]
   setSelections: (selections: any[]) => void
+  chatPanelWidth: number
 } | null>(null)
 
 export function useNotes() {
@@ -57,6 +60,21 @@ export default function DashboardSidebarProvider({ children }: { children: React
   const [selections, setSelections] = useState<any[]>([])
   const [newlyCreatedItem, setNewlyCreatedItem] = useState<Page | null>(null)
   const chatPanelRef = useRef<ChatPanelHandle>(null)
+
+  // Resizable panels
+  const leftSidebar = useResizablePanel({
+    storageKey: 'corta-left-sidebar-width',
+    defaultWidth: 260,
+    minWidth: 220,
+    maxWidth: 400
+  })
+
+  const chatPanel = useResizableChatPanel({
+    storageKey: 'corta-chat-panel-width',
+    defaultWidth: 400,
+    minWidth: 300,
+    maxWidth: 600
+  })
 
   // Mobile detection
   useEffect(() => {
@@ -580,7 +598,7 @@ export default function DashboardSidebarProvider({ children }: { children: React
   }
 
   return (
-    <NotesContext.Provider value={{ pages, activePage, setActivePage, updatePage, refreshOrganizedNotes, isChatOpen, setIsChatOpen, selections, setSelections }}>
+    <NotesContext.Provider value={{ pages, activePage, setActivePage, updatePage, refreshOrganizedNotes, isChatOpen, setIsChatOpen, selections, setSelections, chatPanelWidth: chatPanel.width }}>
       {isMobile ? (
         <MobileLayoutWrapper
           sidebar={
@@ -636,7 +654,10 @@ export default function DashboardSidebarProvider({ children }: { children: React
       ) : (
         <div className="flex h-screen w-screen overflow-hidden">
           {/* Desktop Sidebar */}
-          <div className="h-screen overflow-y-auto bg-[#1a1a1a] border-r border-[#222] min-w-[220px] max-w-[320px] w-[260px]">
+          <div 
+            className="h-screen overflow-y-auto bg-[#1a1a1a] border-r border-[#222] relative flex-shrink-0"
+            style={{ width: `${leftSidebar.width}px` }}
+          >
             <Sidebar
               pages={pages}
               activePage={activePage}
@@ -663,6 +684,12 @@ export default function DashboardSidebarProvider({ children }: { children: React
               newlyCreatedItem={newlyCreatedItem}
               onClearNewlyCreatedItem={clearNewlyCreatedItem}
             />
+            {/* Left sidebar resize handle */}
+            <div
+              className={`absolute top-0 right-0 h-full w-2 cursor-col-resize z-10 ${leftSidebar.isResizing ? 'bg-blue-500/60' : 'bg-transparent hover:bg-blue-500/40'}`}
+              onMouseDown={leftSidebar.startResize}
+              title="Drag to resize sidebar"
+            />
           </div>
           {/* Desktop Main content - adjust width based on chat panel state */}
           <div className={`h-screen overflow-y-auto bg-[#181818] transition-all duration-75 ${
@@ -673,10 +700,24 @@ export default function DashboardSidebarProvider({ children }: { children: React
             </div>
           </div>
           {/* Desktop Chat Panel - always mounted, hidden when closed */}
-          <div className={`h-screen border-l border-[#333333] bg-[#1e1e1e] relative z-50 transition-all duration-[25ms] ${
-            isChatOpen ? 'w-[400px] flex-shrink-0' : 'w-0 overflow-hidden'
-          }`}>
-            <div className="w-[400px] h-full">
+          <div 
+            className={`h-screen border-l border-[#333333] bg-[#1e1e1e] relative z-50 transition-all duration-[25ms] flex-shrink-0 ${
+              isChatOpen ? '' : 'w-0 overflow-hidden'
+            }`}
+            style={{ width: isChatOpen ? chatPanel.width : 0 }}
+          >
+            {/* Chat panel resize handle */}
+            {isChatOpen && (
+              <div
+                className={`absolute top-0 left-0 w-1 h-full cursor-col-resize transition-colors group ${
+                  chatPanel.isResizing ? 'bg-blue-500/50' : 'hover:bg-blue-500/30'
+                }`}
+                onMouseDown={chatPanel.startResize}
+              >
+                <div className="w-full h-full" />
+              </div>
+            )}
+            <div className="h-full" style={{ width: chatPanel.width, marginLeft: isChatOpen ? 4 : 0 }}>
               <ChatPanel
                 ref={chatPanelRef}
                 isOpen={isChatOpen}

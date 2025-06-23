@@ -588,7 +588,7 @@ export default function Sidebar({
       <div className={`
         ${isMobile 
           ? 'relative h-full w-full bg-[#1e1e1e]' 
-          : 'fixed lg:relative inset-y-0 left-0 z-40 w-64 bg-[#1e1e1e] border-r border-[#333333] transform transition-transform duration-200 ease-in-out lg:h-full'
+          : 'fixed lg:relative inset-y-0 left-0 z-40 w-full bg-[#1e1e1e] border-r border-[#333333] transform transition-transform duration-200 ease-in-out lg:h-full'
         }
         ${!isMobile && sidebarOpen ? 'translate-x-0' : !isMobile ? '-translate-x-full lg:translate-x-0' : ''}
       `}>

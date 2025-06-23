@@ -718,7 +718,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
         <div className="flex items-center gap-2">
           <MessageSquare size={16} className="text-[#cccccc]" />
           {showConversations ? (
-            <span className="text-sm text-[#cccccc] font-medium">Past Conversations</span>
+            <span className="text-base text-[#cccccc] font-medium">Past Conversations</span>
           ) : isEditingTitle ? (
             <input
               type="text"
@@ -726,13 +726,13 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
               onChange={(e) => setTitleInputValue(e.target.value)}
               onBlur={handleTitleSave}
               onKeyDown={handleTitleKeyDown}
-              className="text-[16px] md:text-sm text-[#cccccc] font-medium bg-transparent border-none outline-none focus:bg-[#2a2a2a] px-1 rounded"
+              className="text-[16px] md:text-base text-[#cccccc] font-medium bg-transparent border-none outline-none focus:bg-[#2a2a2a] px-1 rounded"
               style={{ fontSize: '16px' }}
               autoFocus
             />
           ) : (
             <span 
-              className="text-sm text-[#cccccc] font-medium cursor-pointer hover:text-white transition-colors"
+              className="text-base text-[#cccccc] font-medium cursor-pointer hover:text-white transition-colors"
               onDoubleClick={handleTitleDoubleClick}
               title="Double-click to rename"
             >
@@ -744,7 +744,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
           {!showConversations && (
             <button
               onClick={() => setShowConversations(true)}
-              className="text-xs text-[#969696] hover:text-[#cccccc] transition-colors"
+              className="text-sm text-[#969696] hover:text-[#cccccc] transition-colors"
             >
               Past Conversations
             </button>
@@ -774,20 +774,20 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
             <div className="flex items-center justify-between mb-3">
               <button
                 onClick={() => setShowConversations(false)}
-                className="text-xs text-[#969696] hover:text-[#cccccc] transition-colors"
+                className="text-sm text-[#969696] hover:text-[#cccccc] transition-colors"
               >
                 ← Back to Chat
               </button>
               <button
                 onClick={createNewConversation}
-                className="text-xs text-[#969696] hover:text-[#cccccc] transition-colors"
+                className="text-sm text-[#969696] hover:text-[#cccccc] transition-colors"
               >
                 New Chat
               </button>
             </div>
             <div className="space-y-2">
               {conversations.length === 0 ? (
-                <div className="text-xs text-[#969696] italic">No conversations yet</div>
+                <div className="text-sm text-[#969696] italic">No conversations yet</div>
               ) : (
                 conversations.map(conversation => (
                   <button
@@ -796,14 +796,14 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                       setActiveConversation(conversation)
                       setShowConversations(false)
                     }}
-                    className={`w-full text-left p-3 rounded text-xs transition-colors ${
+                    className={`w-full text-left p-3 rounded text-sm transition-colors ${
                       activeConversation?.id === conversation.id
                         ? 'bg-[#2a2a2a] text-[#cccccc] border border-[#333333]'
                         : 'text-[#969696] hover:bg-[#2a2a2a] hover:text-[#cccccc]'
                     }`}
                   >
                     <div className="font-medium">{conversation.title}</div>
-                    <div className="text-[10px] text-[#969696] mt-1">
+                    <div className="text-xs text-[#969696] mt-1">
                       {conversation.created_at ? new Date(conversation.created_at).toLocaleDateString() : ''}
                     </div>
                   </button>
@@ -824,11 +824,11 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
           >
             <div className="flex flex-col gap-3 p-4">
               {isLoadingHistory ? (
-                <div className="text-xs text-[#969696]">Loading chat history...</div>
+                <div className="text-sm text-[#969696]">Loading chat history...</div>
               ) : !activeConversation ? (
-                <div className="text-xs text-[#969696]">Select or create a conversation to start chatting</div>
+                <div className="text-sm text-[#969696]">Select or create a conversation to start chatting</div>
               ) : messages.length === 0 ? (
-                <div className="text-xs text-[#969696]">No messages yet. Start a conversation!</div>
+                <div className="text-sm text-[#969696]">No messages yet. Start a conversation!</div>
               ) : (
                 <>
                   <ChatPagination
@@ -841,7 +841,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                       <div key={i} className="space-y-1">
                         {/* Show selections above the message */}
                         {message.selections && message.selections.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mb-1 text-[10px] text-[#969696] justify-start">
+                          <div className="flex flex-wrap gap-2 mb-1 text-xs text-[#969696] justify-start">
                             {message.selections.map(sel => (
                               <span
                                 key={sel.id}
@@ -859,8 +859,8 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                         )}
 
                         {message.role === "assistant" ? (
-                          <div className="text-xs text-[#cccccc] leading-relaxed">
-                            <div className="prose prose-invert prose-xs max-w-none">
+                          <div className="text-sm text-[#cccccc] leading-relaxed">
+                            <div className="prose prose-invert prose-sm max-w-none">
                               <ReactMarkdown 
                                 components={{
                                 p: ({ children }) => <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>,
@@ -869,12 +869,12 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                                 ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1.5">{children}</ul>,
                                 ol: ({ children }) => <ol className="list-decimal list-inside mb-3 space-y-1.5">{children}</ol>,
                                 li: ({ children }) => <li className="text-[#cccccc] leading-relaxed">{children}</li>,
-                                code: ({ children }) => <code className="bg-[#2a2a2a] px-1 py-0.5 rounded text-[#60a5fa] text-[10px]">{children}</code>,
-                                pre: ({ children }) => <pre className="bg-[#2a2a2a] p-2 rounded overflow-x-auto text-[10px] mb-3">{children}</pre>,
+                                code: ({ children }) => <code className="bg-[#2a2a2a] px-1 py-0.5 rounded text-[#60a5fa] text-xs">{children}</code>,
+                                pre: ({ children }) => <pre className="bg-[#2a2a2a] p-2 rounded overflow-x-auto text-xs mb-3">{children}</pre>,
                                 blockquote: ({ children }) => <blockquote className="border-l-2 border-[#60a5fa] pl-3 mb-3 italic text-[#969696]">{children}</blockquote>,
-                                h1: ({ children }) => <h1 className="text-sm font-bold mb-3 mt-4 first:mt-0 text-white">{children}</h1>,
-                                h2: ({ children }) => <h2 className="text-sm font-semibold mb-2 mt-4 first:mt-0 text-white">{children}</h2>,
-                                h3: ({ children }) => <h3 className="text-xs font-semibold mb-2 mt-3 first:mt-0 text-white">{children}</h3>,
+                                h1: ({ children }) => <h1 className="text-base font-bold mb-3 mt-4 first:mt-0 text-white">{children}</h1>,
+                                h2: ({ children }) => <h2 className="text-base font-semibold mb-2 mt-4 first:mt-0 text-white">{children}</h2>,
+                                h3: ({ children }) => <h3 className="text-sm font-semibold mb-2 mt-3 first:mt-0 text-white">{children}</h3>,
                                 hr: () => <hr className="my-6 border-t border-[#404040]" />,
                               }}
                                                         >
@@ -889,7 +889,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                                   {message.relevantDocuments.map((doc, docIndex) => (
                                     <button
                                       key={doc.id || docIndex}
-                                      className="text-[10px] text-[#60a5fa] hover:text-[#4a9fff] underline transition-colors"
+                                      className="text-xs text-[#60a5fa] hover:text-[#4a9fff] underline transition-colors"
                                       onClick={() => {
                                         if (doc.pageUuid) {
                                           logger.info('Opening page in new tab:', { title: doc.title, pageUuid: doc.pageUuid })
@@ -961,7 +961,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                             {/* Copy to Clipboard button */}
                             {message.content && (
                               <button
-                                className="mt-2 text-xs bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] px-2 py-1 rounded transition-colors"
+                                className="mt-2 text-sm bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] px-2 py-1 rounded transition-colors"
                                 onClick={async () => {
                                   try {
                                     await navigator.clipboard.writeText(message.content)
@@ -979,14 +979,14 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                             )}
                           </div>
                         ) : (
-                          <div className="w-full rounded bg-[#2a2a2a] px-3 py-2 text-xs leading-relaxed text-[#cccccc]">
+                          <div className="w-full rounded bg-[#2a2a2a] px-3 py-2 text-sm leading-relaxed text-[#cccccc]">
                             {message.content}
                           </div>
                         )}
                         
                         {/* Optional timestamp display */}
                         {message.timestamp && (
-                          <div className="text-[10px] text-[#969696] text-right">
+                          <div className="text-xs text-[#969696] text-right">
                             {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </div>
                         )}
@@ -997,7 +997,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
               )}
               {/* Loading indicator */} 
               {isLoading && (
-                <div className="mb-3 rounded py-2 px-3 text-xs text-[#969696]">
+                <div className="mb-3 rounded py-2 px-3 text-sm text-[#969696]">
                   Thinking...
                 </div>
               )}
@@ -1014,7 +1014,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
             {selections.length > 0 && (
               <div className="mb-2 flex flex-wrap gap-1 justify-start">
                 {selections.map((sel) => (
-                  <span key={sel.id} className="inline-flex items-center rounded bg-[#2a2a2a] px-1.5 py-0.5 text-[10px] text-[#969696]">
+                  <span key={sel.id} className="inline-flex items-center rounded bg-[#2a2a2a] px-1.5 py-0.5 text-xs text-[#969696]">
                     {(() => {
                       const words = sel.text.split(/[\s\n]+/).filter(word => word.trim())
                       if (words.length === 0) return ''
@@ -1041,7 +1041,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={activeConversation ? "Type a message..." : "Create a conversation first"}
-                className="min-h-[36px] resize-none rounded bg-[#2a2a2a] border border-[#404040] text-xs px-3 py-2 text-[#cccccc] placeholder-[#969696] focus:outline-none focus:border-[#007acc] transition-colors flex-1"
+                className="min-h-[36px] resize-none rounded bg-[#2a2a2a] border border-[#404040] text-sm px-3 py-2 text-[#cccccc] placeholder-[#969696] focus:outline-none focus:border-[#007acc] transition-colors flex-1"
                 rows={1}
                 disabled={isLoading || !activeConversation}
               />
