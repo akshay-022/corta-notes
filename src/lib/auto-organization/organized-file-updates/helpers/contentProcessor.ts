@@ -124,8 +124,16 @@ export class ContentProcessor {
 
   /** Create TipTap JSON from Markdown text using TipTap Markdown extension */
   createTipTapContent(text: string, pageUuid?: string): any {
+    // Check if we're on server-side (no document object)
+    const isServerSide = typeof document === 'undefined';
+    
+    if (isServerSide) {
+      // Server-side: Use simple markdown-to-TipTap conversion
+      return this.createTipTapContentServerSide(text, pageUuid);
+    }
+    
     try {
-      // Create a temporary editor to parse Markdown
+      // Client-side: Use TipTap Editor for proper parsing
       const editor = new Editor({
         extensions,
         content: text, // TipTap with Markdown extension will parse this as Markdown
@@ -143,15 +151,192 @@ export class ContentProcessor {
       return json
     } catch (error) {
       console.error('Error parsing markdown with TipTap:', error)
-      // Fallback to simple paragraph structure
+      // Fallback to server-side method
+      return this.createTipTapContentServerSide(text, pageUuid);
+    }
+  }
+
+  /** Server-safe markdown to TipTap conversion */
+  private createTipTapContentServerSide(text: string, pageUuid?: string): any {
+    try {
+      const lines = text.split('\n');
+      const content: any[] = [];
+      let currentParagraph: string[] = [];
+
+      const flushParagraph = () => {
+        if (currentParagraph.length > 0) {
+          const paragraphText = currentParagraph.join('\n').trim();
+          if (paragraphText) {
+            content.push({
+              type: 'paragraph',
+              content: this.parseInlineMarkdown(paragraphText)
+            });
+          }
+          currentParagraph = [];
+        }
+      };
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmedLine = line.trim();
+        
+        // Handle headings
+        if (trimmedLine.startsWith('### ')) {
+          flushParagraph();
+          content.push({
+            type: 'heading',
+            attrs: { level: 3 },
+            content: this.parseInlineMarkdown(trimmedLine.substring(4))
+          });
+        } else if (trimmedLine.startsWith('## ')) {
+          flushParagraph();
+          content.push({
+            type: 'heading',
+            attrs: { level: 2 },
+            content: this.parseInlineMarkdown(trimmedLine.substring(3))
+          });
+        } else if (trimmedLine.startsWith('# ')) {
+          flushParagraph();
+          content.push({
+            type: 'heading',
+            attrs: { level: 1 },
+            content: this.parseInlineMarkdown(trimmedLine.substring(2))
+          });
+        } else if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('* ')) {
+          // Handle bullet lists
+          flushParagraph();
+          const listItems = [trimmedLine.substring(2)];
+          
+          // Collect consecutive list items
+          let j = i + 1;
+          while (j < lines.length) {
+            const nextLine = lines[j].trim();
+            if (nextLine.startsWith('- ') || nextLine.startsWith('* ')) {
+              listItems.push(nextLine.substring(2));
+              j++;
+            } else if (nextLine === '') {
+              j++;
+              break;
+            } else {
+              break;
+            }
+          }
+          
+          content.push({
+            type: 'bulletList',
+            content: listItems.map(item => ({
+              type: 'listItem',
+              content: [{
+                type: 'paragraph',
+                content: this.parseInlineMarkdown(item)
+              }]
+            }))
+          });
+          
+          // Skip the lines we've processed
+          i = j - 1;
+        } else if (trimmedLine === '') {
+          // Empty line - flush current paragraph
+          flushParagraph();
+        } else {
+          // Regular text line - add to current paragraph
+          currentParagraph.push(line);
+        }
+      }
+      
+      // Flush any remaining paragraph
+      flushParagraph();
+
+      // Add metadata to paragraphs if pageUuid is provided
+      if (pageUuid && content.length > 0) {
+        try {
+          const { ensureParagraphMetadata } = require('./organized-file-metadata')
+          content.forEach((node, index) => {
+            if (node.type === 'paragraph') {
+              node.attrs = node.attrs || {};
+              node.attrs.metadata = node.attrs.metadata || {};
+              node.attrs.metadata.id = `${pageUuid}-p-${index}`;
+            }
+          });
+        } catch (error) {
+          console.error('Error adding paragraph metadata:', error);
+        }
+      }
+
+      return {
+        type: 'doc',
+        content: content.length > 0 ? content : [{
+          type: 'paragraph',
+          content: [{ type: 'text', text: text }]
+        }]
+      };
+    } catch (error) {
+      console.error('Error in server-side markdown parsing:', error);
+      // Ultimate fallback
       return {
         type: 'doc',
         content: [{
           type: 'paragraph',
           content: [{ type: 'text', text }]
         }]
+      };
+    }
+  }
+
+  /** Parse inline markdown (bold, italic, etc.) */
+  private parseInlineMarkdown(text: string): any[] {
+    const content: any[] = [];
+    let currentText = '';
+    let i = 0;
+
+    const flushText = () => {
+      if (currentText) {
+        content.push({ type: 'text', text: currentText });
+        currentText = '';
+      }
+    };
+
+    while (i < text.length) {
+      if (text.substring(i, i + 2) === '**') {
+        // Bold text
+        flushText();
+        const endIndex = text.indexOf('**', i + 2);
+        if (endIndex !== -1) {
+          const boldText = text.substring(i + 2, endIndex);
+          content.push({ 
+            type: 'text', 
+            text: boldText,
+            marks: [{ type: 'bold' }]
+          });
+          i = endIndex + 2;
+        } else {
+          currentText += text[i];
+          i++;
+        }
+      } else if (text[i] === '*' && text[i + 1] !== '*') {
+        // Italic text
+        flushText();
+        const endIndex = text.indexOf('*', i + 1);
+        if (endIndex !== -1) {
+          const italicText = text.substring(i + 1, endIndex);
+          content.push({ 
+            type: 'text', 
+            text: italicText,
+            marks: [{ type: 'italic' }]
+          });
+          i = endIndex + 1;
+        } else {
+          currentText += text[i];
+          i++;
+        }
+      } else {
+        currentText += text[i];
+        i++;
       }
     }
+
+    flushText();
+    return content.length > 0 ? content : [{ type: 'text', text }];
   }
 
   /** Append new text to existing TipTap JSON using Markdown parsing */

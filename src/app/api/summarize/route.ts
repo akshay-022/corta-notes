@@ -1,13 +1,19 @@
-import { Configuration, OpenAIApi } from 'openai-edge';
+import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
 
 export const runtime = 'edge';
 
-const openai = new OpenAIApi(
-  new Configuration({
-    apiKey: process.env.OPENAI_API_KEY,
-  })
-);
+// Lazy-load OpenAI client only when needed (server-side)
+let openaiClient: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (!openaiClient) {
+    openaiClient = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  return openaiClient;
+}
 
 interface SummaryRequest {
   type: 'brain_state_summary' | 'context_summary';
@@ -41,8 +47,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid summary type' }, { status: 400 });
     }
 
-    const resp = await openai.createChatCompletion({
-      model: "gpt-4.1-mini",
+    const openai = getOpenAIClient();
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
@@ -57,8 +64,7 @@ export async function POST(req: Request) {
       temperature: 0.3
     });
 
-    const result = await resp.json();
-    const summary = result.choices?.[0]?.message?.content || '';
+    const summary = response.choices?.[0]?.message?.content || '';
 
     if (!summary) {
       throw new Error('No summary generated');

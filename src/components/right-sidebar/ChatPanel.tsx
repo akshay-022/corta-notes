@@ -8,11 +8,11 @@ import conversationsService from '@/lib/conversations/conversations'
 import ReactMarkdown from 'react-markdown'
 import { Editor } from '@tiptap/react'
 import { 
-  detectLastThought, 
   createThoughtContext 
 } from '@/lib/brainstorming'
 import logger from '@/lib/logger'
 import ChatPagination from './pagination/ChatPagination'
+import { useRouter } from 'next/navigation'
 
 // Simple selection object type
 type SelectionObject = {
@@ -68,6 +68,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   isMobile = false
 }: Props, ref) {
   const supabase = createClient()
+  const router = useRouter()
   
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null)
@@ -132,13 +133,16 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     }
   }, [isOpen]) // Remove scrollToBottom and messages.length dependencies to prevent multiple calls
 
+  // Note: Function calling now happens on server-side via API
+
+  // ------------------- LOAD MESSAGES FUNCTION -------------------
   const loadMessages = useCallback(async (conversationId: string, offset = 0, append = false): Promise<void> => {
     if (offset === 0) {
       setIsLoadingHistory(true)
     } else {
       setIsLoadingOlder(true)
     }
-    
+
     try {
       logger.info('Loading messages for conversation', { conversationId, offset, append })
       
@@ -475,7 +479,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
         thoughtContextLength: thoughtContext.length,
       })
 
-      // Call the LLM API with streaming enabled
+      // Call the unified streaming API (with function calling capabilities)
       const apiResponse = await fetch('/api/chat-panel', {
         method: 'POST',
         headers: {
@@ -487,6 +491,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
           thoughtContext, // Separate thought context
           selections: selections.length > 0 ? selections : undefined,
           currentPageUuid: currentPage?.uuid
+          // No useFunction flag - let AI decide always
         }),
       })
 
@@ -495,7 +500,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
         throw new Error(errorData.error || `API Error: ${apiResponse.statusText}`)
       }
 
-      // Handle streaming response
+      // Handle streaming response (now includes function calling)
       let assistantMessageContent = ''
       let relevantDocuments: RelevantDocument[] = []
       
@@ -547,6 +552,63 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                       responseLength: assistantMessageContent?.length,
                       documentsFound: relevantDocuments.length 
                     })
+                  } else if (data.type === 'function_call') {
+                    // Handle function calls during streaming
+                    logger.info('=== FUNCTION CALL DURING STREAMING ===', {
+                      functionName: data.function_name,
+                      hasResult: !!data.result,
+                      success: data.result?.success
+                    });
+
+                    if (data.result?.success) {
+                      logger.info('=== STREAMING FUNCTION SUCCESS ===', {
+                        result: data.result,
+                        currentPageUuid: currentPage?.uuid
+                      });
+                      
+                      // Auto-refresh after successful function call
+                      setTimeout(async () => {
+                        logger.info('Refreshing page content after successful function call');
+                        
+                        if (currentPage?.uuid) {
+                          try {
+                            // Fetch fresh content from Supabase
+                            const supabase = createClient()
+                            const { data: updatedPage, error } = await supabase
+                              .from('pages')
+                              .select('*')
+                              .eq('uuid', currentPage.uuid)
+                              .single()
+
+                            if (error) {
+                              logger.error('Error fetching updated page content:', error)
+                              return
+                            }
+
+                            if (updatedPage && editor) {
+                              logger.info('Updating editor with fresh content from database')
+                              // Update the editor with fresh content
+                              editor.commands.setContent(updatedPage.content)
+                              
+                              // Also update any page state if needed
+                              if (onApplyAiResponseToEditor) {
+                                onApplyAiResponseToEditor('', []) // Clear any selections
+                              }
+                            }
+                          } catch (error) {
+                            logger.error('Error refreshing page content:', error)
+                          }
+                        }
+                      }, 1000); // Give user 1 second to see the success message
+                      
+                    } else {
+                      logger.error('=== STREAMING FUNCTION FAILED ===', {
+                        result: data.result,
+                        currentPageUuid: currentPage?.uuid
+                      });
+                      
+                      // Error is already shown in the chat stream, no dialog needed
+                    }
                   } else if (data.type === 'error') {
                     throw new Error(data.error || 'Streaming error')
                   }

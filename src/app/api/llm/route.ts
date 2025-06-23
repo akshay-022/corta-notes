@@ -1,14 +1,20 @@
-import { Configuration, OpenAIApi } from 'openai-edge';
+import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
 import logger from '@/lib/logger';
 
 export const runtime = 'edge';
 
-const openai = new OpenAIApi(
-  new Configuration({
-    apiKey: process.env.OPENAI_API_KEY,
-  })
-);
+// Lazy-load OpenAI client only when needed (server-side)
+let openaiClient: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (!openaiClient) {
+    openaiClient = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  return openaiClient;
+}
 
 /**
  * Use OpenAI Responses API for o3 models (optimized for o3)
@@ -90,19 +96,18 @@ async function callChatCompletionsAPI(
 ): Promise<string> {
   logger.info('callChatCompletionsAPI → Making API call', { model });
 
-  const resp = await openai.createChatCompletion({
+  const openai = getOpenAIClient();
+  const response = await openai.chat.completions.create({
     model,
     messages
   });
 
-  const result = await resp.json();
-  
-  if (!result.choices || !result.choices[0]) {
-    logger.error('Chat Completions API response:', { status: resp.status, result });
+  if (!response.choices || !response.choices[0]) {
+    logger.error('Chat Completions API response:', { response });
     throw new Error('No response generated from Chat Completions API');
   }
   
-  return result.choices[0].message?.content || 'No response generated';
+  return response.choices[0].message?.content || 'No response generated';
 }
 
 export async function PUT(req: Request) {

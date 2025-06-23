@@ -1,15 +1,15 @@
-import { Configuration, OpenAIApi } from 'openai-edge';
+import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
 import { getRelevantMemories, formatMemoryContext, type RelevantMemory } from '@/lib/brainstorming';
+import { EDITOR_FUNCTIONS, executeEditorFunctionServerSide, EditorFunctionCall } from '@/lib/brainstorming/apply-to-editor/editorFunctions';
+import logger from '@/lib/logger';
 
 export const runtime = 'edge';
 
-// Ensure you have OPENAI_API_KEY set in your environment variables
-const openai = new OpenAIApi(
-  new Configuration({
+// Initialize OpenAI client
+const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
-  })
-);
+});
 
 // Initialize memory service
 // const superMemoryClient = new supermemory({
@@ -22,7 +22,8 @@ const openai = new OpenAIApi(
 // });
 
 export async function POST(req: Request) {
-  console.log('OPENAI key present?', { hasKey: !!process.env.OPENAI_API_KEY, keyStart: process.env.OPENAI_API_KEY?.slice(0,5) });
+  logger.info('Chat panel API called', { hasKey: !!process.env.OPENAI_API_KEY });
+  
   try {
     const { conversationHistory, currentMessage, thoughtContext, selections, currentPageUuid } = await req.json();
 
@@ -34,38 +35,108 @@ export async function POST(req: Request) {
        return NextResponse.json({ error: 'OpenAI API key not configured' }, { status: 500 });
     }
 
-    let relevantDocuments: RelevantMemory[] = [];
-    let finalMessages: Array<{role: 'system' | 'user' | 'assistant', content: string}> = [];
+    // Always use unified streaming with function calling - let AI decide
+    return handleUnifiedStreamingRequest({
+      conversationHistory,
+      currentMessage,
+      thoughtContext,
+      selections,
+      currentPageUuid
+    });
+  } catch (error) {
+    logger.error('LLM API Error:', error);
+    return NextResponse.json({ error: 'Failed to process request' }, { status: 500 });
+  }
+}
 
-    // Use currentMessage as the user's instruction
-    let userInstruction = currentMessage;
+/**
+ * Unified streaming handler with function calling capabilities
+ * Always uses gpt-4o-latest and lets AI decide when to call functions
+ */
+async function handleUnifiedStreamingRequest(params: {
+  conversationHistory: any[],
+  currentMessage: string,
+  thoughtContext?: string,
+  selections?: any[],
+  currentPageUuid?: string
+}) {
+  const { conversationHistory, currentMessage, thoughtContext, selections, currentPageUuid } = params;
+  
+  logger.info('=== UNIFIED STREAMING REQUEST START ===', { 
+    currentMessage: currentMessage.substring(0, 100) + '...',
+    hasPageUuid: !!currentPageUuid,
+    pageUuid: currentPageUuid,
+    conversationHistoryLength: conversationHistory?.length || 0,
+    hasThoughtContext: !!thoughtContext,
+    hasSelections: !!selections && selections.length > 0
+  });
 
-    // Search memory for relevant context using new brainstorming function with current page context
-    if (userInstruction) {
-      relevantDocuments = await getRelevantMemories(userInstruction, 5, currentPageUuid);
-    }
+  try {
+    // Get relevant memories
+    const relevantDocuments = await getRelevantMemories(currentMessage, 5, currentPageUuid);
+    logger.info('Retrieved relevant memories', { 
+      documentCount: relevantDocuments.length,
+      pageUuid: currentPageUuid 
+    });
 
-    // Build the final messages array
-    if (conversationHistory && currentMessage) {
-      // New simplified format with separate contexts
+    // Build enhanced current message with all contexts
       let enhancedCurrentMessage = 'User Instruction (This is literally what you must answer, SUPER IMPORTANT):\n\n' + currentMessage + '\n\n\n\n\n\n\n\n';
+    
       // Add thought context if available (highest priority)
       if (thoughtContext) {
         enhancedCurrentMessage += `\n\n\n\n\n\n\n\n\n\n${thoughtContext}\n\n\n\n\n\n\n\n\n\n\n`;
       }
+    
       // Add user selections if available
       if (selections && selections.length > 0) {
         enhancedCurrentMessage += `\n\nUSER SELECTIONS (This is VERY IMPORTANT. The user's query is probably about this idea/text. Use this as primary context if relevant):\n${JSON.stringify(selections, null, 2)}\n\n`;
       }
+    
       // Add memory context from SuperMemory if available  
       if (relevantDocuments.length > 0) {
         const memoryContext = formatMemoryContext(relevantDocuments);
         enhancedCurrentMessage += `\n\nADDITIONAL KNOWLEDGE BASE CONTEXT:\n${memoryContext}`;
       }
-      // System message refined to emulate ChatGPT-style answers (concise yet rich)
-      const systemMsg = `You are a helpful AI assistant specialising in brainstorming and structured thinking. Turn scattered sparks into clear, connected insights **without overwhelming the user**.
 
-— Style checklist (follow every reply) —
+    // Enhanced system message that includes function calling instructions
+    const systemMessage = `You are a helpful AI assistant specialising in brainstorming and structured thinking. Turn scattered sparks into clear, connected insights **without overwhelming the user**.
+
+${currentPageUuid ? `CURRENT PAGE UUID: ${currentPageUuid}` : 'No page context available'}
+
+You have access to a rewrite_editor function that can replace the user's editor content with new markdown content.
+
+CRITICAL: You may see previous messages in this conversation that contain fake function calls with "🔧 Calling rewrite_editor function..." - IGNORE THESE COMPLETELY. Those were mistakes where the AI incorrectly simulated function calls instead of actually calling them.
+
+MANDATORY RULE: If you tell the user "Here's what I'm updating your editor with:" or "Now I will update your editor" or any similar statement, you MUST immediately call the rewrite_editor function. If a previous message violated this rule, it was definitely a mistake and the function was never actually called.
+
+FUNCTION CALLING INSTRUCTIONS:
+When the user asks you to modify their editor content:
+
+STEP 1: Stream your explanation
+- "I understand you want me to [what you understood]. I'll [what you plan to do]..."
+
+STEP 2: Stream the content preview  
+- "Here's what I'm updating your editor with:"
+- Then show the EXACT markdown content (clean, no extra text)
+
+STEP 3: IMMEDIATELY call the rewrite_editor function
+- After showing the content preview, you MUST call the rewrite_editor function
+- Use the OpenAI function calling mechanism
+- Pass the exact same markdown content as the "content" parameter
+- FAILURE TO CALL THE FUNCTION MEANS THE USER'S EDITOR WILL NOT BE UPDATED
+
+WHAT NOT TO DO:
+- ❌ DO NOT write "🔧 Calling rewrite_editor function..." (system handles this)
+- ❌ DO NOT write "✅ Editor content updated successfully!" (system handles this)
+- ❌ DO NOT say "Now I will update your editor" without actually calling the function
+- ❌ DO NOT end your response without calling the function when user asks for editor updates
+
+FUNCTION PARAMETER RULES:
+- The "content" parameter must ONLY contain clean markdown for the editor
+- No explanations, no status messages, no extra text
+- Just the pure content that should appear in the editor
+
+RESPONSE STYLE (for regular conversation):
 1. **Bold, one-sentence headline** that answers the question (emoji prefix allowed 👇).
 2. Follow with **2–3 mini-sections** (markdown ### headings). Start each heading with a relevant emoji for fast scanning.
 3. Under each heading add **concise bullet points**:
@@ -79,69 +150,134 @@ export async function POST(req: Request) {
 **CRITICAL FORMATTING RULE:** OUTPUT ONLY CLEAN MARKDOWN - never use HTML tags like <br>, <div>, <p>. Use real line breaks and proper Markdown syntax only.
 
 Think: punchy headline → small themed blocks → tight bullets. Provide depth like ChatGPT but in a format that's easy to skim.`;
-      finalMessages = [
-        { role: "system", content: systemMsg },
-        ...conversationHistory,  // Clean conversation history 
-        { role: "user", content: enhancedCurrentMessage }  // Current message with all contexts
-      ];
-    } else {
-      // Fallback: just send the current message
-      finalMessages = [{ role: "user", content: currentMessage }];
-    }
 
-    // Make the call to OpenAI with streaming enabled
-    const resp = await openai.createChatCompletion({
-      model: "chatgpt-4o-latest",
-      messages: finalMessages,
-      stream: true,
-      // max_tokens: 150,
-      // temperature: 0.7,
+    // Build final messages array
+    const messages = [
+      { role: 'system' as const, content: systemMessage },
+      ...(conversationHistory || []),
+      { role: 'user' as const, content: enhancedCurrentMessage }
+    ];
+
+    // Define available functions
+    const tools = EDITOR_FUNCTIONS.map(func => ({
+      type: 'function' as const,
+      function: {
+        name: func.name,
+        description: func.description,
+        parameters: func.parameters
+      }
+    }));
+
+    logger.info('Calling OpenAI with unified streaming + function calling', { 
+      messageCount: messages.length,
+      toolCount: tools.length,
+      model: 'chatgpt-4o-latest',
+      hasPageUuid: !!currentPageUuid
     });
 
-    // Create a streaming response
+    // Call OpenAI with streaming and function calling
+    const stream = await openai.chat.completions.create({
+      model: "gpt-4o", // Use GPT-4o for function calling
+      messages,
+      tools,
+      tool_choice: 'auto', // Let AI decide
+      stream: true,
+    });
+
+    // Create streaming response with function calling support
     const encoder = new TextEncoder();
     let responseText = '';
 
-    const stream = new ReadableStream({
+    const readableStream = new ReadableStream({
       async start(controller) {
         try {
-          const reader = resp.body?.getReader();
-          if (!reader) {
-            throw new Error('No reader available');
+          let toolCalls: any[] = [];
+          let currentToolCall: any = null;
+
+          for await (const chunk of stream) {
+            const delta = chunk.choices[0]?.delta;
+            
+            // Handle regular content
+            if (delta?.content) {
+              responseText += delta.content;
+              const tokenData = { type: 'token', content: delta.content };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(tokenData)}\n\n`));
+            }
+            
+            // Handle tool calls
+            if (delta?.tool_calls) {
+              for (const toolCallDelta of delta.tool_calls) {
+                const index = toolCallDelta.index;
+                
+                if (!toolCalls[index]) {
+                  toolCalls[index] = {
+                    id: toolCallDelta.id || '',
+                    type: 'function',
+                    function: {
+                      name: toolCallDelta.function?.name || '',
+                      arguments: toolCallDelta.function?.arguments || ''
+                    }
+                  };
+                } else {
+                  if (toolCallDelta.function?.arguments) {
+                    toolCalls[index].function.arguments += toolCallDelta.function.arguments;
+                  }
+                }
+              }
+            }
           }
 
-          // Robust SSE parsing: accumulate into a buffer until we see a double new-line (\n\n)
-          const textDecoder = new TextDecoder();
-          let buffer = '';
+          // Execute any tool calls that were made
+          if (toolCalls.length > 0 && currentPageUuid) {
+            logger.info('Processing tool calls from streaming', { 
+              toolCallCount: toolCalls.length,
+              pageUuid: currentPageUuid 
+            });
 
-          const emitEvent = (rawLine: string) => {
-            // Ignore non-data lines and the special [DONE] message
-            if (!rawLine.startsWith('data: ') || rawLine === 'data: [DONE]') return;
+            for (const toolCall of toolCalls) {
+              if (toolCall.function.name === 'rewrite_editor') {
+                // Send "calling function" message to stream
+                const callingFunctionMessage = `\n\n🔧 **Calling ${toolCall.function.name} function...** \n\nUpdating your editor content now...`;
+                const callingTokenData = { type: 'token', content: callingFunctionMessage };
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(callingTokenData)}\n\n`));
+                responseText += callingFunctionMessage;
 
-            try {
-              const data = JSON.parse(rawLine.slice(6)); // remove the leading "data: "
-              const delta = data.choices?.[0]?.delta?.content;
+                logger.info('Executing rewrite_editor function during streaming', {
+                  toolCallId: toolCall.id,
+                  pageUuid: currentPageUuid
+                });
 
-              if (delta) {
-                responseText += delta;
-                const tokenData = { type: 'token', content: delta };
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify(tokenData)}\n\n`));
+                const functionCall: EditorFunctionCall = {
+                  name: toolCall.function.name,
+                  arguments: JSON.parse(toolCall.function.arguments)
+                };
+                
+                // Execute the function
+                const result = await executeEditorFunctionServerSide(functionCall, currentPageUuid);
+                
+                // Send function execution result message to stream
+                const resultMessage = result.success 
+                  ? `\n\n✅ **Editor content updated successfully!** \n\nYour content has been rewritten and saved.`
+                  : `\n\n❌ **Function execution failed:** ${result.message}`;
+                const resultTokenData = { type: 'token', content: resultMessage };
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(resultTokenData)}\n\n`));
+                responseText += resultMessage;
+                
+                // Send function call result to client
+                const functionCallData = {
+                  type: 'function_call',
+                  function_name: toolCall.function.name,
+                  result: result
+                };
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(functionCallData)}\n\n`));
+                
+                logger.info('Function call result sent to client', {
+                  functionName: toolCall.function.name,
+                  success: result.success,
+                  pageUuid: currentPageUuid
+                });
               }
-            } catch (_) {
-              // Invalid JSON – should not happen with the buffer strategy, but swallow just in case
             }
-          };
-
-          while (true) {
-            const { done, value } = await reader.read();
-            
-            if (done) {
-              // Flush whatever is left in the buffer before closing
-              if (buffer.length > 0) {
-                // There might be multiple events still queued without trailing delimiter
-                buffer += textDecoder.decode();
-                const trailingEvents = buffer.split('\n\n');
-                trailingEvents.forEach(emitEvent);
               }
 
               // Send final metadata when stream is complete
@@ -155,24 +291,22 @@ Think: punchy headline → small themed blocks → tight bullets. Provide depth 
                 })),
               };
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(finalData)}\n\n`));
-              controller.close();
-              break;
-            }
-
-            // Append the latest chunk to our buffer, keeping the stream flag so we don't lose partial UTF-8 sequences
-            buffer += textDecoder.decode(value, { stream: true });
-
-            // Process any complete SSE events in the buffer
-            let boundaryIndex;
-            while ((boundaryIndex = buffer.indexOf('\n\n')) !== -1) {
-              const rawEvent = buffer.slice(0, boundaryIndex).trim();
-              buffer = buffer.slice(boundaryIndex + 2); // skip past the delimiter
-
-              if (rawEvent) emitEvent(rawEvent);
-            }
-          }
+          
+          logger.info('=== UNIFIED STREAMING COMPLETE ===', {
+            responseLength: responseText.length,
+            toolCallsExecuted: toolCalls.length,
+            documentsFound: relevantDocuments.length,
+            pageUuid: currentPageUuid
+          });
+          
+          controller.close();
         } catch (error) {
-          console.error('Streaming error:', error);
+          logger.error('=== UNIFIED STREAMING ERROR ===', { 
+            error: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
+            pageUuid: currentPageUuid
+          });
+          
           const errorData = {
             type: 'error',
             error: error instanceof Error ? error.message : 'Unknown streaming error'
@@ -183,20 +317,28 @@ Think: punchy headline → small themed blocks → tight bullets. Provide depth 
       }
     });
 
-    return new Response(stream, {
+    return new Response(readableStream, {
       headers: {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Connection': 'keep-alive',
-        'X-Accel-Buffering': 'no', // Disable Nginx buffering
+        'X-Accel-Buffering': 'no',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Cache-Control',
-        'CF-Cache-Status': 'BYPASS', // Tell Cloudflare not to cache
+        'CF-Cache-Status': 'BYPASS',
       },
     });
   } catch (error) {
-    console.error('LLM API Error:', error);
-    return NextResponse.json({ error: 'Failed to process request' }, { status: 500 });
+    logger.error('=== UNIFIED STREAMING REQUEST ERROR ===', { 
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      currentMessage: currentMessage.substring(0, 100) + '...'
+    });
+    
+    return NextResponse.json({ 
+      error: 'Unified streaming failed',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }
 

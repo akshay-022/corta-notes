@@ -107,7 +107,26 @@ class PageLoaderService {
         return null
       }
 
-      console.log('✅ Loaded page:', data?.title || 'Not found')
+      if (data) {
+        console.log('✅ Page loaded successfully:', {
+          pageUuid: data.uuid,
+          title: data.title,
+          hasContent: !!data.content,
+          contentType: typeof data.content,
+          contentStructure: data.content ? {
+            type: data.content.type,
+            contentArrayLength: data.content.content?.length || 0,
+            hasHeadings: data.content.content?.some((node: any) => node.type === 'heading'),
+            hasBulletLists: data.content.content?.some((node: any) => node.type === 'bulletList'),
+            hasParagraphs: data.content.content?.some((node: any) => node.type === 'paragraph')
+          } : 'No content',
+          contentPreview: data.content ? JSON.stringify(data.content).substring(0, 300) + '...' : 'No content',
+          updatedAt: data.updated_at
+        });
+      } else {
+        console.log('❌ Page not found:', pageUuid);
+      }
+
       return data
     } catch (error) {
       console.error('❌ Exception loading page:', error)

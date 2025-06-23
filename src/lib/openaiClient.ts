@@ -1,16 +1,63 @@
-import { Configuration, OpenAIApi } from 'openai-edge'
+import OpenAI from 'openai'
 import logger from '@/lib/logger'
 
-// Singleton OpenAI client so we reuse connections across agent calls
-const openai = new OpenAIApi(
-  new Configuration({
-    apiKey: process.env.OPENAI_API_KEY,
-  })
-)
+// Lazy OpenAI client that only instantiates on server-side
+let openaiClient: OpenAI | null = null
+
+function getOpenAIClient(): OpenAI {
+  if (!openaiClient) {
+    if (typeof window !== 'undefined') {
+      throw new Error('OpenAI client should only be used on server-side')
+    }
+    
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY environment variable is required')
+    }
+    
+    openaiClient = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
+  }
+  return openaiClient
+}
 
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant'
+  role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
+  tool_calls?: Array<{
+    id: string
+    type: 'function'
+    function: {
+      name: string
+      arguments: string
+    }
+  }>
+  tool_call_id?: string // for tool role messages
+}
+
+export interface ToolDefinition {
+  type: 'function'
+  function: {
+    name: string
+    description: string
+    parameters: {
+      type: 'object'
+      properties: Record<string, any>
+      required: string[]
+    }
+  }
+}
+
+export interface ToolCallResult {
+  message: string
+  tool_calls?: Array<{
+    id: string
+    type: 'function'
+    function: {
+      name: string
+      arguments: string
+    }
+  }>
 }
 
 /**
@@ -27,19 +74,72 @@ export async function chatCompletion(
   primaryModel: string = 'o3-mini',
   fallbackModel: string = 'gpt-4o'
 ): Promise<string> {
+  const openai = getOpenAIClient()
+  
   const run = async (model: string) => {
     logger.info(`openai.chatCompletion → Using model: ${model}`)
-    const resp = await openai.createChatCompletion({ model, messages })
-    if (!resp.ok) {
-      logger.error(`OpenAI error (model=${model}):`, resp.status)
-      throw new Error(`openai_error_${resp.status}`)
-    }
-    const json = (await resp.json()) as any
-    const content = json?.choices?.[0]?.message?.content as string | undefined
+    const completion = await openai.chat.completions.create({
+      model,
+      messages: messages.map(msg => ({
+        role: msg.role as any,
+        content: msg.content
+      }))
+    })
+    
+    const content = completion.choices[0]?.message?.content
     if (!content) {
       throw new Error('openai_empty_response')
     }
     return content
+  }
+
+  try {
+    return await run(primaryModel)
+  } catch (err: any) {
+    if (/(404|400|429)/.test(err.message)) {
+      logger.warn(`Primary model ${primaryModel} failed, falling back to ${fallbackModel}`)
+      return await run(fallbackModel)
+    }
+    throw err
+  }
+}
+
+/**
+ * Send a chat completion request with tool calling support using the official OpenAI library
+ */
+export async function chatCompletionWithTools(
+  messages: ChatMessage[],
+  tools: ToolDefinition[],
+  primaryModel: string = 'gpt-4-turbo-preview',
+  fallbackModel: string = 'gpt-4o'
+): Promise<ToolCallResult> {
+  const openai = getOpenAIClient()
+  
+  const run = async (model: string) => {
+    logger.info(`openai.chatCompletionWithTools → Using model: ${model}`)
+    
+    const completion = await openai.chat.completions.create({
+      model,
+      messages: messages.map(msg => ({
+        role: msg.role as any,
+        content: msg.content,
+        ...(msg.tool_calls && { tool_calls: msg.tool_calls }),
+        ...(msg.tool_call_id && { tool_call_id: msg.tool_call_id })
+      })),
+      tools,
+      tool_choice: 'auto'
+    })
+    
+    const choice = completion.choices[0]
+    if (!choice) {
+      throw new Error('openai_empty_response')
+    }
+    
+    const message = choice.message
+    return {
+      message: message.content || '',
+      tool_calls: message.tool_calls || undefined
+    }
   }
 
   try {
