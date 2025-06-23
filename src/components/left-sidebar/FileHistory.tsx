@@ -146,7 +146,7 @@ export default function FileHistory({ isMobile, setSidebarOpen, onSeeAll }: File
                 setShowAll(true)
               }
             }}
-            className="text-[#969696] hover:text-[#cccccc] text-[10px] uppercase tracking-wide"
+            className="text-[#969696] hover:text-[#cccccc] text-[10px] tracking-wide"
           >
             See All
           </button>

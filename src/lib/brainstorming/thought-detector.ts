@@ -101,7 +101,8 @@ export function createThoughtContext(
   allPages: Page[],
   currentPage?: Page,
   editor?: any,
-  lastAiMessageTimestamp?: string
+  lastAiMessageTimestamp?: string,
+  lastUserMessageTimestamp?: string
 ): string {
   let context =''
   
@@ -155,21 +156,34 @@ export function createThoughtContext(
     timestampContext.push(`LAST AI MESSAGE: ${aiTimestamp.toISOString()}`)
   }
   
+  if (lastUserMessageTimestamp) {
+    const userTimestamp = new Date(lastUserMessageTimestamp)
+    timestampContext.push(`LAST USER MESSAGE: ${userTimestamp.toISOString()}`)
+  }
+  
   if (timestampContext.length > 0) {
     context += `TIMING CONTEXT:\n${timestampContext.join('\n')}\n\n`
     
-    // Add interpretation guidance
-    if (lastEditorUpdateTimestamp && lastAiMessageTimestamp) {
-      const editorTime = lastEditorUpdateTimestamp.getTime()
-      const aiTime = new Date(lastAiMessageTimestamp).getTime()
+    // Enhanced interpretation guidance using the most recent user message
+    const editorTime = lastEditorUpdateTimestamp?.getTime() || 0
+    const userMessageTime = lastUserMessageTimestamp ? new Date(lastUserMessageTimestamp).getTime() : 0
+    
+    // Compare editor update time vs last user message time
+    if (editorTime > 0 && userMessageTime > 0) {
+      const timeDiffSeconds = Math.abs(editorTime - userMessageTime) / 1000
+      console.log(`Brainstorming timestamp analysis: Editor=${new Date(editorTime).toISOString()}, UserMessage=${new Date(userMessageTime).toISOString()}, Diff=${timeDiffSeconds}s`)
       
-      if (editorTime > aiTime) {
-        context += `CONTEXT INTERPRETATION: User wrote in editor AFTER last AI message - likely referring to recent editor content.\n\n`
-        context += `IMPORTANT: Since the editor update is most recent, you should probably reply in regard to what the user just wrote in the editor, not the previous chat messages.\n\n`
+      if (editorTime > userMessageTime) {
+        context += `CONTEXT INTERPRETATION: User wrote in editor AFTER their last message - likely referring to recent editor content.\n\n`
+        context += `IMPORTANT: Since the editor update is more recent than the user's last message, you should probably reply about what the user just wrote in the editor, not the previous chat messages.\n\n`
       } else {
-        context += `CONTEXT INTERPRETATION: User's last AI message is more recent than editor updates - likely continuing current conversation.\n\n`
-        context += `IMPORTANT: Since the chat conversation is more recent than editor updates, you should probably reply in regard to the previous messages in this chat conversation.\n\n`
+        context += `CONTEXT INTERPRETATION: User's last message is more recent than editor updates - likely continuing current conversation.\n\n`
+        context += `IMPORTANT: Since the user's last message is more recent than editor updates, you should probably reply about the previous chat conversation context.\n\n`
       }
+    } else if (editorTime > 0) {
+      context += `CONTEXT INTERPRETATION: User has recent editor activity - likely referring to editor content.\n\n`
+    } else if (userMessageTime > 0) {
+      context += `CONTEXT INTERPRETATION: User has chat history - likely continuing conversation.\n\n`
     }
     
     context += '\n\n'

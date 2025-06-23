@@ -660,7 +660,7 @@ export default function Sidebar({
                     {!isSearchActive && (
                       <button
                         onClick={() => setViewMode('recent-notes')}
-                        className="text-[#969696] hover:text-[#cccccc] text-[10px] uppercase tracking-wide"
+                        className="text-[#969696] hover:text-[#cccccc] text-[10px] tracking-wide"
                       >
                         See All
                       </button>

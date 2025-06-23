@@ -435,7 +435,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
         content: msg.content
       }))
 
-      // Find the timestamp of the last AI message for context awareness
+      // Find the timestamps of the last messages for context awareness
       const lastAiMessage = messages
         .filter(msg => msg.role === 'assistant')
         .sort((a, b) => {
@@ -443,11 +443,30 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
           const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0
           return timeB - timeA
         })[0]
+
+      const lastUserMessage = messages
+        .filter(msg => msg.role === 'user')
+        .sort((a, b) => {
+          const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0
+          const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0
+          return timeB - timeA
+        })[0]
       
       const lastAiMessageTimestamp = lastAiMessage?.timestamp || undefined
+      const lastUserMessageTimestamp = lastUserMessage?.timestamp || undefined
 
       // Use simplified brainstorming to get thought context with timing information
-      const thoughtContext = createThoughtContext(allPages, currentPage, editor, lastAiMessageTimestamp)
+      const thoughtContext = createThoughtContext(allPages, currentPage, editor, lastAiMessageTimestamp, lastUserMessageTimestamp)
+
+      logger.info('Brainstorming context analysis', {
+        hasSelections: selections.length > 0,
+        hasPageContent: !!currentPage,
+        conversationHistoryCount: conversationHistory.length,
+        thoughtContextLength: thoughtContext.length,
+        lastAiMessageTimestamp,
+        lastUserMessageTimestamp,
+        hasEditor: !!editor
+      })
 
       console.log('Sending messages to LLM API', { 
         hasSelections: selections.length > 0,
