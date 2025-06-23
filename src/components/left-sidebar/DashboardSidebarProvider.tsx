@@ -13,6 +13,7 @@ import { loadRelevantNotes } from '@/lib/supabase/page-loader'
 import logger from '@/lib/logger'
 import MobileLayoutWrapper from '@/components/mobile/MobileLayoutWrapper'
 import ChatPanel, { ChatPanelHandle } from '../right-sidebar/ChatPanel'
+import { useFileTreeEvents } from '@/hooks/useFileTreeEvents'
 
 interface ContextMenu {
   x: number
@@ -150,6 +151,25 @@ export default function DashboardSidebarProvider({ children }: { children: React
       isMounted = false
     }
   }, []) // Empty dependency array - run only once
+
+  // Listen for fileTree INSERT/DELETE events to refresh sidebar
+  useFileTreeEvents((eventType, page) => {
+    logger.info('FileTree event received in sidebar', { eventType, pageTitle: page.title, pageUuid: page.uuid })
+    
+    if (eventType === 'INSERT') {
+      // Refresh pages to include the new page
+      refreshOrganizedNotes()
+    } else if (eventType === 'DELETE') {
+      // Remove the deleted page from state immediately for better UX
+      setPages(prevPages => prevPages.filter(p => p.uuid !== page.uuid))
+      
+      // If the deleted page was active, clear active page
+      if (activePage?.uuid === page.uuid) {
+        setActivePage(null)
+        router.push('/dashboard')
+      }
+    }
+  }, !loading) // Only enable after initial load is complete
 
   // Separate useEffect to handle active page changes when URL changes
   useEffect(() => {

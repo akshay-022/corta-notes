@@ -255,7 +255,13 @@ ${organizationRules}
 
 Follow these rules when organizing content.\n` : ''
 
-  return `You are organizing personal notes. You MUST route to existing [FILE]s or create new [FILE]s inside directories. NEVER route to [DIR]s.
+  return `You are organizing personal notes. You MUST route to existing [FILE]s whenever possible. ONLY create new [FILE]s if absolutely no existing file is suitable. NEVER route to [DIR]s.
+
+**CRITICAL ROUTING RULE: PREFER EXISTING FILES OVER NEW ONES**
+- Existing files exist for a reason - they represent established categories and topics
+- Look for the MOST SUITABLE existing file first, even if it's not a perfect match
+- Only create new files when content is genuinely unique and doesn't fit anywhere
+- When in doubt, choose an existing file over creating a new one
 
 PAGE TITLE: "${pageTitle}"
 
@@ -271,13 +277,16 @@ UNORGANIZED PARAGRAPHS:
 ${list}${organizationRulesSection}
 
 TASK:
-1. Route each paragraph to the best file location based on content and context
-2. Group related paragraphs together in the same destination  
-3. For each destination return:
+1. **FIRST**: Scan existing [FILE]s for the most suitable destination
+2. **SECOND**: Only if no existing file fits, create a new [FILE]
+3. Group related paragraphs together in the same destination  
+4. For each destination return:
    { "targetFilePath": "/Path/To/Location", "relevance": 0.0-1.0, "content": "(organized content)" }
-4. Use normal titles with spaces for file paths (e.g., "AI Journal", "Project Notes")
-5. NEVER use kebab-case, underscores, or .md extensions in file names
-6. Respond ONLY with JSON array (no markdown, no extra text)
+5. Use normal titles with spaces for file paths (e.g., "AI Journal", "Project Notes")
+6. NEVER use kebab-case, underscores, or .md extensions in file names
+7. Respond ONLY with JSON array (no markdown, no extra text)
+
+**REMEMBER: Existing files are preferred - they maintain your established knowledge structure!**
 
 CRITICAL CONTENT REQUIREMENTS:
 • Write like PERSONAL NOTES - conversational, direct, authentic
