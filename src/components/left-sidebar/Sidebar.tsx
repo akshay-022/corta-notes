@@ -293,15 +293,15 @@ export default function Sidebar({
   const getUnorganizedPages = () => {
     return pages.filter(page => 
       page.organized === false && 
-      (showHiddenItems || page.visible !== false) && // Show all pages if showHiddenItems is true, otherwise only visible
+      // (showHiddenItems || page.visible !== false) && // Show all pages if showHiddenItems is true, otherwise only visible
       !page.is_deleted // Exclude deleted pages
     )
   }
 
   const getOrganizedPages = () => {
     return pages.filter(page => 
-      page.organized === true && 
-      (showHiddenItems || page.visible !== false) && // Show all pages if showHiddenItems is true, otherwise only visible
+      page.organized === true &&
+      // (showHiddenItems || page.visible !== false) && // Show all pages if showHiddenItems is true, otherwise only visible
       !page.is_deleted // Exclude deleted pages
     )
   }
@@ -449,11 +449,11 @@ export default function Sidebar({
                 autoFocus
               />
             ) : (
-              <span className={`truncate text-sm font-normal ml-1 ${
-                item.visible === false ? 'text-[#969696] opacity-60' : 'text-[#cccccc]'
+              <span className={`flex-1 truncate transition-colors duration-150 ${
+                // item.visible === false ? 'text-[#969696] opacity-60' : 
+                'text-[#cccccc]'
               }`}>
                 {item.title}
-                {item.visible === false && <span className="ml-1 text-xs">(hidden)</span>}
               </span>
             )}
             
@@ -743,16 +743,12 @@ export default function Sidebar({
                         >
                           <div className="flex items-center gap-1 flex-1 min-w-0">
                             <div className="w-4 h-4 flex items-center justify-center">
-                              <FileText size={14} className={`${correspondingPage.visible === false ? 'text-[#969696]' : 'text-[#519aba]'}`} />
+                              <FileText size={14} className="text-[#519aba]" />
                             </div>
                             <div className="flex-1 min-w-0 ml-1">
-                              <div className={`truncate text-sm font-normal ${
-                                correspondingPage.visible === false ? 'text-[#969696] opacity-60' : 'text-[#cccccc]'
-                              }`}>
+                              <div className="truncate text-sm font-normal text-[#cccccc]">
                                 {doc.title || doc.metadata?.title || 'Untitled'}
-                                {correspondingPage.visible === false && <span className="ml-1 text-xs">(hidden)</span>}
                               </div>
-                              
                             </div>
                             {doc.score && doc.score < 1.0 && (
                               <div className="text-[#969696] text-xs">
@@ -799,13 +795,10 @@ export default function Sidebar({
                           >
                             <div className="flex items-center gap-1 flex-1 min-w-0">
                               <div className="w-4 h-4 flex items-center justify-center">
-                                <FileText size={14} className={`${item.visible === false ? 'text-[#969696]' : 'text-[#519aba]'}`} />
+                                <FileText size={14} className="text-[#519aba]" />
                               </div>
-                              <span className={`truncate text-sm font-normal ml-1 ${
-                                item.visible === false ? 'text-[#969696] opacity-60' : 'text-[#cccccc]'
-                              }`}>
+                              <span className="truncate text-sm font-normal ml-1 text-[#cccccc]">
                                 {item.title}
-                                {item.visible === false && <span className="ml-1 text-xs">(hidden)</span>}
                               </span>
                             </div>
                             
@@ -920,7 +913,8 @@ export default function Sidebar({
                 <Edit size={12} />
                 Rename
               </button>
-              <button
+              {/* Visibility toggle commented out - showing all items now */}
+              {/* <button
                 className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-[#3a3a3a] flex items-center gap-2"
                 onClick={() => {
                   togglePageVisibility(contextMenu.item!)
@@ -938,7 +932,7 @@ export default function Sidebar({
                     Hide
                   </>
                 )}
-              </button>
+              </button> */}
               <button
                 className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-[#3a3a3a] flex items-center gap-2"
                 onClick={() => {

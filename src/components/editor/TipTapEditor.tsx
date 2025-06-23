@@ -58,6 +58,25 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   // Determine which content to show based on toggle
   const currentContent = showSummary ? (page.page_summary || page.content) : page.content
 
+  // Helper: build breadcrumb path titles from parent hierarchy
+  const buildBreadcrumbPath = (): string => {
+    if (!notesCtx?.pages) return page.title
+    const pagesMap = new Map(notesCtx.pages.map((p: any) => [p.uuid, p]))
+    const segments: string[] = []
+    let current: any | undefined = page
+    // Traverse up to root
+    while (current) {
+      segments.push(current.title)
+      if (!current.parent_uuid) break
+      current = pagesMap.get(current.parent_uuid)
+    }
+    const path = segments.reverse()
+    // Always show full path including filename
+    return path.join(' › ')
+  }
+
+  const breadcrumbPath = buildBreadcrumbPath()
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -612,13 +631,22 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
 
       {/* Editor container with independent scrolling */}
       <div className="flex-1 overflow-y-auto">
+        {/* Breadcrumb Path - positioned closer to left sidebar */}
+        {breadcrumbPath && (
+          <div className="pt-6 pb-2 px-4 md:px-8">
+            <div className="text-sm text-gray-400 select-none truncate font-normal">
+              {breadcrumbPath}
+            </div>
+          </div>
+        )}
+
         <div className={`mx-auto min-h-full transition-all duration-[25ms] ${
           notesCtx?.isChatOpen 
             ? 'max-w-2xl px-8 md:px-12' 
             : 'max-w-4xl px-4 md:px-16'
         }`}>
           {/* Title - Notion style */}
-          <div className="pt-8 pb-2 md:pt-16">
+          <div className={`pb-2 ${breadcrumbPath ? 'pt-8 md:pt-12' : 'pt-8 md:pt-16'}`}>
             {isEditingTitle ? (
               <input
                 ref={titleInputRef}
