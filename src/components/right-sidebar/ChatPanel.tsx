@@ -97,6 +97,19 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     }
   }, [])
 
+  // Enhanced scroll function that forces immediate scroll
+  const scrollToBottomImmediate = useCallback(() => {
+    if (messagesContainerRef.current) {
+      // Use requestAnimationFrame to ensure DOM is updated
+      requestAnimationFrame(() => {
+        if (messagesContainerRef.current) {
+          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+          logger.info('Immediately scrolled to bottom of chat')
+        }
+      })
+    }
+  }, [])
+
   // Load conversations when component mounts
   useEffect(() => {
     logger.info('ChatPanel mounted, loading conversations in background...')
@@ -114,7 +127,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
       })
       // If there are already messages loaded, scroll to bottom immediately
       if (messages.length > 0) {
-        scrollToBottom()
+        scrollToBottomImmediate()
       }
     }
   }, [isOpen]) // Remove scrollToBottom and messages.length dependencies to prevent multiple calls
@@ -190,12 +203,27 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
       setCurrentOffset(0)
       loadMessages(activeConversation.id, 0, false).then(() => {
         // Always scroll to bottom after messages load
-        scrollToBottom()
+        scrollToBottomImmediate()
       })
     } else {
       setMessages([])
     }
   }, [activeConversation]) // Remove loadMessages and scrollToBottom dependencies to prevent multiple calls
+
+  // Scroll to bottom whenever messages change (especially important for initial load)
+  useEffect(() => {
+    if (isOpen && messages.length > 0) {
+      // Use setTimeout to ensure DOM has updated
+      setTimeout(() => {
+        scrollToBottomImmediate()
+        logger.info('Auto-scrolled to bottom after messages updated', { 
+          messageCount: messages.length,
+          isOpen,
+          hasActiveConversation: !!activeConversation 
+        })
+      }, 100)
+    }
+  }, [messages.length, isOpen, scrollToBottomImmediate])
 
   // Load older messages function
   const handleLoadOlder = useCallback(() => {
@@ -379,8 +407,13 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     // Clear selections after sending
     setSelections([])
     
-    // Scroll to bottom once after adding both messages
-    scrollToBottom()
+    // Scroll to bottom immediately after adding both messages, BEFORE streaming starts
+    scrollToBottomImmediate()
+    logger.info('Scrolled to bottom before streaming starts', { 
+      userMessageLength: userMessageContent.length,
+      hasSelections: selections.length > 0,
+      isMobile 
+    })
 
     try {
       // Save user message to database
@@ -705,7 +738,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
           {/* Chat Messages */}
           <div 
             ref={messagesContainerRef}
-            className={`flex-1 overflow-y-auto min-h-full ${isMobile ? 'pb-32' : ''}`}
+            className={`flex-1 overflow-y-auto min-h-full ${isMobile ? 'pb-64' : 'pb-96'}`}
           >
             <div className="flex flex-col gap-3 p-4">
               {isLoadingHistory ? (
