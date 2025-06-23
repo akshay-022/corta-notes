@@ -52,45 +52,38 @@ function extractTextFromTipTap(content: any): string {
 }
 
 /**
- * Detects the last thought using our brain state buffer
- * Returns the recent buffer content (last 600 characters)
+ * Extract the most recent editor timestamp from paragraph metadata
  */
-export function detectLastThought(editor: any): string {
+function getLastEditorUpdateTimestamp(editor?: any): Date | null {
+  if (!editor) return null
+  
   try {
-    // Get brain state from lineMap instead of editor nodes
-    const { getBrainState } = require('@/lib/thought-tracking/brain-state')
-    const brainState = getBrainState()
+    const contentBlocks: Array<{content: string, timestamp: Date, index: number}> = []
     
-    if (!brainState?.lineMap) return ''
+    editor.state.doc.content.content.forEach((node: { type: { name: string }, textContent: string, attrs: { metadata?: { lastUpdated?: string } } }, index: number) => {
+      const content = node.textContent.trim()
+      // Only include nodes with actual content AND a timestamp
+      if (content && content.length > 0 && node.attrs.metadata?.lastUpdated) {
+        const timestamp = new Date(node.attrs.metadata.lastUpdated)
+        contentBlocks.push({ content, timestamp, index })
+      }
+    })
 
-         // Get all latest line edits from lineMap
-     const recentEdits: Array<{content: string, timestamp: number, lineId: string}> = []
-     
-     for (const [lineId, lineEdits] of Object.entries(brainState.lineMap)) {
-       if (Array.isArray(lineEdits) && lineEdits.length > 0) {
-         // Get the latest edit for this line
-         const latestEdit = lineEdits[lineEdits.length - 1]
-         if (latestEdit && latestEdit.content && latestEdit.content.trim()) {
-           recentEdits.push({
-             content: latestEdit.content.trim(),
-             timestamp: latestEdit.timestamp,
-             lineId
-           })
-         }
-       }
-     }
-
-         // Take top 5 most recent edits (already in chronological order)
-     const recentContent = recentEdits
-       .slice(0, 5)
-       .map(edit => edit.content)
-       .join('\n\n')
-
-    return recentContent ? 'MOST RECENT TO SLIGHTLY LESS RECENT ORDER : \n' + recentContent : ''
+    // Get the most recent timestamp from non-empty paragraphs (with reverse index ordering for ties)
+    if (contentBlocks.length > 0) {
+      return contentBlocks
+        .sort((a, b) => {
+          const timeDiff = b.timestamp.getTime() - a.timestamp.getTime()
+          if (timeDiff !== 0) return timeDiff
+          // If timestamps are the same, sort by reverse index (later positions first)
+          return b.index - a.index
+        })[0].timestamp
+    }
   } catch (error) {
-    console.error('Error detecting last thought:', error)
-    return ''
+    console.error('Error extracting editor timestamp:', error)
   }
+  
+  return null
 }
 
 /**
@@ -104,45 +97,10 @@ export function createThoughtContext(
   lastAiMessageTimestamp?: string,
   lastUserMessageTimestamp?: string
 ): string {
-  let context =''
+  let context = ''
   
   // Get timestamps for context awareness
-  let lastEditorUpdateTimestamp: Date | null = null
-  
-  // Get last thought from editor history and extract the most recent timestamp
-  const lastThought = detectLastThought(editor)
-  if (lastThought) {
-    context += `MOST RECENT THOUGHT (This is EXTREMELY IMPORTANT, if the user has not given enough context, this line of thinking is the ONLY one you must complete) :\n${lastThought}\n\n\n\n`
-    
-    // Extract the most recent editor timestamp
-    try {
-      if (editor) {
-        const contentBlocks: Array<{content: string, timestamp: Date, index: number}> = []
-        
-        editor.state.doc.content.content.forEach((node: { type: { name: string }, textContent: string, attrs: { lastUpdated?: string } }, index: number) => {
-          const content = node.textContent.trim()
-          // Only include nodes with actual content AND a timestamp
-          if (content && content.length > 0 && node.attrs.lastUpdated) {
-            const timestamp = new Date(node.attrs.lastUpdated)
-            contentBlocks.push({ content, timestamp, index })
-          }
-        })
-
-        // Get the most recent timestamp from non-empty paragraphs (with reverse index ordering for ties)
-        if (contentBlocks.length > 0) {
-          lastEditorUpdateTimestamp = contentBlocks
-            .sort((a, b) => {
-              const timeDiff = b.timestamp.getTime() - a.timestamp.getTime()
-              if (timeDiff !== 0) return timeDiff
-              // If timestamps are the same, sort by reverse index (later positions first)
-              return b.index - a.index
-            })[0].timestamp
-        }
-      }
-    } catch (error) {
-      console.error('Error extracting editor timestamp:', error)
-    }
-  }
+  const lastEditorUpdateTimestamp = getLastEditorUpdateTimestamp(editor)
   
   // Add timestamp context for AI awareness
   const timestampContext = []

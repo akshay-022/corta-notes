@@ -468,7 +468,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       // Clean up previous listeners if any
       if (cleanup) cleanup()
 
-      cleanup = setupAutoOrganization(editor, page.uuid, page.title)
+              cleanup = setupAutoOrganization(editor, page.uuid, page.title)
       logger.info('⚡ Auto-organization initialized for page', { pageUuid: page.uuid })
       }
 

@@ -9,13 +9,7 @@ export function setupAutoOrganization(
   idleMs: number = 30_000,
   doubleEnterMs: number = 400
 ) {
-  let idleTimer: NodeJS.Timeout | null = null
   let lastTriggerTs = 0 // prevent rapid-fire
-
-  const resetIdle = () => {
-    if (idleTimer) clearTimeout(idleTimer)
-    idleTimer = setTimeout(triggerOrganization, idleMs)
-  }
 
   const triggerOrganization = () => {
     const now =Date.now()
@@ -24,13 +18,7 @@ export function setupAutoOrganization(
     organizePage({ editor, pageUuid, pageTitle })
   }
 
-  const handleUpdate = () => {
-    resetIdle()
-  }
-
   const handleKeyDown = (e: KeyboardEvent) => {
-    resetIdle()
-
     if (e.key === 'Enter') {
       // Wait for the doc to update after the Enter press
       setTimeout(() => {
@@ -41,20 +29,14 @@ export function setupAutoOrganization(
     }
   }
 
-  // Attach listeners
-  editor.on('update', handleUpdate)
+  // Attach listeners - only keydown, no idle timer
   const dom = editor.view.dom as HTMLElement
   dom.addEventListener('keydown', handleKeyDown)
 
-  // Start idle timer on mount
-  resetIdle()
-
-  logger.info('Auto-organization triggers installed', { pageUuid })
+  logger.info('Auto-organization triggers installed (double-enter only)', { pageUuid })
 
   return () => {
-    editor.off('update', handleUpdate)
     dom.removeEventListener('keydown', handleKeyDown)
-    if (idleTimer) clearTimeout(idleTimer)
   }
 }
 

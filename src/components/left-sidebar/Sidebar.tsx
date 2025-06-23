@@ -458,7 +458,7 @@ export default function Sidebar({
             )}
             
             {/* Hide/Show button - appears on hover */}
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {/* <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
                 onClick={(e) => {
                   e.stopPropagation()
@@ -473,7 +473,7 @@ export default function Sidebar({
                   <EyeOff size={12} className="text-[#969696] hover:text-[#cccccc]" />
                 )}
               </button>
-            </div>
+            </div> */}
           </div>
           
 
