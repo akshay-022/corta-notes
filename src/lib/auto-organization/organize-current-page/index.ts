@@ -150,7 +150,9 @@ TASK:
 2. Group related paragraphs together in the same destination  
 3. For each destination return:
    { "targetFilePath": "/Path/To/Location", "content": "(organized content)" }
-4. Respond ONLY with JSON array (no markdown, no extra text)
+4. Use normal titles with spaces for file paths (e.g., "AI Journal", "Project Notes")
+5. NEVER use kebab-case, underscores, or .md extensions in file names
+6. Respond ONLY with JSON array (no markdown, no extra text)
 
 CRITICAL CONTENT REQUIREMENTS:
 • Write like PERSONAL NOTES - conversational, direct, authentic

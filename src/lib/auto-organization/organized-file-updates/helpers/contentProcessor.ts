@@ -15,6 +15,7 @@ import CodeBlock from '@tiptap/extension-code-block'
 import Code from '@tiptap/extension-code'
 import HardBreak from '@tiptap/extension-hard-break'
 import HorizontalRule from '@tiptap/extension-horizontal-rule'
+import Underline from '@tiptap/extension-underline'
 import { NodeMetadata } from '@/lib/tiptap/NodeMetadata'
 import { Markdown } from 'tiptap-markdown'
 
@@ -34,6 +35,7 @@ const extensions = [
   Code,
   HardBreak,
   HorizontalRule,
+  Underline,
   NodeMetadata,
   Markdown.configure({
     html: false, // Don't allow HTML input

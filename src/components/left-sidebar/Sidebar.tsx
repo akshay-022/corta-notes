@@ -9,8 +9,10 @@ import DocumentSearch from '@/components/left-sidebar/DocumentSearch'
 import { SuperMemoryDocument } from '@/lib/memory/memory-client'
 import ChronologicalSidebar from './ChronologicalSidebar'
 import FileHistory from './FileHistory'
+import { FileHistoryItem } from './fileHistoryUtils'
 import { useRouter } from 'next/navigation'
 import logger from '@/lib/logger'
+import { createClient } from '@/lib/supabase/supabase-client'
 
 interface ContextMenu {
   x: number
@@ -83,8 +85,9 @@ export default function Sidebar({
   const [organizationInstructions, setOrganizationInstructions] = useState('')
   const [searchResults, setSearchResults] = useState<SuperMemoryDocument[]>([])
   const [isSearchActive, setIsSearchActive] = useState(false)
-  const [viewMode, setViewMode] = useState<'normal' | 'chronological'>('normal')
+  const [viewMode, setViewMode] = useState<'normal' | 'chronological' | 'recent-changes' | 'recent-notes'>('normal')
   const [showHiddenItems, setShowHiddenItems] = useState(false)
+  const [fileHistory, setFileHistory] = useState<FileHistoryItem[]>([])
 
   const router = useRouter();
 
@@ -102,7 +105,57 @@ export default function Sidebar({
     }
   }, [newlyCreatedItem, onClearNewlyCreatedItem])
 
+  // Load file history from Supabase
+  useEffect(() => {
+    const loadFileHistory = async () => {
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user?.id) return
+        
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('metadata')
+          .eq('user_id', user.id)
+          .single()
+        
+        const remoteHistory: FileHistoryItem[] | undefined = profile?.metadata?.fileHistory
+        if (remoteHistory && Array.isArray(remoteHistory)) {
+          setFileHistory(remoteHistory)
+        }
+      } catch (err) {
+        console.error('Failed to load file history from Supabase', err)
+      }
+    }
+    
+    loadFileHistory()
+  }, [])
 
+  // Listen for file history updates
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data.type === 'FILE_HISTORY_UPDATE' && event.data.data) {
+        const newItems: FileHistoryItem[] = event.data.data
+        setFileHistory(prevHistory => {
+          // Create a map of existing items by uuid for deduplication
+          const existingMap = new Map(prevHistory.map(item => [item.uuid, item]))
+          
+          // Add new items, replacing any existing ones with same uuid
+          newItems.forEach(item => {
+            existingMap.set(item.uuid, item)
+          })
+          
+          // Convert back to array and sort by timestamp (newest first)
+          return Array.from(existingMap.values())
+            .sort((a, b) => b.timestamp - a.timestamp)
+            .slice(0, 10) // Keep only 10 most recent
+        })
+      }
+    }
+
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [])
 
   const startRename = (item: Page) => {
     setRenamingItem(item)
@@ -258,7 +311,7 @@ export default function Sidebar({
     return getUnorganizedPages()
       .filter(page => page.type === 'file')
       .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime())
-      .slice(0, 10) // Show latest 10 notes
+      .slice(0, 3) // Show latest 3 notes
   }
 
   const buildTree = (items: Page[], parentId?: string | null) => {
@@ -466,6 +519,69 @@ export default function Sidebar({
     )
   }
 
+  // Show recent changes view if selected
+  if (viewMode === 'recent-changes') {
+    // Filter pages to only those that appear in fileHistory
+    const fileHistoryUuids = new Set(fileHistory.map(item => item.uuid))
+    const recentChangesPages = pages.filter(page => fileHistoryUuids.has(page.uuid))
+    
+    return (
+      <>
+        <ChronologicalSidebar
+          pages={recentChangesPages}
+          activePage={activePage}
+          setActivePage={setActivePage}
+          setSidebarOpen={setSidebarOpen}
+          onBackToNormal={() => setViewMode('normal')}
+          deleteItem={deleteItem}
+          setRenaming={setRenaming}
+          togglePageVisibility={togglePageVisibility}
+          isMobile={isMobile}
+          title="Recent Changes"
+          hideTabs={true}
+          fileHistory={fileHistory}
+        />
+        
+        {/* Mobile overlay - only show on desktop */}
+        {!isMobile && sidebarOpen && (
+          <div 
+            className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+      </>
+    )
+  }
+
+  // Show recent notes view if selected
+  if (viewMode === 'recent-notes') {
+    return (
+      <>
+        <ChronologicalSidebar
+          pages={pages.filter(page => page.organized === false)} // Only show unorganized pages (recent notes)
+          activePage={activePage}
+          setActivePage={setActivePage}
+          setSidebarOpen={setSidebarOpen}
+          onBackToNormal={() => setViewMode('normal')}
+          deleteItem={deleteItem}
+          setRenaming={setRenaming}
+          togglePageVisibility={togglePageVisibility}
+          isMobile={isMobile}
+          title="Recent Notes"
+          hideTabs={true}
+        />
+        
+        {/* Mobile overlay - only show on desktop */}
+        {!isMobile && sidebarOpen && (
+          <div 
+            className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+      </>
+    )
+  }
+
   return (
     <>
       {/* Sidebar - VS Code style */}
@@ -484,15 +600,11 @@ export default function Sidebar({
               <div className="flex items-center justify-between">
                 <span className="text-[#cccccc] text-sm font-medium">Notes</span>
                 <button
-                  onClick={() => setShowHiddenItems(!showHiddenItems)}
-                  className={`text-xs px-2 py-1 rounded transition-colors ${
-                    showHiddenItems 
-                      ? 'bg-[#007acc] text-white' 
-                      : 'text-[#969696] hover:text-[#cccccc] hover:bg-[#2a2a2a]'
-                  }`}
-                  title={showHiddenItems ? 'Hide hidden items' : 'Show hidden items'}
+                  onClick={logout}
+                  className="text-[#969696] hover:text-[#cccccc] p-1 rounded transition-colors"
+                  title="Logout"
                 >
-                  {showHiddenItems ? 'Hide Hidden' : 'Show Hidden'}
+                  <LogOut size={14} />
                 </button>
               </div>
             </div>
@@ -541,9 +653,19 @@ export default function Sidebar({
             {(isSearchActive || getRecentUnorganizedNotes().length > 0) && (
               <div className="flex-shrink-0">
                 <div className="px-4 pb-2">
-                  <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">
-                    {isSearchActive ? 'Search Results' : 'Recent notes'}
-                  </h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">
+                      {isSearchActive ? 'Search Results' : 'Recent notes'}
+                    </h3>
+                    {!isSearchActive && (
+                      <button
+                        onClick={() => setViewMode('recent-notes')}
+                        className="text-[#969696] hover:text-[#cccccc] text-[10px] uppercase tracking-wide"
+                      >
+                        See All
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div 
                   className="pb-6 relative max-h-64 overflow-y-auto"
@@ -639,23 +761,7 @@ export default function Sidebar({
                             )}
                           </div>
                           
-                          {/* Hide/Show button for search results */}
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                togglePageVisibility(correspondingPage)
-                              }}
-                              className="p-1 hover:bg-[#404040] rounded transition-colors"
-                              title={correspondingPage.visible === false ? `Show "${correspondingPage.title}"` : `Hide "${correspondingPage.title}"`}
-                            >
-                              {correspondingPage.visible === false ? (
-                                <Eye size={12} className="text-[#969696] hover:text-[#cccccc]" />
-                              ) : (
-                                <EyeOff size={12} className="text-[#969696] hover:text-[#cccccc]" />
-                              )}
-                            </button>
-                          </div>
+                          {/* Hide/Show button temporarily disabled */}
                         </div>
                       </DragDropStyles>
                     )
@@ -703,33 +809,7 @@ export default function Sidebar({
                               </span>
                             </div>
                             
-                            {/* Action buttons - hidden by default, shown on hover */}
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  togglePageVisibility(item)
-                                }}
-                                className="p-1 hover:bg-[#404040] rounded transition-colors"
-                                title={item.visible === false ? `Show "${item.title}"` : `Hide "${item.title}"`}
-                              >
-                                {item.visible === false ? (
-                                  <Eye size={12} className="text-[#969696] hover:text-[#cccccc]" />
-                                ) : (
-                                  <EyeOff size={12} className="text-[#969696] hover:text-[#cccccc]" />
-                                )}
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  sendForOrganization(item)
-                                }}
-                                className="p-1 hover:bg-[#404040] rounded transition-colors"
-                                title={`Organize "${item.title}"`}
-                              >
-                                <Clock size={12} className="text-[#969696]" />
-                              </button>
-                            </div>
+                            {/* Action buttons temporarily disabled */}
                           </div>
                         </DragDropStyles>
                       )
@@ -800,26 +880,7 @@ export default function Sidebar({
 
           {/* File History */}
           <div className="flex-shrink-0">
-            <FileHistory isMobile={isMobile} setSidebarOpen={setSidebarOpen} />
-          </div>
-
-          {/* Fixed Footer Section - See All Button and Logout */}
-          <div className="flex-shrink-0 p-4">
-            <div className="flex justify-between items-center">
-              <button
-                onClick={logout}
-                className="text-[#969696] hover:text-[#cccccc] p-1 rounded transition-colors"
-                title="Logout"
-              >
-                <LogOut size={14} />
-              </button>
-              <button
-                onClick={() => setViewMode('chronological')}
-                className="text-[#969696] hover:text-[#cccccc] text-xs transition-colors"
-              >
-                See All
-              </button>
-            </div>
+            <FileHistory isMobile={isMobile} setSidebarOpen={setSidebarOpen} onSeeAll={() => setViewMode('recent-changes')} />
           </div>
         </div>
       </div>

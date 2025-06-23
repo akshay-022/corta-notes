@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Page } from '@/lib/supabase/types'
 import { FileText, ArrowLeft, Edit, Trash, EyeOff, Eye } from 'lucide-react'
+import { FileHistoryItem } from './fileHistoryUtils'
 
 interface ContextMenu {
   x: number
@@ -22,6 +23,9 @@ interface ChronologicalSidebarProps {
   setRenaming: (page: Page) => void
   togglePageVisibility: (page: Page) => void
   isMobile?: boolean
+  title?: string
+  hideTabs?: boolean
+  fileHistory?: FileHistoryItem[]
 }
 
 interface GroupedPages {
@@ -40,7 +44,10 @@ export default function ChronologicalSidebar({
   deleteItem,
   setRenaming,
   togglePageVisibility,
-  isMobile = false
+  isMobile = false,
+  title,
+  hideTabs = false,
+  fileHistory
 }: ChronologicalSidebarProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
   const [showHiddenItems, setShowHiddenItems] = useState(false)
@@ -91,7 +98,17 @@ export default function ChronologicalSidebar({
 
   const organizedPages = getFilteredPages(true)
   const unorganizedPages = getFilteredPages(false)
-  const activePages = activeTab === 'organized' ? organizedPages : unorganizedPages
+  const activePages = hideTabs 
+    ? pages.filter(page => 
+        page.type === 'file' && 
+        !page.is_deleted &&
+        (showHiddenItems || page.visible !== false)
+      ).sort((a, b) => {
+        const dateA = new Date(a.updated_at || a.created_at || 0)
+        const dateB = new Date(b.updated_at || b.created_at || 0)
+        return dateB.getTime() - dateA.getTime()
+      })
+    : activeTab === 'organized' ? organizedPages : unorganizedPages
 
   // Group pages by date
   const groupedPages: GroupedPages = {}
@@ -163,51 +180,39 @@ export default function ChronologicalSidebar({
               className="flex items-center gap-2 text-[#cccccc] hover:text-white transition-colors cursor-pointer"
             >
               <ArrowLeft size={16} />
-              <span className="text-sm font-medium">All Notes</span>
+              <span className="text-sm font-medium">{title || 'All Notes'}</span>
             </button>
           </div>
           
           {/* Tabs for organized/unorganized */}
-          <div className="px-4 pb-2">
-            <div className="flex bg-[#2a2a2a] rounded-lg p-1">
-              <button
-                onClick={() => setActiveTab('organized')}
-                className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  activeTab === 'organized'
-                    ? 'bg-[#007acc] text-white'
-                    : 'text-[#cccccc] hover:bg-[#3a3a3a]'
-                }`}
-              >
-                Organized ({organizedPages.length})
-              </button>
-              <button
-                onClick={() => setActiveTab('unorganized')}
-                className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  activeTab === 'unorganized'
-                    ? 'bg-[#007acc] text-white'
-                    : 'text-[#cccccc] hover:bg-[#3a3a3a]'
-                }`}
-              >
-                Unorganized ({unorganizedPages.length})
-              </button>
+          {!hideTabs && (
+            <div className="px-4 pb-2">
+              <div className="flex bg-[#2a2a2a] rounded-lg p-1">
+                <button
+                  onClick={() => setActiveTab('organized')}
+                  className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    activeTab === 'organized'
+                      ? 'bg-[#007acc] text-white'
+                      : 'text-[#cccccc] hover:bg-[#3a3a3a]'
+                  }`}
+                >
+                  Organized ({organizedPages.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('unorganized')}
+                  className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    activeTab === 'unorganized'
+                      ? 'bg-[#007acc] text-white'
+                      : 'text-[#cccccc] hover:bg-[#3a3a3a]'
+                  }`}
+                >
+                  Unorganized ({unorganizedPages.length})
+                </button>
+              </div>
             </div>
-          </div>
+          )}
           
-          {/* Show/Hide toggle */}
-          <div className="px-4 pb-2">
-            <button
-              onClick={() => setShowHiddenItems(!showHiddenItems)}
-              className={`w-full text-xs px-2 py-1 rounded transition-colors flex items-center gap-2 ${
-                showHiddenItems 
-                  ? 'bg-[#007acc] text-white' 
-                  : 'text-[#969696] hover:text-[#cccccc] hover:bg-[#2a2a2a]'
-              }`}
-              title={showHiddenItems ? 'Hide hidden items' : 'Show hidden items'}
-            >
-              {showHiddenItems ? <EyeOff size={12} /> : <Eye size={12} />}
-              {showHiddenItems ? 'Hide Hidden' : 'Show Hidden'}
-            </button>
-          </div>
+          {/* Show/Hide toggle temporarily disabled */}
         </div>
 
         {/* Scrollable content */}
@@ -215,7 +220,10 @@ export default function ChronologicalSidebar({
           {Object.keys(groupedPages).length === 0 ? (
             <div className="p-4 text-center">
               <p className="text-[#969696] text-sm">
-                No {activeTab} notes found
+                {hideTabs 
+                  ? 'No notes found'
+                  : `No ${activeTab} notes found`
+                }
                 {!showHiddenItems && ' (some may be hidden)'}
               </p>
             </div>
@@ -235,6 +243,10 @@ export default function ChronologicalSidebar({
                     const isActive = activePage?.uuid === page.uuid
                     const timeDisplay = formatDateTime(page.updated_at || page.created_at || '', group.displayDate)
                     const isHidden = page.visible === false
+                    
+                    // Find the action from fileHistory if provided
+                    const historyItem = fileHistory?.find(item => item.uuid === page.uuid)
+                    const action = historyItem?.action
                     
                     return (
                       <div
@@ -266,8 +278,19 @@ export default function ChronologicalSidebar({
                             </span>
                           </div>
                           
-                          <div className="text-xs text-[#969696]">
-                            {timeDisplay}
+                          <div className="flex items-center gap-2 text-xs text-[#969696]">
+                            {action && (
+                              <span className={`
+                                px-1.5 py-0.5 rounded text-xs
+                                ${action === 'created' 
+                                  ? 'bg-[#1a5a1a] text-[#4caf50]' 
+                                  : 'bg-[#1a3a5a] text-[#2196f3]'
+                                }
+                              `}>
+                                {action === 'created' ? 'new' : 'upd'}
+                              </span>
+                            )}
+                            <span>{timeDisplay}</span>
                           </div>
                         </div>
                         

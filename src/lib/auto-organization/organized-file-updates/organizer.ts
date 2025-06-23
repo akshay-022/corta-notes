@@ -148,7 +148,7 @@ function buildPrompt(pageTitle: string, paragraphs: ParagraphInfo[]): string {
     .map((p, idx) => `${idx + 1}. ${p.content}`)
     .join('\n')
 
-  return `You are an intelligent knowledge organizer. You MUST MUST MUST only route things into a file and NOT a folder. If there is no file, then create a new file. \n\nPAGE TITLE: "${pageTitle}"\n\nUNORGANIZED PARAGRAPHS:\n${list}\n\nINSTRUCTIONS:\n– Group the ideas logically and rewrite them so each target file/folder receives one coherent \"content\" block.\n– For each destination, output a JSON object with:\n  {\n    \"targetFilePath\": \"/Path/To/Location\",\n    \"content\": \"(merged and refined text)\"\n  }\n– Files have NO extension.\n– A paragraph may appear in multiple content blocks if it fits multiple places.\n– Preserve all information; order does not matter.\n– Respond with a JSON ARRAY ONLY, no markdown fences, no extra text.`
+  return `You are an intelligent knowledge organizer. You MUST MUST MUST only route things into a file and NOT a folder. If there is no file, then create a new file. \n\nPAGE TITLE: "${pageTitle}"\n\nUNORGANIZED PARAGRAPHS:\n${list}\n\nINSTRUCTIONS:\n– Group the ideas logically and rewrite them so each target file/folder receives one coherent \"content\" block.\n– For each destination, output a JSON object with:\n  {\n    \"targetFilePath\": \"/Path/To/Location\",\n    \"content\": \"(merged and refined text)\"\n  }\n– Use normal titles with spaces for file paths (e.g., \"AI Journal\", \"Project Notes\")\n– NEVER use kebab-case, underscores, or .md extensions in file names\n– Files have NO extension.\n– A paragraph may appear in multiple content blocks if it fits multiple places.\n– Preserve all information; order does not matter.\n– Respond with a JSON ARRAY ONLY, no markdown fences, no extra text.`
 }
 
 async function callLLM(prompt: string): Promise<LLMOrganizationChunk[]> {
@@ -275,7 +275,9 @@ TASK:
 2. Group related paragraphs together in the same destination  
 3. For each destination return:
    { "targetFilePath": "/Path/To/Location", "relevance": 0.0-1.0, "content": "(organized content)" }
-4. Respond ONLY with JSON array (no markdown, no extra text)
+4. Use normal titles with spaces for file paths (e.g., "AI Journal", "Project Notes")
+5. NEVER use kebab-case, underscores, or .md extensions in file names
+6. Respond ONLY with JSON array (no markdown, no extra text)
 
 CRITICAL CONTENT REQUIREMENTS:
 • Write like PERSONAL NOTES - conversational, direct, authentic

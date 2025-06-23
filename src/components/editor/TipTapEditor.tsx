@@ -5,6 +5,7 @@ import StarterKit from '@tiptap/starter-kit'
 import HorizontalRule from '@tiptap/extension-horizontal-rule'
 import Placeholder from '@tiptap/extension-placeholder'
 import Typography from '@tiptap/extension-typography'
+import Underline from '@tiptap/extension-underline'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Page, PageUpdate } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/supabase-client'
@@ -15,6 +16,7 @@ import { organizeCurrentPage } from '@/lib/auto-organization/organize-current-pa
 import logger from '@/lib/logger'
 import { DateDividerPlugin } from '@/lib/organized-notes-formatting/dateDividerPlugin'
 import { NodeMetadata } from '@/lib/tiptap/NodeMetadata'
+import { FormattingBubbleMenu } from '@/lib/tiptap/FormattingBubbleMenu'
 
 interface TipTapEditorProps {
   page: Page
@@ -69,6 +71,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       Typography,
       DateDividerPlugin,
       NodeMetadata,
+      Underline,
     ],
     content: currentContent as any,
     editorProps: {
@@ -687,11 +690,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
         <BubbleMenu 
           editor={editor} 
           tippyOptions={{ duration: 100 }}
-          shouldShow={({ state }) => {
-            const { from, to } = state.selection
-            const hasSelection = from !== to
-            return hasSelection
-          }}
+          shouldShow={(_) => false /* temporarily disabled metadata bubble */}
         >
           <div className="bg-[#2a2a2a] border border-gray-600 rounded-lg p-3 shadow-lg min-w-[300px] max-w-[500px] z-50">
             <div className="text-xs text-gray-300">
@@ -809,6 +808,9 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
           </div>
         </BubbleMenu>
       )}
+
+      {/* Formatting toolbar bubble menu */}
+      {editor && <FormattingBubbleMenu editor={editor} />}
 
       {/* Organization Rules Dialog */}
       {isOrganizationRulesOpen && (

@@ -63,7 +63,8 @@ FILE ORGANIZATION RULES:
 - Create new files only for distinct topics that don't fit elsewhere
 - File paths must start with "/" and follow existing structure
 - For new files: ensure parent folder exists in file tree
-- Use descriptive, kebab-case file names
+- Use descriptive titles with spaces (e.g., "AI Journal", "Project Notes")
+- NEVER use kebab-case, underscores, or .md extensions in file names
 - Only create folders when absolutely necessary
 
 BAD REFINEMENT: "Overview: This section provides a comprehensive analysis of the user's annotation requirements..."

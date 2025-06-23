@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { FileText, ChevronDown, ChevronUp } from 'lucide-react'
+import { FileText } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { FileHistoryItem } from './fileHistoryUtils'
 import { createClient } from '@/lib/supabase/supabase-client'
@@ -9,12 +9,13 @@ import { createClient } from '@/lib/supabase/supabase-client'
 interface FileHistoryProps {
   isMobile?: boolean
   setSidebarOpen: (open: boolean) => void
+  onSeeAll?: () => void
 }
 
 const MAX_HISTORY_ITEMS = 10
 const DISPLAY_ITEMS = 3
 
-export default function FileHistory({ isMobile, setSidebarOpen }: FileHistoryProps) {
+export default function FileHistory({ isMobile, setSidebarOpen, onSeeAll }: FileHistoryProps) {
   const [history, setHistory] = useState<FileHistoryItem[]>([])
   const [showAll, setShowAll] = useState(false)
   const [animatingItems, setAnimatingItems] = useState<Set<string>>(new Set())
@@ -124,7 +125,7 @@ export default function FileHistory({ isMobile, setSidebarOpen }: FileHistoryPro
   }
 
   const displayedItems = showAll ? history : history.slice(0, DISPLAY_ITEMS)
-  const hasMore = history.length > DISPLAY_ITEMS
+  const hasMore = false // hide show more button
 
   // if (history.length === 0) {
   //   return null
@@ -132,10 +133,24 @@ export default function FileHistory({ isMobile, setSidebarOpen }: FileHistoryPro
 
   return (
     <div className="pb-4">
-      <div className="px-4 pb-2">
+      <div className="px-4 pb-2 flex items-center justify-between">
         <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">
           Recent Changes
         </h3>
+        {history.length > DISPLAY_ITEMS && (
+          <button
+            onClick={() => {
+              if (onSeeAll) {
+                onSeeAll()
+              } else {
+                setShowAll(true)
+              }
+            }}
+            className="text-[#969696] hover:text-[#cccccc] text-[10px] uppercase tracking-wide"
+          >
+            See All
+          </button>
+        )}
       </div>
       
       <div className="space-y-0">
@@ -187,27 +202,6 @@ export default function FileHistory({ isMobile, setSidebarOpen }: FileHistoryPro
             </div>
           )
         })}
-        
-        {hasMore && (
-          <div className="px-4 pt-1">
-            <button
-              onClick={() => setShowAll(!showAll)}
-              className="text-[#969696] hover:text-[#cccccc] text-xs flex items-center gap-1 transition-colors"
-            >
-              {showAll ? (
-                <>
-                  <ChevronUp size={12} />
-                  Show less
-                </>
-              ) : (
-                <>
-                  <ChevronDown size={12} />
-                  See more ({history.length - DISPLAY_ITEMS} more)
-                </>
-              )}
-            </button>
-          </div>
-        )}
       </div>
     </div>
   )
