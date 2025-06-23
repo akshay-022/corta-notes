@@ -191,5 +191,7 @@ INSTRUCTIONS:
 5. Bold important terms using TipTap marks
 6. Return ONLY the updated TipTap JSON, no other text
 
+CRITICAL FORMATTING RULE: OUTPUT ONLY CLEAN MARKDOWN - never use HTML tags like <br>, <div>, <p>. Use real line breaks and proper Markdown syntax only.
+
 Generate the updated summary as TipTap JSON:`
 } 

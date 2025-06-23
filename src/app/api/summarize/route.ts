@@ -46,7 +46,7 @@ export async function POST(req: Request) {
       messages: [
         {
           role: "system",
-          content: "You are an expert at analyzing writing patterns and thought processes. Generate concise, insightful summaries that capture the essence of what someone is thinking based on their editing behavior."
+          content: "You are an expert at analyzing writing patterns and thought processes. Generate concise, insightful summaries that capture the essence of what someone is thinking based on their editing behavior.\n\nCRITICAL FORMATTING RULE: OUTPUT ONLY CLEAN MARKDOWN - never use HTML tags like <br>, <div>, <p>. Use real line breaks and proper Markdown syntax only."
         },
         {
           role: "user",
