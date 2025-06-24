@@ -16,6 +16,7 @@ import {
   serializeFileTree,
   OrganizedPageSlim,
 } from '@/lib/auto-organization/organized-file-updates/helpers/fileTree'
+import { TIPTAP_FORMATTING_PROMPT } from '@/lib/promptTemplates'
 
 interface ParagraphInfo {
   id: string
@@ -276,6 +277,7 @@ ${organizationRules}
 Follow these rules when organizing content.\n` : ''
 
   return `Route to ALL RELEVANT existing [FILE]s. Content can go to MULTIPLE files if relevant. Only create new [FILE] if nothing fits. NEVER route to [DIR]s.
+${TIPTAP_FORMATTING_PROMPT}
 
 MULTIPLE DESTINATIONS STRATEGY:
 • DUPLICATE content to ALL relevant files - don't pick just one "best" match

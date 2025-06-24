@@ -138,6 +138,7 @@ ${organizationRules}
 Follow these rules when organizing content.\n` : ''
 
   const prompt = `Organize personal notes. Route to ALL RELEVANT [FILE]s - content can go to MULTIPLE files if relevant. Use existing files first. Only create new [FILE] if nothing fits. NEVER route to [DIR]s.
+${TIPTAP_FORMATTING_PROMPT}
 ${ULTRA_CONDENSED_ORGANIZATION_TEMPLATE}
 
 PAGE TITLE: "${pageTitle}"
