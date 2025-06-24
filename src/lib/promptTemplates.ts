@@ -15,11 +15,24 @@ export const ULTRA_CONDENSED_ORGANIZATION_TEMPLATE = `CONDENSED CONTENT RULES:
 • NO explanations, introductions, or overviews
 • NO "This section covers..." or "Overview:" text
 • NO repetitive content or fluff
-• DIRECT content with brief context - like "1. Fix login bug in auth system 2. Add user preferences feature 3. Test payment flow"
-• Use simple bullets or numbered lists
+• DIRECT content with brief context - each item on its own line with proper line breaks
+• **PRIORITIZE NUMBERED LISTS (1. 2. 3.) over bullet points** - better for tasks and priorities
 • Keep original voice and urgency
 • 5-10 words per bullet point (brief but clear)
 • NO corporate speak - write like personal notes
 • Focus on WHAT needs to be done with minimal context
-• Example: "TODO: 1. Call client about project timeline 2. Update API documentation 3. Deploy bug fixes to production"
+• CRITICAL: Use proper line breaks between items, not all on one line
+
+PREFERRED FORMAT (numbered):
+1. Fix login bug in auth system
+2. Call client about project timeline  
+3. Update API documentation
+4. Deploy bug fixes to production
+
+ALTERNATIVE FORMAT (bullets):
+- Fix login bug in auth system
+- Call client about project timeline
+
+BAD FORMAT:
+TODO: 1. Fix bug 2. Call client 3. Update docs (all on one line - NO!)
 ` 

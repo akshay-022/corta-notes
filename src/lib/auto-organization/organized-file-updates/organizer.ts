@@ -162,9 +162,11 @@ PARAGRAPHS:
 ${list}
 
 OUTPUT: JSON array - duplicate content to multiple files if relevant
-[{ "targetFilePath": "/Path1", "content": "condensed bullets" }, { "targetFilePath": "/Path2", "content": "same condensed bullets" }]
+[{ "targetFilePath": "/Path1", "content": "proper markdown bullets" }, { "targetFilePath": "/Path2", "content": "same proper markdown bullets" }]
 
-• Content = direct like "TODO: 1. Fix login bug 2. Test payment flow"
+• Content = PROPER MARKDOWN with line breaks like:
+  "TODO:\n1. Fix login bug in auth system\n2. Test payment flow\n3. Deploy to staging"
+• **PRIORITIZE NUMBERED LISTS (1. 2. 3.) over bullet points** - better for tasks and priorities
 • NO explanations or overviews
 • 5-10 words per bullet (brief but clear)
 • Normal file names (no .md extensions)
@@ -295,7 +297,8 @@ ${list}${organizationRulesSection}
 
 OUTPUT:
 • JSON array: [{ "targetFilePath": "/Path1", "relevance": 0.9, "content": "same content" }, { "targetFilePath": "/Path2", "relevance": 0.8, "content": "same content" }]
-• Content = direct bullets like "TODO: 1. Fix login bug in auth system 2. Test payment flow 3. Deploy to staging"
+• Content = PROPER MARKDOWN with line breaks between items
+• **PRIORITIZE NUMBERED LISTS (1. 2. 3.) over bullet points** - better for tasks and priorities
 • NO explanations or overviews
 • 5-10 words per bullet (brief but clear)
 • Keep original tone/urgency
@@ -305,8 +308,8 @@ OUTPUT:
 EXAMPLE:
 If "Fix API bug" is relevant to both "Bug Tracker" and "Current Sprint":
 [
-  { "targetFilePath": "/Bug Tracker", "relevance": 0.9, "content": "TODO: 1. Fix API authentication bug" },
-  { "targetFilePath": "/Current Sprint", "relevance": 0.8, "content": "TODO: 1. Fix API authentication bug" }
+  { "targetFilePath": "/Bug Tracker", "relevance": 0.9, "content": "TODO:\n1. Fix API authentication bug\n2. Test login endpoints\n3. Update security headers" },
+  { "targetFilePath": "/Current Sprint", "relevance": 0.8, "content": "TODO:\n1. Fix API authentication bug\n2. Test login endpoints\n3. Update security headers" }
 ]
 
 `

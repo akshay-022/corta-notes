@@ -432,7 +432,7 @@ MERGE RULES:
 • NO walls of text
 
 BAD: "Overview: This comprehensive analysis of the system requirements..."
-GOOD: "TODO: 1. Fix login bug in auth system 2. Test payment feature integration"
+GOOD: "TODO:\n1. Fix login bug in auth system\n2. Test payment feature integration\n3. Deploy security updates"
 
 JSON output only:
 {

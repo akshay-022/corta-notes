@@ -154,7 +154,8 @@ ROUTING STRATEGY:
 
 OUTPUT RULES:
 • JSON array: [{ "targetFilePath": "/Path1", "content": "same content" }, { "targetFilePath": "/Path2", "content": "same content" }]
-• Content = direct bullets like "TODO: 1. Fix login bug in auth system 2. Test payment integration 3. Deploy to staging"
+• Content = PROPER MARKDOWN with line breaks between items
+• **PRIORITIZE NUMBERED LISTS (1. 2. 3.) over bullet points** - better for tasks and priorities
 • NO explanations, overviews, or fluff
 • 5-10 words per bullet (brief but clear)
 • Keep original urgency/tone
@@ -164,8 +165,8 @@ OUTPUT RULES:
 EXAMPLE:
 If "Fix login bug" is relevant to both "Bug Tracker" and "Current Sprint", return:
 [
-  { "targetFilePath": "/Bug Tracker", "content": "TODO: 1. Fix login bug in auth system" },
-  { "targetFilePath": "/Current Sprint", "content": "TODO: 1. Fix login bug in auth system" }
+  { "targetFilePath": "/Bug Tracker", "content": "TODO:\n1. Fix login bug in auth system\n2. Test user authentication\n3. Update security docs" },
+  { "targetFilePath": "/Current Sprint", "content": "TODO:\n1. Fix login bug in auth system\n2. Test user authentication\n3. Update security docs" }
 ]`
 
   const models = ['o3-mini', 'gpt-4o']
