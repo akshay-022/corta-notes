@@ -35,4 +35,36 @@ ALTERNATIVE FORMAT (bullets):
 
 BAD FORMAT:
 TODO: 1. Fix bug 2. Call client 3. Update docs (all on one line - NO!)
+`
+
+export const ANTI_NEW_FILE_CREATION_RULES = `🚨 CRITICAL: AVOID CREATING NEW FILES AT ALL COSTS!
+• If content has already been routed to existing files, it's EXTREMELY UNLIKELY you need to create a new file
+• ALWAYS use existing files first - they exist for a reason
+• Only create new files if content is 100% unique and fits nowhere else
+• When in doubt, USE AN EXISTING FILE rather than create new one
+• Write FULL FILE PATHS (like "/Project Notes/Sprint Planning") to avoid creating accidental new notes
+• Partial paths create unwanted new files - ALWAYS use complete paths from file tree
+
+ROUTING PRIORITY:
+1. FIRST: Try existing files (even if not perfect match)
+2. SECOND: Use broader existing categories  
+3. LAST RESORT: Create new file (almost never needed)
+`
+
+export const MULTIPLE_DESTINATIONS_STRATEGY = `MULTIPLE DESTINATIONS STRATEGY:
+• DUPLICATE content to ALL relevant files - don't pick just one "best" match
+• Same content can appear in multiple files (Project Notes, Bug Tracker, Daily Tasks, etc.)
+• Better to have content in multiple relevant places than miss it somewhere
+• Each relevant file gets its own JSON object with the SAME content
+• If content fits 3 files, create 3 separate JSON objects with same content
+`
+
+export const MARKDOWN_OUTPUT_RULES = `OUTPUT FORMATTING:
+• Content = PROPER MARKDOWN with line breaks between items
+• **PRIORITIZE NUMBERED LISTS (1. 2. 3.) over bullet points** - better for tasks and priorities
+• NO explanations, overviews, or fluff
+• 5-10 words per bullet (brief but clear)
+• Keep original urgency/tone
+• Normal file names with spaces (no .md, no kebab-case)
+• REPEAT the same content across multiple files if it's relevant to multiple places
 ` 

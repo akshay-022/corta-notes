@@ -3,7 +3,13 @@ import { createClient } from '@/lib/supabase/supabase-client'
 import { ContentProcessor } from '@/lib/auto-organization/organized-file-updates/helpers/contentProcessor'
 import { ensureMetadataMarkedOrganized } from '@/lib/auto-organization/organized-file-updates/helpers/organized-file-metadata'
 import logger from '@/lib/logger'
-import { TIPTAP_FORMATTING_PROMPT, ULTRA_CONDENSED_ORGANIZATION_TEMPLATE } from '@/lib/promptTemplates'
+import { 
+  TIPTAP_FORMATTING_PROMPT, 
+  ULTRA_CONDENSED_ORGANIZATION_TEMPLATE,
+  ANTI_NEW_FILE_CREATION_RULES,
+  MULTIPLE_DESTINATIONS_STRATEGY,
+  MARKDOWN_OUTPUT_RULES
+} from '@/lib/promptTemplates'
 
 export interface OrganizeCurrentPageOptions {
   editor: Editor
@@ -137,33 +143,22 @@ ${organizationRules}
 
 Follow these rules when organizing content.\n` : ''
 
-  const prompt = `Organize personal notes. Route to ALL RELEVANT [FILE]s - content can go to MULTIPLE files if relevant. Use existing files first. Only create new [FILE] if nothing fits. NEVER route to [DIR]s.
+  const prompt = `Organize personal notes to ALL RELEVANT existing files. NEVER route to [DIR]s.
 ${TIPTAP_FORMATTING_PROMPT}
 ${ULTRA_CONDENSED_ORGANIZATION_TEMPLATE}
+${ANTI_NEW_FILE_CREATION_RULES}
 
 PAGE TITLE: "${pageTitle}"
 
 PARAGRAPHS TO ORGANIZE:
 ${list}${organizationRulesSection}
 
-ROUTING STRATEGY:
-• DUPLICATE CONTENT TO MULTIPLE FILES if relevant - don't try to find one "best" match
-• Same content can appear in Project Notes, Daily Tasks, Bug Tracker, etc. if it fits all
-• Better to have content in multiple relevant places than miss it in one
-• Each file gets its own JSON object with the SAME content if relevant
+${MULTIPLE_DESTINATIONS_STRATEGY}
 
-OUTPUT RULES:
-• JSON array: [{ "targetFilePath": "/Path1", "content": "same content" }, { "targetFilePath": "/Path2", "content": "same content" }]
-• Content = PROPER MARKDOWN with line breaks between items
-• **PRIORITIZE NUMBERED LISTS (1. 2. 3.) over bullet points** - better for tasks and priorities
-• NO explanations, overviews, or fluff
-• 5-10 words per bullet (brief but clear)
-• Keep original urgency/tone
-• Normal file names with spaces (no .md, no kebab-case)
-• REPEAT the same content across multiple files if it's relevant to multiple places
+${MARKDOWN_OUTPUT_RULES}
 
 EXAMPLE:
-If "Fix login bug" is relevant to both "Bug Tracker" and "Current Sprint", return:
+If "Fix login bug" is relevant to both "/Bug Tracker" and "/Current Sprint", return:
 [
   { "targetFilePath": "/Bug Tracker", "content": "TODO:\n1. Fix login bug in auth system\n2. Test user authentication\n3. Update security docs" },
   { "targetFilePath": "/Current Sprint", "content": "TODO:\n1. Fix login bug in auth system\n2. Test user authentication\n3. Update security docs" }

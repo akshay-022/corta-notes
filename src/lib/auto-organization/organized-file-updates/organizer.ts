@@ -16,7 +16,12 @@ import {
   serializeFileTree,
   OrganizedPageSlim,
 } from '@/lib/auto-organization/organized-file-updates/helpers/fileTree'
-import { TIPTAP_FORMATTING_PROMPT } from '@/lib/promptTemplates'
+import { 
+  TIPTAP_FORMATTING_PROMPT,
+  ANTI_NEW_FILE_CREATION_RULES,
+  MULTIPLE_DESTINATIONS_STRATEGY,
+  MARKDOWN_OUTPUT_RULES
+} from '@/lib/promptTemplates'
 
 interface ParagraphInfo {
   id: string
@@ -149,29 +154,22 @@ function buildPrompt(pageTitle: string, paragraphs: ParagraphInfo[]): string {
     .map((p, idx) => `${idx + 1}. ${p.content}`)
     .join('\n')
 
-  return `Route to ALL RELEVANT FILES. Content can go to MULTIPLE files if relevant. Never route to folders. Create new file if needed.
-
-MULTIPLE DESTINATIONS STRATEGY:
-• Send content to ALL relevant files - don't pick just one
-• Same content can appear in multiple files if it fits
-• Better to duplicate than miss important places
+  return `Route to ALL RELEVANT existing files. Never route to folders. AVOID CREATING NEW FILES.
+${ANTI_NEW_FILE_CREATION_RULES}
 
 PAGE: "${pageTitle}"
 
 PARAGRAPHS:
 ${list}
 
-OUTPUT: JSON array - duplicate content to multiple files if relevant
-[{ "targetFilePath": "/Path1", "content": "proper markdown bullets" }, { "targetFilePath": "/Path2", "content": "same proper markdown bullets" }]
+${MULTIPLE_DESTINATIONS_STRATEGY}
 
-• Content = PROPER MARKDOWN with line breaks like:
-  "TODO:\n1. Fix login bug in auth system\n2. Test payment flow\n3. Deploy to staging"
-• **PRIORITIZE NUMBERED LISTS (1. 2. 3.) over bullet points** - better for tasks and priorities
-• NO explanations or overviews
-• 5-10 words per bullet (brief but clear)
+OUTPUT: JSON array - duplicate content to multiple existing files
+[{ "targetFilePath": "/Full/Path1", "content": "proper markdown bullets" }, { "targetFilePath": "/Full/Path2", "content": "same proper markdown bullets" }]
+
+${MARKDOWN_OUTPUT_RULES}
 • Normal file names (no .md extensions)
-• Keep all important info, just condensed
-• REPEAT same content for each relevant destination`
+• Keep all important info, just condensed`
 }
 
 async function callLLM(prompt: string): Promise<LLMOrganizationChunk[]> {
@@ -278,35 +276,26 @@ ${organizationRules}
 
 Follow these rules when organizing content.\n` : ''
 
-  return `Route to ALL RELEVANT existing [FILE]s. Content can go to MULTIPLE files if relevant. Only create new [FILE] if nothing fits. NEVER route to [DIR]s.
+  return `Route to ALL RELEVANT existing [FILE]s from the file tree. NEVER route to [DIR]s.
 ${TIPTAP_FORMATTING_PROMPT}
-
-MULTIPLE DESTINATIONS STRATEGY:
-• DUPLICATE content to ALL relevant files - don't pick just one "best" match
-• Same content can appear in multiple files (Project Notes, Bug Tracker, Daily Tasks, etc.)
-• Better to have content in multiple relevant places than miss it somewhere
-• Each relevant file gets its own JSON object with the SAME content
+${ANTI_NEW_FILE_CREATION_RULES}
 
 PAGE: "${pageTitle}"
 
-FILE TREE:
+EXISTING FILE TREE:
 ${fileTreeContext}
 
 PARAGRAPHS:
 ${list}${organizationRulesSection}
 
+${MULTIPLE_DESTINATIONS_STRATEGY}
+
 OUTPUT:
 • JSON array: [{ "targetFilePath": "/Path1", "relevance": 0.9, "content": "same content" }, { "targetFilePath": "/Path2", "relevance": 0.8, "content": "same content" }]
-• Content = PROPER MARKDOWN with line breaks between items
-• **PRIORITIZE NUMBERED LISTS (1. 2. 3.) over bullet points** - better for tasks and priorities
-• NO explanations or overviews
-• 5-10 words per bullet (brief but clear)
-• Keep original tone/urgency
-• Normal file names (no .md, no kebab-case)
-• REPEAT the same content for each relevant destination
+${MARKDOWN_OUTPUT_RULES}
 
 EXAMPLE:
-If "Fix API bug" is relevant to both "Bug Tracker" and "Current Sprint":
+If "Fix API bug" is relevant to both "/Bug Tracker" and "/Current Sprint" from the file tree:
 [
   { "targetFilePath": "/Bug Tracker", "relevance": 0.9, "content": "TODO:\n1. Fix API authentication bug\n2. Test login endpoints\n3. Update security headers" },
   { "targetFilePath": "/Current Sprint", "relevance": 0.8, "content": "TODO:\n1. Fix API authentication bug\n2. Test login endpoints\n3. Update security headers" }
