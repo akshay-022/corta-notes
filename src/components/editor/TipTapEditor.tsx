@@ -133,8 +133,8 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       .select()
       .single()
 
-    if (data && !isUserTyping) {
-      // Only update parent state if user isn't actively typing
+    if (data) {
+      // Always update parent state after successful save
       onUpdate(data)
     }
 

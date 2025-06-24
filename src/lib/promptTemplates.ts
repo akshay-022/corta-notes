@@ -60,8 +60,6 @@ export const MULTIPLE_DESTINATIONS_STRATEGY = `MULTIPLE DESTINATIONS STRATEGY:
 export const MARKDOWN_OUTPUT_RULES = `OUTPUT FORMATTING:
 • Content = PROPER MARKDOWN with line breaks between items
 • **PRIORITIZE NUMBERED LISTS (1. 2. 3.) over bullet points** - better for tasks and priorities
-• NO explanations, overviews, or fluff
-• 5-10 words per bullet (brief but clear)
 • Keep original urgency/tone
 • Normal file names with spaces (no .md, no kebab-case)
 • REPEAT the same content across multiple files if it's relevant to multiple places
@@ -78,10 +76,15 @@ export const EDITING_USER_CONTENT_FOR_ORGANIZATION = `CONTENT EDITING GUIDELINES
 • **Maintain the user's urgency and emotion** - if they wrote "URGENT!" keep that energy
 • **Combine similar ideas** - group related thoughts together logically
 • **Keep original urgency/tone** - preserve the user's emotional context
-• **NO explanations, overviews, or fluff** - get straight to the point
-• **Focus on organization, not reduction** - make it easier to scan and understand
+• **ADD CONTEXT AND EXPLANATIONS** - single-line bullets with no explanation are useless
+• **EXPLAIN WHY things matter** - add 1-2 sentences of context for each main point
+• **PROVIDE DETAILS** - don't just list items, explain what they mean or why they're important
+• **Focus on organization AND explanation** - make it both scannable and informative
 
 EXAMPLES:
-BAD: "Overview: This comprehensive analysis of the system requirements shows that we need to address several critical issues in our current implementation..."
-GOOD: "## Critical System Issues\n1. Fix login bug in auth system\n2. Test payment feature integration\n3. Deploy security updates"
+BAD: "Second brain delivers relevant content only" (no context, no explanation)
+GOOD: "## Second Brain Principles\n\n**Relevant Content Delivery**: The second brain should filter and surface only the most relevant information for your current context and goals. This reduces cognitive load by eliminating noise and helping you focus on what matters most for your immediate tasks.\n\n**High Surface Ingestion**: Design your system to capture information quickly and effortlessly, so you don't lose important insights in the moment."
+
+BAD: "Fix login bug" (too brief, no context)
+GOOD: "1. **Fix login authentication bug** - Users are getting 401 errors when trying to log in with valid credentials. This is blocking new user signups and affecting customer satisfaction."
 ` 
