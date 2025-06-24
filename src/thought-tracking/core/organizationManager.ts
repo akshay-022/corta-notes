@@ -359,40 +359,23 @@ export class OrganizationManager {
   }
 
   private getOrganizationInstructions(): string {
-    return `
-You are organizing personal notes and thoughts into a coherent file structure.
+    return `Organize personal notes. Group related edits. Use existing files first.
 
-CORE PRINCIPLE: Group N edits into M files where N >= M (multiple edits can go to the same file when they're related).
+CONDENSED CONTENT RULES:
+• NO explanations, introductions, or overviews
+• Direct content with brief context - like "TODO: 1. Fix login bug in auth system 2. Test payment flow 3. Deploy to staging"
+• 5-10 words per bullet (brief but clear)
+• Use bullets or numbers only
+• Keep original urgency/tone
+• NO corporate speak or fluff
 
-ORGANIZATION STRATEGY:
-1. ANALYZE CONTENT SIMILARITY: Group similar/related edits together
-2. USE EXISTING FILES: Prefer adding to existing relevant files when content fits
-3. CREATE NEW FILES: Only when content represents a distinct new topic that doesn't fit existing files
-4. BE EFFICIENT: Don't create unnecessary files - group related content together
+ORGANIZATION:
+- Similar edits → same file
+- Use existing files when possible
+- New file only if nothing fits
+- Group efficiently
 
-CONTENT REFINEMENT APPROACH:
-• Write like PERSONAL NOTES - conversational, direct, authentic
-• Preserve the user's original voice, tone, and urgency - don't sanitize
-• NO corporate speak, NO "Overview/Summary" sections, NO repetitive content
-• BE CONCISE - eliminate fluff and redundancy
-• Focus on actionable insights, not descriptions
-• Keep strong emotions, caps, urgency from original text
-• Use simple formatting - basic bullets or lists, not complex structures
-
-DECISION PROCESS:
-- If edits relate to existing file content: add to that file
-- If multiple edits are similar to each other: group them into one file (existing or new)
-- If edit is unique and substantial: consider new file
-- If edit is short/minor: add to most relevant existing file
-
-QUALITY ASSURANCE:
-- Preserve all information from the edits
-- Ensure all edits are incorporated somewhere
-- Maintain authentic voice and readability
-- Keep related information accessible
-- Focus on content similarity and logical grouping
-
-Remember: These are PERSONAL NOTES, not business documents. Keep them authentic and useful.
+OUTPUT: Condensed bullets like "TODO: 1. Fix login bug in auth system 2. Call client about timeline"
 `;
   }
 

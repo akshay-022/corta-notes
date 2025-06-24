@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/supabase-client'
 import { ContentProcessor } from '@/lib/auto-organization/organized-file-updates/helpers/contentProcessor'
 import { ensureMetadataMarkedOrganized } from '@/lib/auto-organization/organized-file-updates/helpers/organized-file-metadata'
 import logger from '@/lib/logger'
-import { TIPTAP_FORMATTING_PROMPT } from '@/lib/promptTemplates'
+import { TIPTAP_FORMATTING_PROMPT, ULTRA_CONDENSED_ORGANIZATION_TEMPLATE } from '@/lib/promptTemplates'
 
 export interface OrganizeCurrentPageOptions {
   editor: Editor
@@ -137,41 +137,35 @@ ${organizationRules}
 
 Follow these rules when organizing content.\n` : ''
 
-  const prompt = `You are organizing personal notes. **Heavily prioritise routing paragraphs to EXISTING [FILE]s whenever they are relevant. Only create a new [FILE] if there is truly no suitable existing destination.** NEVER route to [DIR]s (you must always choose a file).
-${TIPTAP_FORMATTING_PROMPT}
+  const prompt = `Organize personal notes. Route to ALL RELEVANT [FILE]s - content can go to MULTIPLE files if relevant. Use existing files first. Only create new [FILE] if nothing fits. NEVER route to [DIR]s.
+${ULTRA_CONDENSED_ORGANIZATION_TEMPLATE}
 
 PAGE TITLE: "${pageTitle}"
 
-ALL PARAGRAPHS TO ORGANIZE:
+PARAGRAPHS TO ORGANIZE:
 ${list}${organizationRulesSection}
 
-TASK:
-1. Route each paragraph to the best file location based on content and context
-2. Group related paragraphs together in the same destination  
-3. For each destination return:
-   { "targetFilePath": "/Path/To/Location", "content": "(organized content)" }
-4. Use normal titles with spaces for file paths (e.g., "AI Journal", "Project Notes")
-5. NEVER use kebab-case, underscores, or .md extensions in file names
-6. Respond ONLY with JSON array (no markdown, no extra text)
+ROUTING STRATEGY:
+• DUPLICATE CONTENT TO MULTIPLE FILES if relevant - don't try to find one "best" match
+• Same content can appear in Project Notes, Daily Tasks, Bug Tracker, etc. if it fits all
+• Better to have content in multiple relevant places than miss it in one
+• Each file gets its own JSON object with the SAME content if relevant
 
-CRITICAL CONTENT REQUIREMENTS:
-• Write like PERSONAL NOTES - conversational, direct, authentic
-• Keep the user's original voice and urgency - don't sanitize their tone
-• NO corporate speak, NO "Overview/Summary" sections, NO repetitive content
-• BE CONCISE - eliminate fluff and redundancy 
-• DO NOT MISS OR DROP any important detail from any paragraph – everything the user wrote must appear in the organized result (possibly rewritten, but present)
-• Focus on actionable insights, not descriptions
-• Preserve strong emotions, caps, urgency from original text
-• Use simple formatting - basic bullets or lists, not complex structures
-• Add clear, concise titles when organizing new sections
-• Use \\n\\n for proper line breaks between topics
+OUTPUT RULES:
+• JSON array: [{ "targetFilePath": "/Path1", "content": "same content" }, { "targetFilePath": "/Path2", "content": "same content" }]
+• Content = direct bullets like "TODO: 1. Fix login bug in auth system 2. Test payment integration 3. Deploy to staging"
+• NO explanations, overviews, or fluff
+• 5-10 words per bullet (brief but clear)
+• Keep original urgency/tone
+• Normal file names with spaces (no .md, no kebab-case)
+• REPEAT the same content across multiple files if it's relevant to multiple places
 
-BAD: "Overview: This section provides a comprehensive analysis of..."
-GOOD: "Need annotation feature - users want control over routing"
-
-Remember: These are PERSONAL NOTES, not business documents. Keep them authentic and useful.
-
-Also, do NOT repeat page title in your content. That is already the heading of the page, it will not change.`
+EXAMPLE:
+If "Fix login bug" is relevant to both "Bug Tracker" and "Current Sprint", return:
+[
+  { "targetFilePath": "/Bug Tracker", "content": "TODO: 1. Fix login bug in auth system" },
+  { "targetFilePath": "/Current Sprint", "content": "TODO: 1. Fix login bug in auth system" }
+]`
 
   const models = ['o3-mini', 'gpt-4o']
   

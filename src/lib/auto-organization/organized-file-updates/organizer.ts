@@ -148,7 +148,27 @@ function buildPrompt(pageTitle: string, paragraphs: ParagraphInfo[]): string {
     .map((p, idx) => `${idx + 1}. ${p.content}`)
     .join('\n')
 
-  return `You are an intelligent knowledge organizer. You MUST MUST MUST only route things into a file and NOT a folder. If there is no file, then create a new file. \n\nPAGE TITLE: "${pageTitle}"\n\nUNORGANIZED PARAGRAPHS:\n${list}\n\nINSTRUCTIONS:\n– Group the ideas logically and rewrite them so each target file/folder receives one coherent \"content\" block.\n– For each destination, output a JSON object with:\n  {\n    \"targetFilePath\": \"/Path/To/Location\",\n    \"content\": \"(merged and refined text)\"\n  }\n– Use normal titles with spaces for file paths (e.g., \"AI Journal\", \"Project Notes\")\n– NEVER use kebab-case, underscores, or .md extensions in file names\n– Files have NO extension.\n– A paragraph may appear in multiple content blocks if it fits multiple places.\n– Preserve all information; order does not matter.\n– Respond with a JSON ARRAY ONLY, no markdown fences, no extra text.`
+  return `Route to ALL RELEVANT FILES. Content can go to MULTIPLE files if relevant. Never route to folders. Create new file if needed.
+
+MULTIPLE DESTINATIONS STRATEGY:
+• Send content to ALL relevant files - don't pick just one
+• Same content can appear in multiple files if it fits
+• Better to duplicate than miss important places
+
+PAGE: "${pageTitle}"
+
+PARAGRAPHS:
+${list}
+
+OUTPUT: JSON array - duplicate content to multiple files if relevant
+[{ "targetFilePath": "/Path1", "content": "condensed bullets" }, { "targetFilePath": "/Path2", "content": "same condensed bullets" }]
+
+• Content = direct like "TODO: 1. Fix login bug 2. Test payment flow"
+• NO explanations or overviews
+• 5-10 words per bullet (brief but clear)
+• Normal file names (no .md extensions)
+• Keep all important info, just condensed
+• REPEAT same content for each relevant destination`
 }
 
 async function callLLM(prompt: string): Promise<LLMOrganizationChunk[]> {
@@ -255,54 +275,37 @@ ${organizationRules}
 
 Follow these rules when organizing content.\n` : ''
 
-  return `You are organizing personal notes. You MUST route to existing [FILE]s whenever possible. ONLY create new [FILE]s if absolutely no existing file is suitable. NEVER route to [DIR]s.
+  return `Route to ALL RELEVANT existing [FILE]s. Content can go to MULTIPLE files if relevant. Only create new [FILE] if nothing fits. NEVER route to [DIR]s.
 
-**CRITICAL ROUTING RULE: PREFER EXISTING FILES OVER NEW ONES**
-- Existing files exist for a reason - they represent established categories and topics
-- Look for the MOST SUITABLE existing file first, even if it's not a perfect match
-- Only create new files when content is genuinely unique and doesn't fit anywhere
-- When in doubt, choose an existing file over creating a new one
+MULTIPLE DESTINATIONS STRATEGY:
+• DUPLICATE content to ALL relevant files - don't pick just one "best" match
+• Same content can appear in multiple files (Project Notes, Bug Tracker, Daily Tasks, etc.)
+• Better to have content in multiple relevant places than miss it somewhere
+• Each relevant file gets its own JSON object with the SAME content
 
-PAGE TITLE: "${pageTitle}"
+PAGE: "${pageTitle}"
 
-FULL PAGE CONTENT (for context):
-"""
-${fullPageText.slice(0, 1200)}
-"""
-
-CURRENT FILE TREE:
+FILE TREE:
 ${fileTreeContext}
 
-UNORGANIZED PARAGRAPHS:
+PARAGRAPHS:
 ${list}${organizationRulesSection}
 
-TASK:
-1. **FIRST**: Scan existing [FILE]s for the most suitable destination
-2. **SECOND**: Only if no existing file fits, create a new [FILE]
-3. Group related paragraphs together in the same destination  
-4. For each destination return:
-   { "targetFilePath": "/Path/To/Location", "relevance": 0.0-1.0, "content": "(organized content)" }
-5. Use normal titles with spaces for file paths (e.g., "AI Journal", "Project Notes")
-6. NEVER use kebab-case, underscores, or .md extensions in file names
-7. Respond ONLY with JSON array (no markdown, no extra text)
+OUTPUT:
+• JSON array: [{ "targetFilePath": "/Path1", "relevance": 0.9, "content": "same content" }, { "targetFilePath": "/Path2", "relevance": 0.8, "content": "same content" }]
+• Content = direct bullets like "TODO: 1. Fix login bug in auth system 2. Test payment flow 3. Deploy to staging"
+• NO explanations or overviews
+• 5-10 words per bullet (brief but clear)
+• Keep original tone/urgency
+• Normal file names (no .md, no kebab-case)
+• REPEAT the same content for each relevant destination
 
-**REMEMBER: Existing files are preferred - they maintain your established knowledge structure!**
-
-CRITICAL CONTENT REQUIREMENTS:
-• Write like PERSONAL NOTES - conversational, direct, authentic
-• Keep the user's original voice and urgency - don't sanitize their tone
-• NO corporate speak, NO "Overview/Summary" sections, NO repetitive content
-• BE CONCISE - eliminate fluff and redundancy 
-• Focus on actionable insights, not descriptions
-• Preserve strong emotions, caps, urgency from original text
-• Use simple formatting - basic bullets or lists, not complex structures
-• Add clear, concise titles when organizing new sections
-• Use \n\n for proper line breaks between topics
-
-BAD: "Overview: This section provides a comprehensive analysis of..."
-GOOD: "Need annotation feature - users want control over routing"
-
-Remember: These are PERSONAL NOTES, not business documents. Keep them authentic and useful.
+EXAMPLE:
+If "Fix API bug" is relevant to both "Bug Tracker" and "Current Sprint":
+[
+  { "targetFilePath": "/Bug Tracker", "relevance": 0.9, "content": "TODO: 1. Fix API authentication bug" },
+  { "targetFilePath": "/Current Sprint", "relevance": 0.8, "content": "TODO: 1. Fix API authentication bug" }
+]
 
 `
 

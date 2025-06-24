@@ -372,9 +372,33 @@ export class ContentProcessor {
       const { ensureParagraphMetadata } = require('./organized-file-metadata')
       const allNodes = ensureParagraphMetadata(existingContent?.content || [], pageUuid)
 
-      // Collect paragraph nodes after ensuring IDs
+      // Collect paragraph nodes after ensuring IDs - filter to TODAY ONLY
       const paragraphNodes = allNodes.filter((n: any) => n.type === 'paragraph')
-      const recentNodes = paragraphNodes.length <= 30 ? paragraphNodes : paragraphNodes.slice(-30)
+      
+      // Get today's date boundaries (start and end of today)
+      const today = new Date()
+      const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+      const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1)
+      
+      // Filter paragraphs to only include those created/updated TODAY
+      const todayNodes = paragraphNodes.filter((node: any) => {
+        const lastUpdated = node.attrs?.metadata?.lastUpdated
+        if (!lastUpdated) return false // Skip nodes without timestamps
+        
+        const nodeDate = new Date(lastUpdated)
+        return nodeDate >= startOfToday && nodeDate < endOfToday
+      })
+      
+      // Use today's nodes (even if less than 30) - better to have fewer relevant nodes than old irrelevant ones
+      const recentNodes = todayNodes
+
+      console.log('📅 Content filtering results:', {
+        totalParagraphs: paragraphNodes.length,
+        todayParagraphs: todayNodes.length,
+        startOfToday: startOfToday.toISOString(),
+        endOfToday: endOfToday.toISOString(),
+        sampleTimestamps: todayNodes.slice(0, 3).map((n: any) => n.attrs?.metadata?.lastUpdated)
+      })
 
       const recentBlockText = recentNodes
         .map((node: any) => {
@@ -390,40 +414,30 @@ ${organizationRules}
 
 Follow these rules when organizing and merging content.\n` : ''
 
-      const prompt = `You are helping merge new content into an existing page that is sorted by recency.
-${TIPTAP_FORMATTING_PROMPT}
+      const prompt = `Merge new content into existing page. Find best insert point.
 
-EXISTING RECENT PARAGRAPHS (with IDs):
+EXISTING PARAGRAPHS (with IDs):
 ${recentBlockText}
 
-NEW CONTENT TO INTEGRATE:
+NEW CONTENT:
 ${newText}${organizationRulesSection}
 
-TASK: Decide ABOVE WHICH paragraph ID the merged content should be inserted (that paragraph and everything after it stay below).
-Create one cohesive, well-formatted section that combines both the recent paragraphs (you may rewrite them) and the new content.
-IMPORTANT: Do NOT output any standalone page title or heading at the very top. Start directly with the merged content section.
+MERGE RULES:
+• Condensed output with brief context - like "TODO: 1. Fix login bug in auth system 2. Test payment integration 3. Deploy to staging"
+• NO explanations, overviews, or fluff
+• 5-10 words per bullet (brief but clear)
+• Keep original urgency/tone
+• Combine similar ideas
+• Use bullets or numbers only
+• NO walls of text
 
-CRITICAL REQUIREMENTS:
-• Write like PERSONAL NOTES, not formal documents
-• Keep the user's original voice and tone - if they write urgently, keep it urgent
-• NO corporate speak, NO "Overview/Summary" sections, NO repetitive bullet points  
-• BE CONCISE - eliminate all redundancy and fluff
-• DO NOT DROP any important detail – the merged section must include every key idea from both recent paragraphs and new text
-• Focus on WHAT MATTERS - actionable insights, not descriptions
-• Use natural, conversational language like talking to yourself
-• Preserve strong emotions, caps, urgency - don't sanitize the user's voice
-• Combine similar ideas into single, clear statements
-• Use simple formatting - basic bullets or numbered lists, not complex structures
-• Prefer bullet points and short lists; break complex ideas into concise bullets for easy scanning — **no walls of text**
-• Never output raw HTML tags like <br> – use real line breaks or Markdown only
+BAD: "Overview: This comprehensive analysis of the system requirements..."
+GOOD: "TODO: 1. Fix login bug in auth system 2. Test payment feature integration"
 
-BAD EXAMPLE: "Overview: This section delivers a cohesive view of..." 
-GOOD EXAMPLE: "Need to add annotation feature - users want control over where stuff goes"
-
-Respond ONLY with valid JSON of the form:
+JSON output only:
 {
   "insertAboveParagraphId": "<paragraphId>",
-  "mergedText": "<your merged section text>"
+  "mergedText": "<condensed bullets (your merged section text)>"
 }
 
 `
