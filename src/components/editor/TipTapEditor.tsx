@@ -659,7 +659,11 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
         <BubbleMenu 
           editor={editor} 
           tippyOptions={{ duration: 100 }}
-          shouldShow={(_) => false /* temporarily disabled metadata bubble */}
+          shouldShow={({ editor }) => {
+            const { from, to } = editor.state.selection
+            // Show when text is selected and we have metadata to display
+            return from !== to && !!selectedParagraphMetadata
+          }}
         >
           <div className="bg-[#2a2a2a] border border-gray-600 rounded-lg p-3 shadow-lg min-w-[300px] max-w-[500px] z-50">
             <div className="text-xs text-gray-300">

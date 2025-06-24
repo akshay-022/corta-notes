@@ -372,41 +372,50 @@ export class ContentProcessor {
       const { ensureParagraphMetadata } = require('./organized-file-metadata')
       const allNodes = ensureParagraphMetadata(existingContent?.content || [], pageUuid)
 
-      // Collect paragraph nodes after ensuring IDs - filter to TODAY ONLY
-      const paragraphNodes = allNodes.filter((n: any) => n.type === 'paragraph')
-      
       // Get today's date boundaries (start and end of today)
       const today = new Date()
       const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
       const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1)
       
-      // Filter paragraphs to only include those created/updated TODAY
-      const todayNodes = paragraphNodes.filter((node: any) => {
-        const lastUpdated = node.attrs?.metadata?.lastUpdated
-        if (!lastUpdated) return false // Skip nodes without timestamps
+      // Find boundary: continuous today's content at top until first non-today node
+      let boundaryIndex = 0
+      for (let i = 0; i < allNodes.length; i++) {
+        const lastUpdated = allNodes[i].attrs?.metadata?.lastUpdated
+        if (!lastUpdated) {
+          // No timestamp = boundary found
+          break
+        }
         
         const nodeDate = new Date(lastUpdated)
-        return nodeDate >= startOfToday && nodeDate < endOfToday
-      })
-      
-      // Use today's nodes (even if less than 30) - better to have fewer relevant nodes than old irrelevant ones
-      const recentNodes = todayNodes
+        if (nodeDate >= startOfToday && nodeDate < endOfToday) {
+          boundaryIndex = i + 1 // Continue taking today's content
+        } else {
+          // Hit non-today content = boundary found
+          break
+        }
+      }
 
-      console.log('📅 Content filtering results:', {
-        totalParagraphs: paragraphNodes.length,
-        todayParagraphs: todayNodes.length,
+      const topTodayNodes = allNodes.slice(0, boundaryIndex)
+      const everythingAfterBoundary = allNodes.slice(boundaryIndex)
+
+      console.log('📅 Content boundary analysis:', {
+        totalNodes: allNodes.length,
+        boundaryIndex,
+        topTodayNodes: topTodayNodes.length,
+        afterBoundaryNodes: everythingAfterBoundary.length,
         startOfToday: startOfToday.toISOString(),
         endOfToday: endOfToday.toISOString(),
-        sampleTimestamps: todayNodes.slice(0, 3).map((n: any) => n.attrs?.metadata?.lastUpdated)
+        sampleTopTodayTimestamps: topTodayNodes.slice(0, 3).map((n: any) => n.attrs?.metadata?.lastUpdated),
+        firstAfterBoundaryTimestamp: everythingAfterBoundary[0]?.attrs?.metadata?.lastUpdated
       })
 
-      const recentBlockText = recentNodes
+      // Extract text from top today's content for LLM context
+      const todayText = topTodayNodes
         .map((node: any) => {
-          const pid = node.attrs.id || node.attrs.metadata.id
           const text = (node.content || []).map((n: any) => n.text || '').join('')
-          return `Paragraph ${pid}: ${text}`
+          return text
         })
-        .join('\n')
+        .join('\n\n')
 
       const organizationRulesSection = organizationRules?.trim() ? 
         `\n\nORGANIZATION RULES FOR THIS PAGE:
@@ -414,12 +423,12 @@ ${organizationRules}
 
 Follow these rules when organizing and merging content.\n` : ''
 
-      const prompt = `Merge new content into existing page. Find best insert point.
+      const prompt = `Merge and organize today's content with new content. Replace all of today's content with this merged result.
 
-EXISTING PARAGRAPHS (with IDs):
-${recentBlockText}
+TODAY'S EXISTING CONTENT:
+${todayText}
 
-NEW CONTENT:
+NEW CONTENT TO MERGE:
 ${newText}${organizationRulesSection}
 
 MERGE RULES:
@@ -436,8 +445,7 @@ GOOD: "TODO:\n1. Fix login bug in auth system\n2. Test payment feature integrati
 
 JSON output only:
 {
-  "insertAboveParagraphId": "<paragraphId>",
-  "mergedText": "<condensed bullets (your merged section text)>"
+  "mergedText": "<condensed merged content that replaces all of today's content>"
 }
 
 `
@@ -455,38 +463,38 @@ JSON output only:
         .trim()
 
       const parsed = JSON.parse(cleaned)
-      const insertId: string = parsed.insertAboveParagraphId
       const mergedText: string = parsed.mergedText
-      if (!insertId || !mergedText) throw new Error('LLM missing fields')
+      if (!mergedText) throw new Error('LLM missing mergedText field')
 
+      // Create new content from merged text
       const mergedJSON = this.createTipTapContent(mergedText, pageUuid)
-      // Metadata is already added by createTipTapContent, but ensure it's applied
       const mergedNodesWithMeta = mergedJSON.content
 
-      // Build new content array
-      const newContentArray: any[] = []
-      let inserted = false
-      for (const node of allNodes) {
-        const nid = node.attrs?.id || node.attrs?.metadata?.id
-        if (!inserted && nid === insertId) {
-          // Insert merged section before this node
-          newContentArray.push(...mergedNodesWithMeta)
-          inserted = true
-        }
-        if (inserted) {
-          // Keep the rest of the nodes as-is
-          newContentArray.push(node)
+      // Create empty paragraph for spacing with today's metadata
+      const spacingParagraph = {
+        type: 'paragraph',
+        content: [],
+        attrs: {
+          id: `${pageUuid}-spacing-${Date.now()}`,
+          metadata: {
+            id: `${pageUuid}-spacing-${Date.now()}`,
+            isOrganized: false,
+            lastUpdated: new Date().toISOString(),
+            organizationStatus: 'no'
+          }
         }
       }
 
-      // If insertId not found, prepend merged section
-      if (!inserted) {
-        newContentArray.unshift(...mergedNodesWithMeta)
-      }
+      // Build final content: new merged content at top + spacing + everything after boundary preserved
+      const finalContent = [
+        ...mergedNodesWithMeta,        // Today's new merged content at top
+        spacingParagraph,              // Empty paragraph for spacing
+        ...everythingAfterBoundary     // Everything after boundary preserved untouched
+      ]
 
       return {
         ...(existingContent || { type: 'doc' }),
-        content: newContentArray,
+        content: finalContent,
       }
     } catch (err) {
       console.error('smartMergeTipTapContent fallback', err)
