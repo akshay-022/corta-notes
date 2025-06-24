@@ -1,5 +1,5 @@
 import { RefinementItem, LineEdit } from '@/thought-tracking/core/organization/types'
-import { TIPTAP_FORMATTING_PROMPT } from '@/lib/promptTemplates'
+import { TIPTAP_FORMATTING_PROMPT, EDITING_USER_CONTENT_FOR_ORGANIZATION } from '@/lib/promptTemplates'
 import { Editor } from '@tiptap/core'
 import Document from '@tiptap/extension-document'
 import Paragraph from '@tiptap/extension-paragraph'
@@ -431,21 +431,12 @@ ${todayText}
 NEW CONTENT TO MERGE:
 ${newText}${organizationRulesSection}
 
-MERGE RULES:
-• Condensed output with brief context - like "TODO: 1. Fix login bug in auth system 2. Test payment integration 3. Deploy to staging"
-• NO explanations, overviews, or fluff
-• 5-10 words per bullet (brief but clear)
-• Keep original urgency/tone
-• Combine similar ideas
-• Use bullets or numbers only
-• NO walls of text
+${EDITING_USER_CONTENT_FOR_ORGANIZATION}
 
-BAD: "Overview: This comprehensive analysis of the system requirements..."
-GOOD: "TODO:\n1. Fix login bug in auth system\n2. Test payment feature integration\n3. Deploy security updates"
 
 JSON output only:
 {
-  "mergedText": "<condensed merged content that replaces all of today's content>"
+  "mergedText": "<well-organized merged content that replaces all of today's content>"
 }
 
 `

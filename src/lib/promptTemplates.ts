@@ -52,11 +52,8 @@ ROUTING PRIORITY:
 `
 
 export const MULTIPLE_DESTINATIONS_STRATEGY = `MULTIPLE DESTINATIONS STRATEGY:
-• DUPLICATE content to ALL relevant files - don't pick just one "best" match
-• Same content can appear in multiple files (Project Notes, Bug Tracker, Daily Tasks, etc.)
-• Better to have content in multiple relevant places than miss it somewhere
-• Each relevant file gets its own JSON object with the SAME content
-• If content fits 3 files, create 3 separate JSON objects with same content
+• Same content can appear in multiple files (Project Notes, Bug Tracker, Daily Tasks, etc.) but its SUPER rare.
+• If content fits 3 files very very well, create 3 separate JSON objects with same content. But doing things like putting TODOs in ideas is just stupid and wrong.
 `
 
 export const MARKDOWN_OUTPUT_RULES = `OUTPUT FORMATTING:
@@ -67,4 +64,23 @@ export const MARKDOWN_OUTPUT_RULES = `OUTPUT FORMATTING:
 • Keep original urgency/tone
 • Normal file names with spaces (no .md, no kebab-case)
 • REPEAT the same content across multiple files if it's relevant to multiple places
+`
+
+export const EDITING_USER_CONTENT_FOR_ORGANIZATION = `CONTENT EDITING GUIDELINES:
+• **PRESERVE the user's authentic language, tone, and voice** - don't rewrite their words
+• **GROUP related ideas together** under clear headings or sections
+• **Use bullet points and numbered lists** to break up walls of text
+• **Keep ALL important information** - don't cut out details, just organize them better
+• **Add structure with markdown headings** (## and ###) to create scannable sections
+• **Bold key terms and important points** for quick scanning
+• **Break long paragraphs** into shorter, digestible chunks
+• **Maintain the user's urgency and emotion** - if they wrote "URGENT!" keep that energy
+• **Combine similar ideas** - group related thoughts together logically
+• **Keep original urgency/tone** - preserve the user's emotional context
+• **NO explanations, overviews, or fluff** - get straight to the point
+• **Focus on organization, not reduction** - make it easier to scan and understand
+
+EXAMPLES:
+BAD: "Overview: This comprehensive analysis of the system requirements shows that we need to address several critical issues in our current implementation..."
+GOOD: "## Critical System Issues\n1. Fix login bug in auth system\n2. Test payment feature integration\n3. Deploy security updates"
 ` 

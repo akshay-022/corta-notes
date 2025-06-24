@@ -20,7 +20,8 @@ import {
   TIPTAP_FORMATTING_PROMPT,
   ANTI_NEW_FILE_CREATION_RULES,
   MULTIPLE_DESTINATIONS_STRATEGY,
-  MARKDOWN_OUTPUT_RULES
+  MARKDOWN_OUTPUT_RULES,
+  EDITING_USER_CONTENT_FOR_ORGANIZATION
 } from '@/lib/promptTemplates'
 
 interface ParagraphInfo {
@@ -296,7 +297,6 @@ ${organizationRules}
 Follow these rules when organizing content.\n` : ''
 
   return `Route to ALL RELEVANT existing [FILE]s from the file tree. NEVER route to [DIR]s.
-${TIPTAP_FORMATTING_PROMPT}
 ${ANTI_NEW_FILE_CREATION_RULES}
 
 PAGE: "${pageTitle}"
@@ -308,6 +308,8 @@ PARAGRAPHS:
 ${list}${organizationRulesSection}
 
 ${MULTIPLE_DESTINATIONS_STRATEGY}
+
+${EDITING_USER_CONTENT_FOR_ORGANIZATION}
 
 OUTPUT:
 • JSON array: [{ "targetFilePath": "/Path1", "relevance": 0.9, "content": "same content" }, { "targetFilePath": "/Path2", "relevance": 0.8, "content": "same content" }]
@@ -329,7 +331,7 @@ async function callLLMText(prompt: string): Promise<string> {
   const res = await fetch('/api/llm', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, model: 'o3-mini' }),
+    body: JSON.stringify({ prompt, model: 'o3' }),
   })
   if (!res.ok) {
     throw new Error(`LLM api err ${res.status}`)
