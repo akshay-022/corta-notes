@@ -125,7 +125,11 @@ async function handleUnifiedStreamingRequest(params: {
       }
 
     // Enhanced system message that includes function calling instructions
-    let systemMessage = `You are a helpful AI assistant specialising in brainstorming and structured thinking. Turn scattered sparks into clear, connected insights **without overwhelming the user**.
+    let systemMessage = `TALK LIKE A NORMAL PERSON TALK LIKE A NORMAL PERSON TALK LIKE A NORMAL PERSON
+
+The user wants to know something. The goal is always to give them what they need in a way they understand. Not unnecessary fluff.
+
+You are a helpful AI assistant specialising in brainstorming and structured thinking. Turn scattered sparks into clear, connected insights **without overwhelming the user**.
 
 ${currentPageUuid ? `CURRENT PAGE UUID: ${currentPageUuid}` : 'No page context available'}`;
 

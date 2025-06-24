@@ -120,7 +120,14 @@ export async function organizePage({ editor, pageUuid, pageTitle }: OrganizePage
       (c: any) => c.targetFilePath && c.content,
     )
 
-    logger.info('Routing returned chunks', { count: chunks.length })
+    logger.info('🤖 LLM routing returned chunks', { 
+      count: chunks.length,
+      targetPaths: chunks.map(c => c.targetFilePath),
+      chunks: chunks.map(c => ({ 
+        path: c.targetFilePath, 
+        contentPreview: c.content.substring(0, 100) + (c.content.length > 100 ? '...' : '') 
+      }))
+    })
 
     const { created, updated } = await applyOrganizationChunks(chunks)
     logger.info('applyOrganizationChunks result', {
@@ -246,6 +253,11 @@ async function getFileTreeContext() {
       .eq('organized', true)
       .eq('is_deleted', false)
 
+    logger.info('🌳 Raw pages data from database', { 
+      count: pages?.length || 0,
+      pages: pages?.map(p => ({ title: p.title, type: p.type, uuid: p.uuid.substring(0, 8) })) || []
+    })
+
     const slim: OrganizedPageSlim[] = (pages || []).map((p: any) => ({
       uuid: p.uuid,
       title: p.title,
@@ -254,7 +266,14 @@ async function getFileTreeContext() {
     }))
 
     const tree = buildFileTree(slim)
-    return { fileTreeContext: serializeFileTree(tree) }
+    const serializedTree = serializeFileTree(tree)
+    
+    logger.info('🌳 Serialized file tree context for LLM', { 
+      treeLength: serializedTree.length,
+      tree: serializedTree.substring(0, 500) + (serializedTree.length > 500 ? '...' : '')
+    })
+    
+    return { fileTreeContext: serializedTree }
   } catch (e) {
     logger.error('Failed building file tree context', { e })
     return { fileTreeContext: '' }

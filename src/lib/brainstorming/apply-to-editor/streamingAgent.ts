@@ -132,7 +132,11 @@ export class StreamingEditorAgent {
 
     // System message with function calling instructions
     const currentContent = this.editor?.getText() || ''
-    let systemMessage = `You are an AI assistant that helps users with their notes and documents.
+    let systemMessage = `TALK LIKE A NORMAL PERSON TALK LIKE A NORMAL PERSON TALK LIKE A NORMAL PERSON
+
+The user wants to know something. The goal is always to give them what they need in a way they understand. Not unnecessary fluff.
+
+You are an AI assistant that helps users with their notes and documents.
 
 You have access to a rewrite_editor function that can replace the user's editor content with new markdown content.
 

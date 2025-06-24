@@ -171,7 +171,11 @@ export class ConversationAgent {
    * Build the system message with function calling instructions
    */
   private buildSystemMessage(organizationInstructions?: string): string {
-    let systemMessage = `You are an AI assistant that can help users with their notes and documents. You have access to functions that allow you to:
+    let systemMessage = `TALK LIKE A NORMAL PERSON TALK LIKE A NORMAL PERSON TALK LIKE A NORMAL PERSON
+
+The user wants to know something. The goal is always to give them what they need in a way they understand. Not unnecessary fluff.
+
+You are an AI assistant that can help users with their notes and documents. You have access to functions that allow you to:
 
 1. Rewrite the entire editor content with new markdown content
 

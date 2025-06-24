@@ -70,6 +70,21 @@ class FileTreeEventManager {
           }
         }
       )
+      .on('postgres_changes', 
+        { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'pages',
+          filter: 'is_deleted=eq.true'
+        }, 
+        (payload) => {
+          const page = this.mapToOrganizedPageSlim(payload.new)
+          if (page) {
+            logger.info('FileTree soft DELETE event detected (is_deleted=true)', { pageTitle: page.title, pageUuid: page.uuid })
+            this.callbacks.forEach(cb => cb('DELETE', page))
+          }
+        }
+      )
       .subscribe()
   }
 

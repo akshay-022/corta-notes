@@ -19,6 +19,8 @@ const contentProcessor = new ContentProcessor()
 
 /** Ensure the full folder hierarchy exists and return the page representing the final file */
 async function ensurePageForPath(userId: string, filePath: string, supabase: any) {
+  logger.info('🔍 ensurePageForPath called', { filePath })
+  
   const segments = filePath.replace(/^\/+/, '').split('/')
   let parentUuid: string | null = null
   let currentPage: Page | null = null
@@ -49,9 +51,17 @@ async function ensurePageForPath(userId: string, filePath: string, supabase: any
     }
 
     if (existing) {
+      logger.info('🔍 Found existing page/folder', { title, type, uuid: existing.uuid.substring(0, 8) })
       currentPage = existing
       parentUuid = existing.uuid
     } else {
+      logger.info('🆕 Creating new page/folder (not found in database)', { 
+        title, 
+        type, 
+        parentUuid: parentUuid?.substring(0, 8) || 'root',
+        filePath 
+      })
+      
       // create
       const insertObj: Partial<Page> = {
         title,
@@ -79,10 +89,16 @@ async function ensurePageForPath(userId: string, filePath: string, supabase: any
 
       currentPage = newPage
       parentUuid = newPage.uuid
-      logger.info('Created new page/folder', { title, type, uuid: newPage.uuid })
+      logger.info('🆕 Created new page/folder', { title, type, uuid: newPage.uuid.substring(0, 8) })
     }
   }
 
+  logger.info('🔍 ensurePageForPath completed', { 
+    filePath, 
+    finalPageUuid: currentPage?.uuid.substring(0, 8),
+    finalPageTitle: currentPage?.title 
+  })
+  
   return currentPage
 }
 
