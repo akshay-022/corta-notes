@@ -18,12 +18,13 @@ interface ApplyResult {
 const contentProcessor = new ContentProcessor()
 
 /** Ensure the full folder hierarchy exists and return the page representing the final file */
-async function ensurePageForPath(userId: string, filePath: string, supabase: any) {
+async function ensurePageForPath(userId: string, filePath: string, supabase: any): Promise<{ page: Page | null, wasCreated: boolean }> {
   logger.info('🔍 ensurePageForPath called', { filePath })
   
   const segments = filePath.replace(/^\/+/, '').split('/')
   let parentUuid: string | null = null
   let currentPage: Page | null = null
+  let wasCreated = false
 
   // iterate through segments
   for (let i = 0; i < segments.length; i++) {
@@ -40,66 +41,53 @@ async function ensurePageForPath(userId: string, filePath: string, supabase: any
       .eq('type', type)
       .eq('is_deleted', false)
 
-    query = parentUuid ? query.eq('parent_uuid', parentUuid) : query.is('parent_uuid', null)
-
-    const { data: existingData, error } = await query.maybeSingle()
-
-    const existing = existingData as Page | null
-
-    if (error && error.code !== 'PGRST116') {
-      throw error
+    if (parentUuid) {
+      query = query.eq('parent_uuid', parentUuid)
+    } else {
+      query = query.is('parent_uuid', null)
     }
 
+    const { data: existing } = await query.single()
+
     if (existing) {
-      logger.info('🔍 Found existing page/folder', { title, type, uuid: existing.uuid.substring(0, 8) })
+      logger.info(`📁 Found existing ${type}`, { title, uuid: existing.uuid.substring(0, 8) })
       currentPage = existing
       parentUuid = existing.uuid
     } else {
-      logger.info('🆕 Creating new page/folder (not found in database)', { 
-        title, 
-        type, 
-        parentUuid: parentUuid?.substring(0, 8) || 'root',
-        filePath 
-      })
-      
-      // create
-      const insertObj: Partial<Page> = {
+      // Create new page/folder
+      const newPage: Partial<Page> = {
+        user_id: userId,
         title,
         type,
         parent_uuid: parentUuid,
-        user_id: userId,
         organized: true,
-        content: type === 'file' ? contentProcessor.createTipTapContent('') : null,
-        content_text: '',
-        visible: true,
-        is_deleted: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        content: isLast ? { type: 'doc', content: [] } : null,
+        content_text: isLast ? '' : null,
       }
 
-      const { data: newPageData, error: insertErr } = await supabase
+      const { data: created, error } = await supabase
         .from('pages')
-        .insert(insertObj)
+        .insert(newPage)
         .select()
         .single()
 
-      const newPage = newPageData as Page
+      if (error) {
+        logger.error(`🚨 Failed to create ${type}`, { title, error })
+        return { page: null, wasCreated: false }
+      }
 
-      if (insertErr) throw insertErr
-
-      currentPage = newPage
-      parentUuid = newPage.uuid
-      logger.info('🆕 Created new page/folder', { title, type, uuid: newPage.uuid.substring(0, 8) })
+      logger.info(`🆕 Creating new ${type}`, { title, uuid: (created as Page).uuid.substring(0, 8) })
+      currentPage = created as Page
+      parentUuid = (created as Page).uuid
+      
+      // Mark as created if this is the final file
+      if (isLast) {
+        wasCreated = true
+      }
     }
   }
 
-  logger.info('🔍 ensurePageForPath completed', { 
-    filePath, 
-    finalPageUuid: currentPage?.uuid.substring(0, 8),
-    finalPageTitle: currentPage?.title 
-  })
-  
-  return currentPage
+  return { page: currentPage, wasCreated }
 }
 
 export async function applyOrganizationChunks(chunks: OrganizedChunk[]): Promise<ApplyResult> {
@@ -115,10 +103,10 @@ export async function applyOrganizationChunks(chunks: OrganizedChunk[]): Promise
 
   for (const chunk of chunks) {
     try {
-      const page = await ensurePageForPath(user.id, chunk.targetFilePath, supabase)
+      const { page, wasCreated } = await ensurePageForPath(user.id, chunk.targetFilePath, supabase)
       if (!page) continue
 
-      const isNewFile = page.content_text === ''
+      const isNewFile = wasCreated
 
       let newContentJSON: any
       let newContentText: string
@@ -161,10 +149,12 @@ export async function applyOrganizationChunks(chunks: OrganizedChunk[]): Promise
         updated.push({ uuid: page.uuid, title: page.title, action: 'updated', timestamp: Date.now(), path: chunk.targetFilePath })
       }
 
-      logger.info('Updated page with organized chunk', {
-        pageUuid: page.uuid,
-        targetFilePath: chunk.targetFilePath,
-        isNewFile,
+      logger.info('📝 Processing organization chunk', {
+        targetPath: chunk.targetFilePath,
+        pageUuid: page.uuid.substring(0, 8),
+        pageTitle: page.title,
+        isNewFile: wasCreated,
+        chunkContentLength: chunk.content.length
       })
     } catch (err) {
       logger.error('Failed to apply chunk', { chunk, err })

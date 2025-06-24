@@ -1,3 +1,4 @@
+// This only goes in smart merge
 export const TIPTAP_FORMATTING_PROMPT = `Markdown Formatting Rules (apply strictly):
 • OUTPUT CLEAN MARKDOWN - not plain text, not HTML, not JSON
 • Prefer numbered lists (1. 2. 3.) or bullet lists (- item) for easy scanning
