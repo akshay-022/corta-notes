@@ -30,6 +30,7 @@ export class StreamingEditorAgent {
       selections?: string[]
       relevantDocuments?: Array<{ title: string; content: string }>
       conversationHistory?: any[]
+      organizationInstructions?: string
     }
   ): Promise<{
     response: string
@@ -38,7 +39,8 @@ export class StreamingEditorAgent {
   }> {
     logger.info('Processing user message with function calling', { 
       messageLength: userMessage.length,
-      hasContext: !!context 
+      hasContext: !!context,
+      hasOrganizationInstructions: !!context?.organizationInstructions
     })
 
     try {
@@ -123,13 +125,14 @@ export class StreamingEditorAgent {
       selections?: string[]
       relevantDocuments?: Array<{ title: string; content: string }>
       conversationHistory?: any[]
+      organizationInstructions?: string
     }
   ): ChatMessage[] {
     const messages: ChatMessage[] = []
 
     // System message with function calling instructions
     const currentContent = this.editor?.getText() || ''
-    const systemMessage = `You are an AI assistant that helps users with their notes and documents.
+    let systemMessage = `You are an AI assistant that helps users with their notes and documents.
 
 You have access to a rewrite_editor function that can replace the user's editor content with new markdown content.
 
@@ -141,10 +144,24 @@ CRITICAL RULES:
 - Use clean markdown formatting in the content parameter
 
 CURRENT EDITOR CONTENT:
-${currentContent}
+${currentContent}`;
+
+    // Add organization instructions if available
+    if (context?.organizationInstructions?.trim()) {
+      systemMessage += `
+
+ORGANIZATION INSTRUCTIONS FOR THIS PAGE:
+The user has defined specific organization rules for this page. When rewriting or organizing content, follow these guidelines:
+
+"${context.organizationInstructions.trim()}"
+
+Apply these rules when structuring content, deciding on organization, or making editorial decisions.`;
+    }
+
+    systemMessage += `
 
 If the user asks about their content or wants to discuss it, just respond normally without calling functions.
-Only call rewrite_editor when they specifically want you to modify the editor content.`
+Only call rewrite_editor when they specifically want you to modify the editor content.`;
 
     messages.push({
       role: 'system',

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { getRelevantMemories, formatMemoryContext, type RelevantMemory } from '@/lib/brainstorming';
 import { EDITOR_FUNCTIONS, executeEditorFunctionServerSide, EditorFunctionCall } from '@/lib/brainstorming/apply-to-editor/editorFunctions';
 import logger from '@/lib/logger';
+import { createClient } from '@/lib/supabase/supabase-client';
 
 export const runtime = 'edge';
 
@@ -79,6 +80,31 @@ async function handleUnifiedStreamingRequest(params: {
       pageUuid: currentPageUuid 
     });
 
+    // Get organization instructions from current page if available
+    let organizationInstructions = '';
+    if (currentPageUuid) {
+      try {
+        const supabase = createClient();
+        const { data: page } = await supabase
+          .from('pages')
+          .select('metadata')
+          .eq('uuid', currentPageUuid)
+          .single();
+        
+        const pageMetadata = page?.metadata as any;
+        organizationInstructions = pageMetadata?.organizationRules || '';
+        
+        if (organizationInstructions) {
+          logger.info('Loaded organization instructions for brainstorming', { 
+            pageUuid: currentPageUuid, 
+            instructionsLength: organizationInstructions.length 
+          });
+        }
+      } catch (error) {
+        logger.warn('Failed to load organization instructions', { error, pageUuid: currentPageUuid });
+      }
+    }
+
     // Build enhanced current message with all contexts
       let enhancedCurrentMessage = 'User Instruction (This is literally what you must answer, SUPER IMPORTANT):\n\n' + currentMessage + '\n\n\n\n\n\n\n\n';
     
@@ -99,9 +125,23 @@ async function handleUnifiedStreamingRequest(params: {
       }
 
     // Enhanced system message that includes function calling instructions
-    const systemMessage = `You are a helpful AI assistant specialising in brainstorming and structured thinking. Turn scattered sparks into clear, connected insights **without overwhelming the user**.
+    let systemMessage = `You are a helpful AI assistant specialising in brainstorming and structured thinking. Turn scattered sparks into clear, connected insights **without overwhelming the user**.
 
-${currentPageUuid ? `CURRENT PAGE UUID: ${currentPageUuid}` : 'No page context available'}
+${currentPageUuid ? `CURRENT PAGE UUID: ${currentPageUuid}` : 'No page context available'}`;
+
+    // Add organization instructions if available
+    if (organizationInstructions.trim()) {
+      systemMessage += `
+
+ORGANIZATION INSTRUCTIONS FOR THIS PAGE:
+The user has defined specific organization rules for this page. When helping them brainstorm or organize content, keep these instructions in mind:
+
+"${organizationInstructions.trim()}"
+
+Use these guidelines when suggesting content organization, structure, or when using the rewrite_editor function.`;
+    }
+
+    systemMessage += `
 
 You have access to a rewrite_editor function that can replace the user's editor content with new markdown content.
 

@@ -53,11 +53,13 @@ export class ConversationAgent {
       selections?: string[]
       relevantDocuments?: Array<{ title: string; content: string }>
       conversationHistory?: any[]
+      organizationInstructions?: string
     }
   ): Promise<AgentResponse> {
     logger.info('Processing user message', { 
       messageLength: userMessage.length,
-      hasContext: !!context 
+      hasContext: !!context,
+      hasOrganizationInstructions: !!context?.organizationInstructions
     })
 
     try {
@@ -92,10 +94,11 @@ export class ConversationAgent {
       selections?: string[]
       relevantDocuments?: Array<{ title: string; content: string }>
       conversationHistory?: any[]
+      organizationInstructions?: string
     }
   ): Promise<AgentResponse> {
     // Build the system message with function calling instructions
-    const systemMessage = this.buildSystemMessage()
+    const systemMessage = this.buildSystemMessage(context?.organizationInstructions)
     
     // Build the enhanced user message with context
     const enhancedMessage = this.buildEnhancedMessage(userMessage, context)
@@ -167,8 +170,8 @@ export class ConversationAgent {
   /**
    * Build the system message with function calling instructions
    */
-  private buildSystemMessage(): string {
-    return `You are an AI assistant that can help users with their notes and documents. You have access to functions that allow you to:
+  private buildSystemMessage(organizationInstructions?: string): string {
+    let systemMessage = `You are an AI assistant that can help users with their notes and documents. You have access to functions that allow you to:
 
 1. Rewrite the entire editor content with new markdown content
 
@@ -178,9 +181,25 @@ IMPORTANT GUIDELINES:
 - Use markdown formatting in your content
 - Be conversational and explain what you're doing
 - Preserve the user's authentic voice and tone
-- Only modify content when specifically requested
+- Only modify content when specifically requested`;
 
-When the user asks you to modify their content, use the appropriate functions to make the changes.`
+    // Add organization instructions if available
+    if (organizationInstructions?.trim()) {
+      systemMessage += `
+
+ORGANIZATION INSTRUCTIONS FOR THIS PAGE:
+The user has defined specific organization rules for this page. When helping them organize or rewrite content, follow these guidelines:
+
+"${organizationInstructions.trim()}"
+
+Apply these rules when structuring content, making editorial decisions, or organizing information.`;
+    }
+
+    systemMessage += `
+
+When the user asks you to modify their content, use the appropriate functions to make the changes.`;
+
+    return systemMessage;
   }
 
   /**

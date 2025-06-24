@@ -9,10 +9,9 @@ import Underline from '@tiptap/extension-underline'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Page, PageUpdate } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/supabase-client'
-import { Info, Edit2, Save, X, FileText, Eye, Edit3, Zap, MessageSquare } from 'lucide-react'
+import { Info, Edit2, Save, X, FileText, Eye, Edit3, MessageSquare } from 'lucide-react'
 
 import { setupAutoOrganization } from '@/lib/auto-organization/organized-file-updates'
-import { organizeCurrentPage } from '@/lib/auto-organization/organize-current-page'
 import { useNotes } from '@/components/left-sidebar/DashboardSidebarProvider'
 import logger from '@/lib/logger'
 import { DateDividerPlugin } from '@/lib/organized-notes-formatting/dateDividerPlugin'
@@ -40,7 +39,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   const [showSummary, setShowSummary] = useState(false) // Toggle between content and summary
   const [isOrganizationRulesOpen, setIsOrganizationRulesOpen] = useState(false)
   const [organizationRules, setOrganizationRules] = useState('')
-  const [isOrganizing, setIsOrganizing] = useState(false)
+
   
   const titleInputRef = useRef<HTMLInputElement>(null)
   const currentPageRef = useRef(page.uuid)
@@ -241,37 +240,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   }
 
   // Organize the entire page
-  const handleOrganizePage = async () => {
-    if (!editor || isOrganizing) return
-    
-    setIsOrganizing(true)
-    try {
-      logger.info('🚀 Starting page organization', { pageUuid: page.uuid, pageTitle: page.title })
-      
-      // Call the organize current page function
-      await organizeCurrentPage({
-        editor,
-        pageUuid: page.uuid,
-        pageTitle: page.title
-      })
-      
-      logger.info('✅ Page organization completed successfully', { pageUuid: page.uuid })
-      
-      // Refresh the page data if callback is available
-      if (pageRefreshCallbackRef.current) {
-        logger.info('🔄 Refreshing page data after organization', { pageUuid: page.uuid })
-        await pageRefreshCallbackRef.current()
-        logger.info('✅ Page data refresh completed', { pageUuid: page.uuid })
-      }
-      
-    } catch (error) {
-      logger.error('❌ Error organizing page:', error)
-      // You might want to show a toast notification here
-    } finally {
-      logger.info('🏁 Organization process finished, clearing loading state', { pageUuid: page.uuid })
-      setIsOrganizing(false)
-    }
-  }
+
 
   // Capture current selection when opening chat (only when Command+K is pressed)
   const captureCurrentSelection = useCallback(() => {
@@ -567,25 +536,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
             <Edit3 size={14} />
           </button>
           
-          {/* Organize Page Button */}
-          <button
-            onClick={handleOrganizePage}
-            disabled={isOrganizing}
-            className={`p-1.5 rounded transition-colors ${
-              isOrganizing 
-                ? 'text-blue-400 bg-blue-500/20 cursor-not-allowed' 
-                : 'text-gray-400 hover:text-white hover:bg-[#3a3a3a]'
-            }`}
-            title={isOrganizing ? "Organizing page..." : "Organize This Page"}
-          >
-            {isOrganizing ? (
-              <div className="w-3 h-3 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
-            ) : (
-              <Zap size={14} />
-            )}
-          </button>
-          
-          <div className="w-px h-4 bg-gray-600" />
+
           
           {/* Chat Toggle Button */}
           <button
@@ -619,15 +570,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
         </div>
       )}
 
-      {/* Organizing indicator */}
-      {isOrganizing && (
-        <div className="absolute top-4 left-4 md:left-6 z-10">
-          <div className="flex items-center gap-2 bg-blue-500/20 border border-blue-500/30 rounded-lg px-3 py-1">
-            <div className="w-3 h-3 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
-            <span className="text-blue-300 text-xs font-medium">Organizing page...</span>
-          </div>
-        </div>
-      )}
+
 
       {/* Editor container with independent scrolling */}
       <div className="flex-1 overflow-y-auto">
