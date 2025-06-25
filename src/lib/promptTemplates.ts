@@ -1,3 +1,61 @@
+
+
+// PROMPTS FOR ROUTING CONTENT TO FILES
+
+export const ANTI_NEW_FILE_CREATION_RULES = `🚨 CRITICAL: AVOID CREATING NEW FILES AT ALL COSTS!
+• If content has already been routed to existing files, it's EXTREMELY UNLIKELY you need to create a new file
+• ALWAYS use existing files first - they exist for a reason
+• Only create new files if content is 100% unique and fits nowhere else
+• When in doubt, USE AN EXISTING FILE rather than create new one
+• Write FULL FILE PATHS (like "/Project Notes/Sprint Planning") to avoid creating accidental new notes
+• Partial paths create unwanted new files - ALWAYS use complete paths from file tree
+
+ROUTING PRIORITY:
+1. FIRST: Try existing files (even if not perfect match)
+2. SECOND: Use broader existing categories  
+3. LAST RESORT: Create new file (almost never needed)
+`
+
+export const MULTIPLE_DESTINATIONS_STRATEGY = `MULTIPLE DESTINATIONS STRATEGY:
+• Same content can appear in multiple files (Project Notes, Bug Tracker, Daily Tasks, etc.) but its SUPER rare.
+• If content fits 3 files very very well, create 3 separate JSON objects with same content. But doing things like putting TODOs in ideas is just stupid and wrong.
+`
+
+
+export const ROUTING_CONTEXT_INSTRUCTIONS = `=== NEW CONTENT TO BE ORGANIZED ===
+These are the ONLY new unorganized paragraphs that need to be added to target files:
+
+{NEW_CONTENT_LIST}
+
+=== CONTEXT (for understanding only) ===
+This is the full page context where the new content was written. Use this to understand the context and flow:
+
+{FULL_PAGE_TEXT}
+
+=== END CONTEXT ==={ORGANIZATION_RULES_SECTION}`
+
+export const ROUTING_OUTPUT_FORMAT = `IMPORTANT: 
+- Your "content" field should include the new content AND context (including examples of existing organized content)
+- Structure your output to help the smart merge system understand what's new vs context
+- The smart merge system needs context that includes examples of existing organized content to make intelligent merging decisions
+- Format: "NEW CONTENT:\\n[new content]\\n\\nCONTEXT (for smart merge reference only):\\n[relevant context from full page + examples of existing organized content from target file]"
+
+OUTPUT:
+• JSON array with structured content: [{ "targetFilePath": "/Path1", "relevance": 0.9, "content": "NEW CONTENT:\\n[new content here]\\n\\nCONTEXT (for smart merge reference only):\\n[relevant context from full page + examples of existing organized content from target file]" }]`
+
+
+
+
+
+
+
+
+
+
+
+// PROMPTS FOR ORGANIZING NEW CONTENT IN ORGANIZED PAGES
+
+
 // This only goes in smart merge
 export const TIPTAP_FORMATTING_PROMPT = `Markdown Formatting Rules (apply strictly):
 • OUTPUT CLEAN MARKDOWN - not plain text, not HTML, not JSON
@@ -38,24 +96,6 @@ BAD FORMAT:
 TODO: 1. Fix bug 2. Call client 3. Update docs (all on one line - NO!)
 `
 
-export const ANTI_NEW_FILE_CREATION_RULES = `🚨 CRITICAL: AVOID CREATING NEW FILES AT ALL COSTS!
-• If content has already been routed to existing files, it's EXTREMELY UNLIKELY you need to create a new file
-• ALWAYS use existing files first - they exist for a reason
-• Only create new files if content is 100% unique and fits nowhere else
-• When in doubt, USE AN EXISTING FILE rather than create new one
-• Write FULL FILE PATHS (like "/Project Notes/Sprint Planning") to avoid creating accidental new notes
-• Partial paths create unwanted new files - ALWAYS use complete paths from file tree
-
-ROUTING PRIORITY:
-1. FIRST: Try existing files (even if not perfect match)
-2. SECOND: Use broader existing categories  
-3. LAST RESORT: Create new file (almost never needed)
-`
-
-export const MULTIPLE_DESTINATIONS_STRATEGY = `MULTIPLE DESTINATIONS STRATEGY:
-• Same content can appear in multiple files (Project Notes, Bug Tracker, Daily Tasks, etc.) but its SUPER rare.
-• If content fits 3 files very very well, create 3 separate JSON objects with same content. But doing things like putting TODOs in ideas is just stupid and wrong.
-`
 
 export const MARKDOWN_OUTPUT_RULES = `OUTPUT FORMATTING:
 • Content = PROPER MARKDOWN with line breaks between items
@@ -152,6 +192,18 @@ Eliminate biases – you must not have internal biases.
 No internal biases – definitely no internal biases. 
 `
 
+
+
+
+
+
+
+
+
+
+
+// PROMPTS FOR BRAINSTORMING
+
 export const BRAINSTORMING_SYSTEM_PROMPT = `
 
 The user wants to know something. The goal is always to give them exactly what they need. Not unnecessary fluff.
@@ -192,27 +244,6 @@ PARA PRINCIPLES - AVOID THESE MISTAKES:
 ✅ DO ask "When will I need to act on this?"
 
 Route content where you'll actually look for it when you need to take action.`
-
-export const ROUTING_CONTEXT_INSTRUCTIONS = `=== NEW CONTENT TO BE ORGANIZED ===
-These are the ONLY new unorganized paragraphs that need to be added to target files:
-
-{NEW_CONTENT_LIST}
-
-=== CONTEXT (for understanding only) ===
-This is the full page context where the new content was written. Use this to understand the context and flow:
-
-{FULL_PAGE_TEXT}
-
-=== END CONTEXT ==={ORGANIZATION_RULES_SECTION}`
-
-export const ROUTING_OUTPUT_FORMAT = `IMPORTANT: 
-- Your "content" field should include the new content AND context (including examples of existing organized content)
-- Structure your output to help the smart merge system understand what's new vs context
-- The smart merge system needs context that includes examples of existing organized content to make intelligent merging decisions
-- Format: "NEW CONTENT:\\n[new content]\\n\\nCONTEXT (for smart merge reference only):\\n[relevant context from full page + examples of existing organized content from target file]"
-
-OUTPUT:
-• JSON array with structured content: [{ "targetFilePath": "/Path1", "relevance": 0.9, "content": "NEW CONTENT:\\n[new content here]\\n\\nCONTEXT (for smart merge reference only):\\n[relevant context from full page + examples of existing organized content from target file]" }]`
 
 export const BRAINSTORMING_FUNCTION_CALLING_RULES = `
 You have access to a rewrite_editor function that can replace the user's editor content with new markdown content.
