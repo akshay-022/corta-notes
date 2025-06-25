@@ -288,7 +288,7 @@ function buildRoutingPrompt(
   fullPageText: string,
   organizationRules?: string,
 ) {
-  const list = paragraphs.map((p, i) => `${i + 1}. ${p.content}`).join('\n')
+  const newContentList = paragraphs.map((p, i) => `${i + 1}. ${p.content}`).join('\n')
   
   const organizationRulesSection = organizationRules?.trim() ? 
     `\n\nORGANIZATION RULES FOR THIS PAGE:
@@ -304,22 +304,40 @@ PAGE: "${pageTitle}"
 EXISTING FILE TREE:
 ${fileTreeContext}
 
-PARAGRAPHS:
-${list}${organizationRulesSection}
+=== NEW CONTENT TO BE ORGANIZED ===
+These are the ONLY new unorganized paragraphs that need to be added to target files:
+
+${newContentList}
+
+=== CONTEXT (for understanding only) ===
+This is the full page context where the new content was written. Use this to understand the context and flow:
+
+${fullPageText}
+
+=== END CONTEXT ===${organizationRulesSection}
 
 ${MULTIPLE_DESTINATIONS_STRATEGY}
 
 ${EDITING_USER_CONTENT_FOR_ORGANIZATION}
 
+IMPORTANT: 
+- Your "content" field should include the new content AND context (including examples of existing organized content)
+- Structure your output to help the smart merge system understand what's new vs context
+- The smart merge system needs context that includes examples of existing organized content to make intelligent merging decisions
+- Format: "NEW CONTENT:\n[new content]\n\nCONTEXT (for smart merge reference only):\n[relevant context from full page + examples of existing organized content from target file]"
+
 OUTPUT:
-• JSON array: [{ "targetFilePath": "/Path1", "relevance": 0.9, "content": "same content" }, { "targetFilePath": "/Path2", "relevance": 0.8, "content": "same content" }]
+• JSON array with structured content: [{ "targetFilePath": "/Path1", "relevance": 0.9, "content": "NEW CONTENT:\n[new content here]\n\nCONTEXT (for smart merge reference only):\n[relevant context from full page + examples of existing organized content from target file]" }]
 ${MARKDOWN_OUTPUT_RULES}
 
 EXAMPLE:
-If "Fix API bug" is relevant to both "/Bug Tracker" and "/Current Sprint" from the file tree:
+If NEW CONTENT "Fix API bug" is relevant to "/Bug Tracker" with context from a sprint planning page:
 [
-  { "targetFilePath": "/Bug Tracker", "relevance": 0.9, "content": "TODO:\n1. Fix API authentication bug\n2. Test login endpoints\n3. Update security headers" },
-  { "targetFilePath": "/Current Sprint", "relevance": 0.8, "content": "TODO:\n1. Fix API authentication bug\n2. Test login endpoints\n3. Update security headers" }
+  { 
+    "targetFilePath": "/Bug Tracker", 
+    "relevance": 0.9, 
+    "content": "NEW CONTENT:\nTODO:\n1. Fix API authentication bug\n2. Test login endpoints\n3. Update security headers\n\nCONTEXT (for smart merge reference only):\nThis was written during sprint planning while discussing Q1 priorities and security improvements. Related to user authentication issues reported last week. The target Bug Tracker file currently contains similar items like: • Database connection timeout - Priority: High • User profile page loading slowly - Status: In Progress • Mobile app crash on iOS 17 - Assigned: Sarah" 
+  }
 ]
 
 `

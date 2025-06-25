@@ -34,8 +34,6 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   const [isUserEditingTitle, setIsUserEditingTitle] = useState(false) // Track title editing specifically
 
   const [selectedParagraphMetadata, setSelectedParagraphMetadata] = useState<{id: string, metadata: any, pos?: number, nodeType?: string} | null>(null)
-  const [isEditingMetadata, setIsEditingMetadata] = useState(false)
-  const [metadataEditValue, setMetadataEditValue] = useState('')
   const [showSummary, setShowSummary] = useState(false) // Toggle between content and summary
   const [isOrganizationRulesOpen, setIsOrganizationRulesOpen] = useState(false)
   const [organizationRules, setOrganizationRules] = useState('')
@@ -371,23 +369,11 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
 
       // Update local state
       setSelectedParagraphMetadata(prev => prev ? { ...prev, metadata: parsedMetadata } : null)
-      setIsEditingMetadata(false)
-      setMetadataEditValue('')
     } catch (error) {
       console.error('Error updating metadata:', error)
       // Could add toast notification here
     }
   }, [editor, selectedParagraphMetadata])
-
-  // Handle metadata edit start
-  const startEditingMetadata = useCallback(() => {
-    if (selectedParagraphMetadata?.metadata) {
-      setMetadataEditValue(JSON.stringify(selectedParagraphMetadata.metadata, null, 2))
-    } else {
-      setMetadataEditValue('{}')
-    }
-    setIsEditingMetadata(true)
-  }, [selectedParagraphMetadata])
 
   // Update selected paragraph metadata when selection changes
   useEffect(() => {
@@ -732,26 +718,52 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                       {/* Organization Status */}
                       {selectedParagraphMetadata.metadata.isOrganized !== undefined && (
                         <div className="p-2 bg-[#1a1a1a] rounded">
-                          <div className="text-gray-400">
-                            Organized: <span className={`font-medium ${selectedParagraphMetadata.metadata.isOrganized ? 'text-green-400' : 'text-yellow-400'}`}>
-                              {selectedParagraphMetadata.metadata.isOrganized ? 'Yes' : 'No'}
-                            </span>
+                          <div className="text-gray-400 flex items-center justify-between">
+                            <span>Organized:</span>
+                            <select
+                              value={selectedParagraphMetadata.metadata.isOrganized ? 'true' : 'false'}
+                              onChange={(e) => {
+                                const newMetadata = {
+                                  ...selectedParagraphMetadata.metadata,
+                                  isOrganized: e.target.value === 'true'
+                                }
+                                updateNodeMetadata(newMetadata)
+                              }}
+                              className="bg-[#2a2a2a] border border-gray-600 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-500"
+                            >
+                              <option value="true">Yes</option>
+                              <option value="false">No</option>
+                            </select>
                           </div>
                         </div>
                       )}
 
-                      {/* Last Updated */}
+                      {/* Last Updated - Now editable for debugging boundary issues */}
                       {selectedParagraphMetadata.metadata.lastUpdated && (
                       <div className="p-2 bg-[#1a1a1a] rounded">
-                        <div className="text-gray-400">
-                          Last Updated: <span className="text-gray-200">
+                        <div className="text-gray-400 flex items-center justify-between">
+                          <span>Last Updated:</span>
+                          <input
+                            type="datetime-local"
+                            value={new Date(selectedParagraphMetadata.metadata.lastUpdated).toISOString().slice(0, 16)}
+                            onChange={(e) => {
+                              const newTimestamp = new Date(e.target.value).toISOString()
+                              const newMetadata = {
+                                ...selectedParagraphMetadata.metadata,
+                                lastUpdated: newTimestamp
+                              }
+                              updateNodeMetadata(newMetadata)
+                            }}
+                            className="bg-[#2a2a2a] border border-gray-600 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
                               {new Date(selectedParagraphMetadata.metadata.lastUpdated).toLocaleString()}
-                          </span>
                         </div>
                       </div>
                       )}
 
-                      {/* Where Organized */}
+                      {/* Where Organized - Read only for now */}
                       {selectedParagraphMetadata.metadata.whereOrganized && 
                        selectedParagraphMetadata.metadata.whereOrganized.length > 0 && (
                         <div className="p-2 bg-[#1a1a1a] rounded">
@@ -772,24 +784,102 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                         </div>
                       )}
 
-                      {/* All Other Metadata Fields */}
+                      {/* Other Metadata Fields - Inline Editable */}
                       {Object.entries(selectedParagraphMetadata.metadata).filter(([key]) => 
-                        !['isOrganized', 'lastUpdated', 'whereOrganized', 'organizationStatus'].includes(key)
+                        !['isOrganized', 'lastUpdated', 'whereOrganized', 'organizationStatus', 'id'].includes(key)
                       ).length > 0 && (
                         <div className="p-2 bg-[#1a1a1a] rounded">
-                          <div className="text-gray-400 mb-1">Other Metadata:</div>
-                          <div className="space-y-1 max-h-32 overflow-y-auto">
+                          <div className="text-gray-400 mb-2">Other Metadata:</div>
+                          <div className="space-y-2 max-h-32 overflow-y-auto">
                             {Object.entries(selectedParagraphMetadata.metadata)
-                              .filter(([key]) => !['isOrganized', 'lastUpdated', 'whereOrganized', 'organizationStatus'].includes(key))
+                              .filter(([key]) => !['isOrganized', 'lastUpdated', 'whereOrganized', 'organizationStatus', 'id'].includes(key))
                               .map(([key, value]) => (
-                                <div key={key} className="text-xs">
-                                  <span className="text-gray-400">{key}:</span>{' '}
-                                  <span className="text-gray-200 break-all">
-                                    {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                                  </span>
+                                <div key={key} className="flex items-start gap-2">
+                                  <input
+                                    type="text"
+                                    value={key}
+                                    onChange={(e) => {
+                                      if (e.target.value !== key) {
+                                        const newMetadata = { ...selectedParagraphMetadata.metadata }
+                                        delete newMetadata[key]
+                                        newMetadata[e.target.value] = value
+                                        updateNodeMetadata(newMetadata)
+                                      }
+                                    }}
+                                    className="flex-1 bg-[#2a2a2a] border border-gray-600 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none focus:border-blue-500"
+                                    placeholder="Key"
+                                  />
+                                  <span className="text-gray-500 text-xs mt-1">:</span>
+                                  <input
+                                    type="text"
+                                    value={typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                    onChange={(e) => {
+                                      let newValue: any = e.target.value
+                                      // Try to parse as JSON if it looks like JSON
+                                      if (newValue.startsWith('{') || newValue.startsWith('[') || newValue === 'true' || newValue === 'false' || !isNaN(Number(newValue))) {
+                                        try {
+                                          newValue = JSON.parse(newValue)
+                                        } catch {
+                                          // Keep as string if JSON parse fails
+                                        }
+                                      }
+                                      const newMetadata = {
+                                        ...selectedParagraphMetadata.metadata,
+                                        [key]: newValue
+                                      }
+                                      updateNodeMetadata(newMetadata)
+                                    }}
+                                    className="flex-2 bg-[#2a2a2a] border border-gray-600 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-500"
+                                    placeholder="Value"
+                                  />
+                                  <button
+                                    onClick={() => {
+                                      const newMetadata = { ...selectedParagraphMetadata.metadata }
+                                      delete newMetadata[key]
+                                      updateNodeMetadata(newMetadata)
+                                    }}
+                                    className="text-red-400 hover:text-red-300 text-xs px-1"
+                                    title="Delete field"
+                                  >
+                                    ×
+                                  </button>
                               </div>
                             ))}
                           </div>
+                          
+                          {/* Add new field button */}
+                          <button
+                            onClick={() => {
+                              const newMetadata = {
+                                ...selectedParagraphMetadata.metadata,
+                                'newField': 'newValue'
+                              }
+                              updateNodeMetadata(newMetadata)
+                            }}
+                            className="w-full mt-2 px-2 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded transition-colors"
+                          >
+                            + Add Field
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Add Field button if no other metadata exists */}
+                      {Object.entries(selectedParagraphMetadata.metadata).filter(([key]) => 
+                        !['isOrganized', 'lastUpdated', 'whereOrganized', 'organizationStatus', 'id'].includes(key)
+                      ).length === 0 && (
+                        <div className="p-2 bg-[#1a1a1a] rounded">
+                          <button
+                            onClick={() => {
+                              const newMetadata = {
+                                ...selectedParagraphMetadata.metadata,
+                                'newField': 'newValue'
+                              }
+                              updateNodeMetadata(newMetadata)
+                            }}
+                            className="w-full px-2 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded transition-colors"
+                          >
+                            + Add Custom Field
+                          </button>
                         </div>
                       )}
                     </>
@@ -800,14 +890,6 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                       <div className="text-gray-500 italic">No metadata available</div>
                     </div>
                   )}
-
-                  {/* Edit Metadata Button */}
-                  <button
-                    onClick={startEditingMetadata}
-                    className="w-full mt-2 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
-                  >
-                    Edit Metadata
-                  </button>
                 </div>
               ) : (
                 <div className="text-gray-500 italic">No node metadata found</div>

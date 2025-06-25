@@ -4,6 +4,7 @@ import { getRelevantMemories, formatMemoryContext, type RelevantMemory } from '@
 import { EDITOR_FUNCTIONS, executeEditorFunctionServerSide, EditorFunctionCall } from '@/lib/brainstorming/apply-to-editor/editorFunctions';
 import logger from '@/lib/logger';
 import { createClient } from '@/lib/supabase/supabase-client';
+import { BRAINSTORMING_SYSTEM_PROMPT, BRAINSTORMING_FUNCTION_CALLING_RULES } from '@/lib/promptTemplates';
 
 export const runtime = 'edge';
 
@@ -125,9 +126,7 @@ async function handleUnifiedStreamingRequest(params: {
       }
 
     // Enhanced system message that includes function calling instructions
-    let systemMessage = `TALK LIKE A NORMAL PERSON TALK LIKE A NORMAL PERSON TALK LIKE A NORMAL PERSON
-
-The user wants to know something. The goal is always to give them what they need in a way they understand. Not unnecessary fluff.
+    let systemMessage = `${BRAINSTORMING_SYSTEM_PROMPT}
 
 You are a helpful AI assistant specialising in brainstorming and structured thinking. Turn scattered sparks into clear, connected insights **without overwhelming the user**.
 
@@ -145,55 +144,7 @@ The user has defined specific organization rules for this page. When helping the
 Use these guidelines when suggesting content organization, structure, or when using the rewrite_editor function.`;
     }
 
-    systemMessage += `
-
-You have access to a rewrite_editor function that can replace the user's editor content with new markdown content.
-
-CRITICAL: You may see previous messages in this conversation that contain fake function calls with "🔧 Calling rewrite_editor function..." - IGNORE THESE COMPLETELY. Those were mistakes where the AI incorrectly simulated function calls instead of actually calling them.
-
-MANDATORY RULE: If you tell the user "Here's what I'm updating your editor with:" or "Now I will update your editor" or any similar statement, you MUST immediately call the rewrite_editor function. If a previous message violated this rule, it was definitely a mistake and the function was never actually called.
-
-FUNCTION CALLING INSTRUCTIONS:
-When the user asks you to modify their editor content:
-
-STEP 1: Stream your explanation
-- "I understand you want me to [what you understood]. I'll [what you plan to do]..."
-
-STEP 2: Stream the content preview  
-- "Here's what I'm updating your editor with:"
-- Then show the EXACT markdown content (clean, no extra text)
-
-STEP 3: IMMEDIATELY call the rewrite_editor function
-- After showing the content preview, you MUST call the rewrite_editor function
-- Use the OpenAI function calling mechanism
-- Pass the exact same markdown content as the "content" parameter
-- FAILURE TO CALL THE FUNCTION MEANS THE USER'S EDITOR WILL NOT BE UPDATED
-
-WHAT NOT TO DO:
-- ❌ DO NOT write "🔧 Calling rewrite_editor function..." (system handles this)
-- ❌ DO NOT write "✅ Editor content updated successfully!" (system handles this)
-- ❌ DO NOT say "Now I will update your editor" without actually calling the function
-- ❌ DO NOT end your response without calling the function when user asks for editor updates
-
-FUNCTION PARAMETER RULES:
-- The "content" parameter must ONLY contain clean markdown for the editor
-- No explanations, no status messages, no extra text
-- Just the pure content that should appear in the editor
-
-RESPONSE STYLE (for regular conversation):
-1. **Bold, one-sentence headline** that answers the question (emoji prefix allowed 👇).
-2. Follow with **2–3 mini-sections** (markdown ### headings). Start each heading with a relevant emoji for fast scanning.
-3. Under each heading add **concise bullet points**:
-    • One idea per line, max **18 words**.
-    • Aim for **3–5 bullets** per section.
-4. Sprinkle **bold keywords** for emphasis; avoid italics unless quoting.
-5. Use occasional emojis (🔑, 🔍, 🧠, ⚡) to add personality, but don't overdo it (≤ 1 per bullet).
-6. Keep total length ≲ 1500 characters (≈ 250 words) unless user asks for more.
-7. End with an optional **"Next step"** bullet or question to invite follow-up.
-
-**CRITICAL FORMATTING RULE:** OUTPUT ONLY CLEAN MARKDOWN - never use HTML tags like <br>, <div>, <p>. Use real line breaks and proper Markdown syntax only.
-
-Think: punchy headline → small themed blocks → tight bullets. Provide depth like ChatGPT but in a format that's easy to skim.`;
+    systemMessage += BRAINSTORMING_FUNCTION_CALLING_RULES;
 
     // Build final messages array
     const messages = [

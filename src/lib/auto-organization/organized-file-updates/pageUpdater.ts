@@ -108,6 +108,25 @@ export async function applyOrganizationChunks(chunks: OrganizedChunk[]): Promise
 
       const isNewFile = wasCreated
 
+      console.log('🎯 === ORGANIZATION CHUNK PROCESSING ===')
+      console.log('🎯 Chunk processing context:', {
+        targetFilePath: chunk.targetFilePath,
+        pageUuid: page.uuid.substring(0, 8),
+        pageTitle: page.title,
+        isNewFile,
+        wasCreated,
+        chunkContentLength: chunk.content.length,
+        chunkContentPreview: chunk.content.substring(0, 200) + (chunk.content.length > 200 ? '...' : '')
+      })
+
+      console.log('🎯 Existing page content analysis:', {
+        hasPageContent: !!page.content,
+        pageContentType: typeof page.content,
+        pageContentHasContent: !!(page.content as any)?.content,
+        pageContentLength: (page.content as any)?.content?.length,
+        pageContentText: page.content_text?.substring(0, 200) + (page.content_text && page.content_text.length > 200 ? '...' : '')
+      })
+
       let newContentJSON: any
       let newContentText: string
 
@@ -115,14 +134,49 @@ export async function applyOrganizationChunks(chunks: OrganizedChunk[]): Promise
       const pageMetadata = page.metadata as any
       const organizationRules = pageMetadata?.organizationRules || ''
 
+      console.log('🎯 Organization rules:', {
+        hasPageMetadata: !!pageMetadata,
+        hasOrganizationRules: !!organizationRules,
+        organizationRulesLength: organizationRules.length
+      })
+
       if (isNewFile) {
+        console.log('🎯 === NEW FILE PATH ===')
         // For brand-new files call smartMerge too (existing content may be empty)
         const baseContent = page.content || { type: 'doc', content: [] }
+        console.log('🎯 Base content for new file:', {
+          baseContentType: typeof baseContent,
+          baseContentHasContent: !!(baseContent as any).content,
+          baseContentLength: (baseContent as any).content?.length
+        })
+        
         newContentJSON = await contentProcessor.smartMergeTipTapContent(baseContent, chunk.content, page.uuid, organizationRules)
         newContentText = chunk.content
+        
+        console.log('🎯 New file processing result:', {
+          newContentJSONType: typeof newContentJSON,
+          newContentJSONHasContent: !!newContentJSON?.content,
+          newContentJSONLength: newContentJSON?.content?.length,
+          newContentTextLength: newContentText.length
+        })
       } else {
+        console.log('🎯 === EXISTING FILE PATH ===')
+        console.log('🎯 About to call smartMergeTipTapContent with:', {
+          existingContentType: typeof page.content,
+          existingContentHasContent: !!(page.content as any)?.content,
+          existingContentLength: (page.content as any)?.content?.length,
+          newChunkLength: chunk.content.length
+        })
+        
         newContentJSON = await contentProcessor.smartMergeTipTapContent(page.content, chunk.content, page.uuid, organizationRules)
         newContentText = (page.content_text || '') + '\n\n' + chunk.content
+        
+        console.log('🎯 Existing file processing result:', {
+          newContentJSONType: typeof newContentJSON,
+          newContentJSONHasContent: !!newContentJSON?.content,
+          newContentJSONLength: newContentJSON?.content?.length,
+          newContentTextLength: newContentText.length
+        })
       }
 
       // Mark all content as organized after processing

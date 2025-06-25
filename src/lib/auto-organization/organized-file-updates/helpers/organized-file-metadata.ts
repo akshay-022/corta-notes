@@ -7,14 +7,37 @@ function randomHex(len = 8): string {
  * Returns a NEW array of nodes (does not mutate originals)
  */
 export function ensureParagraphMetadata(nodes: any[], pageUuid: string): any[] {
-  const nowIso = new Date().toISOString()
+  console.log('🔧 === ENSURE PARAGRAPH METADATA START ===')
+  console.log('🔧 Input parameters:', {
+    nodesType: typeof nodes,
+    nodesIsArray: Array.isArray(nodes),
+    nodesLength: nodes?.length,
+    pageUuid: pageUuid.substring(0, 8)
+  })
 
-  return nodes.map((node) => {
+  const nowIso = new Date().toISOString()
+  console.log('🔧 Generated timestamp:', nowIso)
+
+  const result = nodes.map((node, index) => {
+    console.log(`🔧 --- Processing node ${index} ---`)
+    console.log(`🔧 Node ${index} input:`, {
+      nodeType: node?.type,
+      hasAttrs: !!node?.attrs,
+      existingId: node?.attrs?.id,
+      existingMetadata: node?.attrs?.metadata,
+      existingLastUpdated: node?.attrs?.metadata?.lastUpdated
+    })
 
     const existingId = node?.attrs?.id || node?.attrs?.metadata?.id
     const id = existingId || `${pageUuid}-${node.type}-${Date.now()}-${randomHex()}`
 
-    return {
+    console.log(`🔧 Node ${index} ID resolution:`, {
+      existingId,
+      generatedId: id,
+      usingExisting: !!existingId
+    })
+
+    const processedNode = {
       ...node,
       attrs: {
         ...(node.attrs || {}),
@@ -28,7 +51,29 @@ export function ensureParagraphMetadata(nodes: any[], pageUuid: string): any[] {
         },
       },
     }
+
+    console.log(`🔧 Node ${index} output:`, {
+      nodeType: processedNode.type,
+      finalId: processedNode.attrs.id,
+      finalLastUpdated: processedNode.attrs.metadata.lastUpdated,
+      finalIsOrganized: processedNode.attrs.metadata.isOrganized,
+      finalOrgStatus: processedNode.attrs.metadata.organizationStatus,
+      metadataKeys: Object.keys(processedNode.attrs.metadata)
+    })
+
+    return processedNode
   })
+
+  console.log('🔧 === ENSURE PARAGRAPH METADATA END ===')
+  console.log('🔧 Final result:', {
+    resultType: typeof result,
+    resultIsArray: Array.isArray(result),
+    resultLength: result.length,
+    allNodesHaveMetadata: result.every(n => !!n.attrs?.metadata),
+    allNodesHaveLastUpdated: result.every(n => !!n.attrs?.metadata?.lastUpdated)
+  })
+
+  return result
 }
 
 /**
@@ -64,7 +109,8 @@ export function ensureMetadataMarkedOrganized(nodes: any[], pageUuid: string): a
           ...(node.attrs?.metadata || {}), // Preserve existing metadata first
           id,
           isOrganized: true,               // Always mark as organized
-          lastUpdated: nowIso,             // Always update timestamp
+          // Preserve existing lastUpdated timestamp - don't overwrite it!
+          lastUpdated: node.attrs?.metadata?.lastUpdated || nowIso, // Only set if missing
           organizationStatus: 'yes',       // Always mark as organized
         },
       },

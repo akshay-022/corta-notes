@@ -365,49 +365,86 @@ export class ContentProcessor {
   }
 
   /**
+   * Helper method to detect if content has duplicate sections
+   */
+  private detectDuplicateContent(text: string): boolean {
+    const lines = text.split('\n').filter(line => line.trim().length > 0)
+    const uniqueLines = new Set(lines)
+    return lines.length !== uniqueLines.size
+  }
+
+  /**
    * Smart merge using LLM: takes recent (<=24h) paragraphs + new text and asks LLM to integrate
    */
   async smartMergeTipTapContent(existingContent: any, newText: string, pageUuid: string, organizationRules?: string): Promise<any> {
     try {
+      console.log('🚀 === SMART MERGE START ===')
+      console.log('🚀 Input parameters:', {
+        hasExistingContent: !!existingContent,
+        existingContentType: typeof existingContent,
+        newTextLength: newText.length,
+        pageUuid: pageUuid.substring(0, 8),
+        hasOrganizationRules: !!organizationRules
+      })
+
       const { ensureParagraphMetadata } = require('./organized-file-metadata')
       const allNodes = ensureParagraphMetadata(existingContent?.content || [], pageUuid)
+
+      console.log('📦 After ensureParagraphMetadata:', {
+        allNodesType: typeof allNodes,
+        allNodesIsArray: Array.isArray(allNodes),
+        allNodesLength: allNodes.length,
+        firstNodePreview: allNodes[0] ? {
+          type: allNodes[0].type,
+          hasAttrs: !!allNodes[0].attrs,
+          hasMetadata: !!allNodes[0].attrs?.metadata,
+          lastUpdated: allNodes[0].attrs?.metadata?.lastUpdated
+        } : 'NO_FIRST_NODE'
+      })
 
       // Get today's date boundaries (start and end of today)
       const today = new Date()
       const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
       const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1)
-      
       // Find boundary: continuous today's content at top until first non-today node
       let boundaryIndex = 0
-      for (let i = 0; i < allNodes.length; i++) {
-        const lastUpdated = allNodes[i].attrs?.metadata?.lastUpdated
+      for (let nodeIndex = 0; nodeIndex < allNodes.length; nodeIndex++) {
+        const lastUpdated = allNodes[nodeIndex].attrs?.metadata?.lastUpdated
+        console.log(`🔍 Node ${nodeIndex} lastUpdated:`, {
+          lastUpdated,
+          lastUpdatedType: typeof lastUpdated,
+          lastUpdatedExists: !!lastUpdated
+        })
+
         if (!lastUpdated) {
-          // No timestamp = boundary found
+          console.log(`🔍 Node ${nodeIndex} has NO timestamp - BOUNDARY FOUND`)
           break
         }
         
         const nodeDate = new Date(lastUpdated)
+        console.log(`🔍 Node ${nodeIndex} date analysis:`, {
+          lastUpdated,
+          nodeDate: nodeDate.toISOString(),
+          nodeDateTimestamp: nodeDate.getTime(),
+          isAfterStartOfToday: nodeDate >= startOfToday,
+          isBeforeEndOfToday: nodeDate < endOfToday,
+          isInTodayRange: nodeDate >= startOfToday && nodeDate < endOfToday
+        })
+
         if (nodeDate >= startOfToday && nodeDate < endOfToday) {
-          boundaryIndex = i + 1 // Continue taking today's content
+          console.log(`🔍 Node ${nodeIndex} IS TODAY'S CONTENT - incrementing boundary`)
+          boundaryIndex = nodeIndex + 1
+          console.log(`🔍 New boundaryIndex: ${boundaryIndex}`)
         } else {
-          // Hit non-today content = boundary found
+          console.log(`🔍 Node ${nodeIndex} is NOT today's content - BOUNDARY FOUND`)
           break
         }
       }
 
+
       const topTodayNodes = allNodes.slice(0, boundaryIndex)
       const everythingAfterBoundary = allNodes.slice(boundaryIndex)
 
-      console.log('📅 Content boundary analysis:', {
-        totalNodes: allNodes.length,
-        boundaryIndex,
-        topTodayNodes: topTodayNodes.length,
-        afterBoundaryNodes: everythingAfterBoundary.length,
-        startOfToday: startOfToday.toISOString(),
-        endOfToday: endOfToday.toISOString(),
-        sampleTopTodayTimestamps: topTodayNodes.slice(0, 3).map((n: any) => n.attrs?.metadata?.lastUpdated),
-        firstAfterBoundaryTimestamp: everythingAfterBoundary[0]?.attrs?.metadata?.lastUpdated
-      })
 
       // Extract text from top today's content for LLM context
       const todayText = topTodayNodes
@@ -416,6 +453,15 @@ export class ContentProcessor {
           return text
         })
         .join('\n\n')
+
+      console.log('🔍 Smart merge content analysis:', {
+        todayTextLength: todayText.length,
+        newTextLength: newText.length,
+        todayTextPreview: todayText.substring(0, 200) + (todayText.length > 200 ? '...' : ''),
+        newTextPreview: newText.substring(0, 200) + (newText.length > 200 ? '...' : ''),
+        todayTextContainsNewText: todayText.includes(newText.substring(0, 50)),
+        newTextContainsTodayText: newText.includes(todayText.substring(0, 50))
+      })
 
       const organizationRulesSection = organizationRules?.trim() ? 
         `\n\nORGANIZATION RULES FOR THIS PAGE:
@@ -457,9 +503,27 @@ JSON output only:
       const mergedText: string = parsed.mergedText
       if (!mergedText) throw new Error('LLM missing mergedText field')
 
+      console.log('🤖 LLM merge result analysis:', {
+        mergedTextLength: mergedText.length,
+        mergedTextPreview: mergedText.substring(0, 300) + (mergedText.length > 300 ? '...' : ''),
+        mergedTextContainsDuplicates: this.detectDuplicateContent(mergedText),
+        inputTodayLength: todayText.length,
+        inputNewLength: newText.length,
+        outputMergedLength: mergedText.length
+      })
+
       // Create new content from merged text
+      console.log('🏗️ === CONTENT ASSEMBLY START ===')
       const mergedJSON = this.createTipTapContent(mergedText, pageUuid)
       const mergedNodesWithMeta = mergedJSON.content
+
+      console.log('🏗️ Merged JSON created:', {
+        mergedJSONType: typeof mergedJSON,
+        mergedJSONHasContent: !!mergedJSON.content,
+        mergedNodesWithMetaType: typeof mergedNodesWithMeta,
+        mergedNodesWithMetaIsArray: Array.isArray(mergedNodesWithMeta),
+        mergedNodesWithMetaLength: mergedNodesWithMeta.length
+      })
 
       // Create empty paragraph for spacing with today's metadata
       const spacingParagraph = {
@@ -476,17 +540,47 @@ JSON output only:
         }
       }
 
+      console.log('🏗️ Spacing paragraph created:', {
+        spacingParagraphType: spacingParagraph.type,
+        spacingParagraphId: spacingParagraph.attrs.id
+      })
+
       // Build final content: new merged content at top + spacing + everything after boundary preserved
+      console.log('🏗️ About to assemble final content:', {
+        mergedNodesLength: mergedNodesWithMeta.length,
+        spacingParagraphCount: 1,
+        everythingAfterBoundaryLength: everythingAfterBoundary.length,
+        totalExpectedLength: mergedNodesWithMeta.length + 1 + everythingAfterBoundary.length
+      })
+
       const finalContent = [
         ...mergedNodesWithMeta,        // Today's new merged content at top
         spacingParagraph,              // Empty paragraph for spacing
         ...everythingAfterBoundary     // Everything after boundary preserved untouched
       ]
 
-      return {
+      console.log('🏗️ Final content assembled:', {
+        finalContentType: typeof finalContent,
+        finalContentIsArray: Array.isArray(finalContent),
+        finalContentLength: finalContent.length,
+        firstElementType: finalContent[0]?.type,
+        lastElementType: finalContent[finalContent.length - 1]?.type
+      })
+
+      const result = {
         ...(existingContent || { type: 'doc' }),
         content: finalContent,
       }
+
+      console.log('🏁 === SMART MERGE END ===')
+      console.log('🏁 Final result:', {
+        resultType: typeof result,
+        resultHasContent: !!result.content,
+        resultContentLength: result.content?.length,
+        resultDocType: result.type
+      })
+
+      return result
     } catch (err) {
       console.error('smartMergeTipTapContent fallback', err)
       // fallback to simple append

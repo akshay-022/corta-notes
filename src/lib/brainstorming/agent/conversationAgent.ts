@@ -6,6 +6,7 @@ import {
   EditorFunctionResult, 
   executeEditorFunction 
 } from '../apply-to-editor/editorFunctions'
+import { BRAINSTORMING_SYSTEM_PROMPT } from '@/lib/promptTemplates'
 
 export interface AgentMessage {
   role: 'user' | 'assistant' | 'function'
@@ -171,9 +172,7 @@ export class ConversationAgent {
    * Build the system message with function calling instructions
    */
   private buildSystemMessage(organizationInstructions?: string): string {
-    let systemMessage = `TALK LIKE A NORMAL PERSON TALK LIKE A NORMAL PERSON TALK LIKE A NORMAL PERSON
-
-The user wants to know something. The goal is always to give them what they need in a way they understand. Not unnecessary fluff.
+    let systemMessage = `${BRAINSTORMING_SYSTEM_PROMPT}
 
 You are an AI assistant that can help users with their notes and documents. You have access to functions that allow you to:
 

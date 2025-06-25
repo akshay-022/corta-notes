@@ -2,6 +2,7 @@ import { Editor } from '@tiptap/react'
 import logger from '@/lib/logger'
 import { executeEditorFunction, EditorFunctionCall, EditorFunctionResult, EDITOR_FUNCTIONS } from './editorFunctions'
 import { chatCompletionWithTools, ChatMessage, ToolDefinition } from '@/lib/openaiClient'
+import { BRAINSTORMING_SYSTEM_PROMPT } from '@/lib/promptTemplates'
 
 /**
  * Proper function-calling editor agent that uses OpenAI's native function calling
@@ -132,9 +133,7 @@ export class StreamingEditorAgent {
 
     // System message with function calling instructions
     const currentContent = this.editor?.getText() || ''
-    let systemMessage = `TALK LIKE A NORMAL PERSON TALK LIKE A NORMAL PERSON TALK LIKE A NORMAL PERSON
-
-The user wants to know something. The goal is always to give them what they need in a way they understand. Not unnecessary fluff.
+    let systemMessage = `${BRAINSTORMING_SYSTEM_PROMPT}
 
 You are an AI assistant that helps users with their notes and documents.
 
