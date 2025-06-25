@@ -376,7 +376,7 @@ export class ContentProcessor {
   /**
    * Smart merge using LLM: takes recent (<=24h) paragraphs + new text and asks LLM to integrate
    */
-  async smartMergeTipTapContent(existingContent: any, newText: string, pageUuid: string, organizationRules?: string): Promise<any> {
+  async smartMergeTipTapContent(existingContent: any, newText: string, pageUuid: string, organizationRules?: string, pageTitle?: string): Promise<any> {
     try {
       console.log('🚀 === SMART MERGE START ===')
       console.log('🚀 Input parameters:', {
@@ -469,7 +469,10 @@ ${organizationRules}
 
 Follow these rules when organizing and merging content.\n` : ''
 
-      const prompt = `Merge and organize today's content with new content. Replace all of today's content with this merged result.
+      const pageTitleSection = pageTitle ? `\n\nTARGET PAGE: "${pageTitle}"\n` : ''
+
+      const prompt = `Merge and organize today's content with new content. Replace all of today's content with this merged result.${pageTitleSection}
+CRITICAL: Only include content that is DIRECTLY RELEVANT to "${pageTitle || 'this page'}". If any content doesn't belong on this specific page, DO NOT include it in the merged result.
 
 TODAY'S EXISTING CONTENT:
 ${todayText}
@@ -479,10 +482,15 @@ ${newText}${organizationRulesSection}
 
 ${EDITING_USER_CONTENT_FOR_ORGANIZATION}
 
+RELEVANCE FILTER:
+• Everything you add MUST be related to "${pageTitle || 'this page'}"
+• If content belongs on a different page, exclude it entirely
+• Better to exclude unrelated content than pollute the page with irrelevant information
+• Only merge content that makes sense together on this specific page
 
 JSON output only:
 {
-  "mergedText": "<well-organized merged content that replaces all of today's content>"
+  "mergedText": "<well-organized merged content that replaces all of today's content - ONLY content relevant to ${pageTitle || 'this page'}>"
 }
 
 `

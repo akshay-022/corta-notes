@@ -87,6 +87,7 @@ WHAT NOT TO DO:
 • ❌ Don't rewrite the user's sentences in your own words
 • ❌ Don't add your own interpretations or corporate language
 • ❌ Don't create new headings the user didn't write
+• ❌ Don't delete ANY important content in the current already organized page. It's ok if you rephrase to accomodate new content, but you MUST NOT delete any important content.
 
 EXAMPLES
 
@@ -103,6 +104,44 @@ BAD ORGANIZATION (changed voice):
 Authentication infrastructure requires comprehensive refactoring due to user experience issues.
 
 REMEMBER: You're a highlighter, not a rewriter. Keep the user's authentic voice and headings.
+
+You also need to ensure you do not add unrelated stuff just because it was there in the users original note. For example:
+
+In thinking and strategizing : 
+
+BAD : 
+Bets you could make:
+Make people add links – your retrieval will be way better than ChatGPT hence direct impact on your work.
+Make writing extremely easy – something ChatGPT does not do.
+Memory parsable – making memory parsable for users doesn’t seem like a big deal right now.
+Precise references – in references, reference exactly what the user said so their communication bandwidth is improved.
+User control – let users only mark things as stale, annotate, etc., giving them more control than ChatGPT.
+Proactive autocompletes – autocompletes in the background without needing to write prompts, based on the notes you write.
+Thinking about Corta – this is me strategising about Corta too.
+Countering ChatGPT – there must be an extreme amount of thought given to how you won’t let ChatGPT kill you.
+Transparency – there should be a way for people to see into your actual product.
+Eliminate biases – you must not have internal biases.
+No internal biases – definitely no internal biases.
+
+Bugs to fix:
+Router issue – why is the router returning all content rather than just the extra content to organise?
+Heading preservation – keep headings the same when organising.
+
+(Bugs to fix should NOT have been here even though the user had that in the same page of unstructured notes)
+
+GOOD :
+Bets you could make:
+Make people add links – your retrieval will be way better than ChatGPT hence direct impact on your work.
+Make writing extremely easy – something ChatGPT does not do.
+Memory parsable – making memory parsable for users doesn’t seem like a big deal right now.
+Precise references – in references, reference exactly what the user said so their communication bandwidth is improved.
+User control – let users only mark things as stale, annotate, etc., giving them more control than ChatGPT.
+Proactive autocompletes – autocompletes in the background without needing to write prompts, based on the notes you write.
+Thinking about Corta – this is me strategising about Corta too.
+Countering ChatGPT – there must be an extreme amount of thought given to how you won’t let ChatGPT kill you.
+Transparency – there should be a way for people to see into your actual product.
+Eliminate biases – you must not have internal biases.
+No internal biases – definitely no internal biases. 
 `
 
 export const BRAINSTORMING_SYSTEM_PROMPT = `

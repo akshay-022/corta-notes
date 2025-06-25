@@ -150,7 +150,7 @@ export async function applyOrganizationChunks(chunks: OrganizedChunk[]): Promise
           baseContentLength: (baseContent as any).content?.length
         })
         
-        newContentJSON = await contentProcessor.smartMergeTipTapContent(baseContent, chunk.content, page.uuid, organizationRules)
+        newContentJSON = await contentProcessor.smartMergeTipTapContent(baseContent, chunk.content, page.uuid, organizationRules, page.title)
         newContentText = chunk.content
         
         console.log('🎯 New file processing result:', {
@@ -168,7 +168,7 @@ export async function applyOrganizationChunks(chunks: OrganizedChunk[]): Promise
           newChunkLength: chunk.content.length
         })
         
-        newContentJSON = await contentProcessor.smartMergeTipTapContent(page.content, chunk.content, page.uuid, organizationRules)
+        newContentJSON = await contentProcessor.smartMergeTipTapContent(page.content, chunk.content, page.uuid, organizationRules, page.title)
         newContentText = (page.content_text || '') + '\n\n' + chunk.content
         
         console.log('🎯 Existing file processing result:', {
