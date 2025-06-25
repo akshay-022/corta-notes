@@ -116,16 +116,16 @@ CORE PRINCIPLE: PRESERVE THE USER'S AUTHENTIC VOICE & HEADINGS
 
 WHAT TO DO:
 • **Bold** the most important keywords and conclusions
-• <u>Underline</u> approximately 20% of the content - the most critical parts that give the gist of everything
+• *Emphasize* approximately 20% of the content - the most critical parts that give the gist of everything
 • Choose the most relevant sentences/bullets from what the user wrote
 • Group related ideas together under the user's original headings
 • Add brief context (1-2 words) only when absolutely necessary for clarity
 • Use the user's original structure - just make it more concise
 
 HIGHLIGHTING STRATEGY:
-• **Bold**: Key terms and important conclusions
-• <u>Underline</u>: The 20% most important content that gives the immediate gist
-• Together, bold + underline should help users scan and understand quickly
+• **Bold**: Key terms and important conclusions  
+• *Italics*: The 20% most important content that gives the immediate gist
+• Together, bold + italics should help users scan and understand quickly
 
 
 WHAT NOT TO DO:
@@ -145,7 +145,7 @@ I think the API authentication system is completely broken and we need to rebuil
 
 GOOD ORGANIZATION (preserve voice, highlight key parts):
 ## Bets I'm making
-<u>**API authentication system needs complete rebuild**</u> - users keep complaining about login issues, tried everything else.
+***API authentication system needs complete rebuild*** - users keep complaining about login issues, tried everything else.
 
 BAD ORGANIZATION (changed voice):
 ## Key Technical Assumptions
