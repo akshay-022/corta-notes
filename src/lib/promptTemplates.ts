@@ -65,26 +65,36 @@ export const MARKDOWN_OUTPUT_RULES = `OUTPUT FORMATTING:
 • REPEAT the same content across multiple files if it's relevant to multiple places
 `
 
-export const EDITING_USER_CONTENT_FOR_ORGANIZATION = `CONTENT EDITING GUIDELINES:
-• **PRESERVE the user's authentic language, tone, and voice** - don't rewrite their words
-• **GROUP related ideas together** under clear headings or sections
-• **Use bullet points and numbered lists** to break up walls of text
-• **Keep ALL important information** - don't cut out details, just organize them better
-• **Add structure with markdown headings** (## and ###) to create scannable sections
-• **Bold key terms and important points** for quick scanning
-• **Break long paragraphs** into shorter, digestible chunks
-• **Maintain the user's urgency and emotion** - if they wrote "URGENT!" keep that energy
-• **Combine similar ideas** - group related thoughts together logically
-• **Keep original urgency/tone** - preserve the user's emotional context
-• **ADD CONTEXT AND EXPLANATIONS** - single-line bullets with no explanation are useless
-• **EXPLAIN WHY things matter** - add 1-2 sentences of context for each main point
-• **PROVIDE DETAILS** - don't just list items, explain what they mean or why they're important
-• **Focus on organization AND explanation** - make it both scannable and informative
+export const EDITING_USER_CONTENT_FOR_ORGANIZATION = `SMART ORGANIZATION RULES (concise & context):
 
-EXAMPLES:
-BAD: "Second brain delivers relevant content only" (no context, no explanation)
-GOOD: "## Second Brain Principles\n\n**Relevant Content Delivery**: The second brain should filter and surface only the most relevant information for your current context and goals. This reduces cognitive load by eliminating noise and helping you focus on what matters most for your immediate tasks.\n\n**High Surface Ingestion**: Design your system to capture information quickly and effortlessly, so you don't lose important insights in the moment."
+GENERAL PRINCIPLES
+• Write like crisp personal notes – no corporate fluff, no filler.
+• Preserve the user's own words/energy.
+• Bullet/paragraph ≤ 15 words when possible.
+• Give a brief **why** (1 short sentence) after each key conclusion.
+• Use markdown headings (##) and **bold** to structure & highlight.
+• Choose format by content type:
+  – Thinking / Reflection → "## Key Conclusions" then bullets (**idea** – why it matters).
+  – TODOs → Numbered list 1. 2. 3. (some context on the todo, ≤10 words).
+  – Learnings / Book notes → bullets: quote (if any) + takeaway (≤2 sentences).
+• Separate sections with a blank line.
+• Keep all meaningful detail; just condense & group logically.
 
-BAD: "Fix login bug" (too brief, no context)
-GOOD: "1. **Fix login authentication bug** - Users are getting 401 errors when trying to log in with valid credentials. This is blocking new user signups and affecting customer satisfaction."
+EXAMPLES
+THINKING (BAD)
+The second brain is useless.
+
+THINKING (GOOD)
+## Key Conclusions
+
+**Second brain must surface relevance** – Only useful when notes appear exactly when needed.
+
+TODO LIST (GOOD)
+1. **Fix login bug**
+2. Call client about project timeline
+
+LEARNINGS (GOOD)
+### Atomic Habits – James Clear
+> "You do not rise to the level of your goals..."
+**Systems over goals** – Daily systems compound to large outcomes.
 ` 

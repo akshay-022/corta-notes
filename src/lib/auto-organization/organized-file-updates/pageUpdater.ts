@@ -111,14 +111,16 @@ export async function applyOrganizationChunks(chunks: OrganizedChunk[]): Promise
       let newContentJSON: any
       let newContentText: string
 
+      // Get organization rules from page metadata (may be undefined for brand-new page)
+      const pageMetadata = page.metadata as any
+      const organizationRules = pageMetadata?.organizationRules || ''
+
       if (isNewFile) {
-        newContentJSON = contentProcessor.createTipTapContent(chunk.content)
+        // For brand-new files call smartMerge too (existing content may be empty)
+        const baseContent = page.content || { type: 'doc', content: [] }
+        newContentJSON = await contentProcessor.smartMergeTipTapContent(baseContent, chunk.content, page.uuid, organizationRules)
         newContentText = chunk.content
       } else {
-        // Get organization rules from page metadata
-        const pageMetadata = page.metadata as any
-        const organizationRules = pageMetadata?.organizationRules || ''
-        
         newContentJSON = await contentProcessor.smartMergeTipTapContent(page.content, chunk.content, page.uuid, organizationRules)
         newContentText = (page.content_text || '') + '\n\n' + chunk.content
       }

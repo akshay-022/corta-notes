@@ -212,19 +212,24 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       const newContent = showSummary ? (page.page_summary || page.content) : page.content
       editor.commands.setContent(newContent as any)
       setTitle(page.title)
-    } else if (editor && page.uuid === currentPageRef.current) {
-      // Same page but content might have been updated externally
-      const currentEditorContent = JSON.stringify(editor.getJSON())
-      const newContent = showSummary ? (page.page_summary || page.content) : page.content
-      const newContentString = JSON.stringify(newContent)
-      
-      if (currentEditorContent !== newContentString && !isUserTyping) {
-        logger.info('Page content updated externally, refreshing editor', { pageUuid: page.uuid })
+    }
+  }, [page.uuid, editor, showSummary]) // Only trigger on UUID change, not all page changes
+
+  // Listen for external content updates (from chat panel events)
+  useEffect(() => {
+    const handleExternalUpdate = (event: CustomEvent) => {
+      const { updatedPage } = event.detail
+      if (updatedPage && updatedPage.uuid === page.uuid && editor && !isUserTyping) {
+        logger.info('External page update received, refreshing editor content', { pageUuid: page.uuid })
+        const newContent = showSummary ? (updatedPage.page_summary || updatedPage.content) : updatedPage.content
         editor.commands.setContent(newContent as any)
-        setTitle(page.title)
+        setTitle(updatedPage.title)
       }
     }
-  }, [page, editor, showSummary, isUserTyping])
+
+    window.addEventListener('updatePageContent', handleExternalUpdate as EventListener)
+    return () => window.removeEventListener('updatePageContent', handleExternalUpdate as EventListener)
+  }, [editor, page.uuid, showSummary, isUserTyping])
 
   // Update title when page prop changes
   useEffect(() => {
