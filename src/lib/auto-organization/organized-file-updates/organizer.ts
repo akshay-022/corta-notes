@@ -21,7 +21,10 @@ import {
   ANTI_NEW_FILE_CREATION_RULES,
   MULTIPLE_DESTINATIONS_STRATEGY,
   MARKDOWN_OUTPUT_RULES,
-  EDITING_USER_CONTENT_FOR_ORGANIZATION
+  EDITING_USER_CONTENT_FOR_ORGANIZATION,
+  PARA_METHODOLOGY_GUIDELINES,
+  ROUTING_CONTEXT_INSTRUCTIONS,
+  ROUTING_OUTPUT_FORMAT
 } from '@/lib/promptTemplates'
 
 interface ParagraphInfo {
@@ -296,38 +299,28 @@ ${organizationRules}
 
 Follow these rules when organizing content.\n` : ''
 
+  const contextInstructions = ROUTING_CONTEXT_INSTRUCTIONS
+    .replace('{NEW_CONTENT_LIST}', newContentList)
+    .replace('{FULL_PAGE_TEXT}', fullPageText)
+    .replace('{ORGANIZATION_RULES_SECTION}', organizationRulesSection)
+
   return `Route to ALL RELEVANT existing [FILE]s from the file tree. NEVER route to [DIR]s.
 ${ANTI_NEW_FILE_CREATION_RULES}
+
+${PARA_METHODOLOGY_GUIDELINES}
 
 PAGE: "${pageTitle}"
 
 EXISTING FILE TREE:
 ${fileTreeContext}
 
-=== NEW CONTENT TO BE ORGANIZED ===
-These are the ONLY new unorganized paragraphs that need to be added to target files:
-
-${newContentList}
-
-=== CONTEXT (for understanding only) ===
-This is the full page context where the new content was written. Use this to understand the context and flow:
-
-${fullPageText}
-
-=== END CONTEXT ===${organizationRulesSection}
+${contextInstructions}
 
 ${MULTIPLE_DESTINATIONS_STRATEGY}
 
 ${EDITING_USER_CONTENT_FOR_ORGANIZATION}
 
-IMPORTANT: 
-- Your "content" field should include the new content AND context (including examples of existing organized content)
-- Structure your output to help the smart merge system understand what's new vs context
-- The smart merge system needs context that includes examples of existing organized content to make intelligent merging decisions
-- Format: "NEW CONTENT:\n[new content]\n\nCONTEXT (for smart merge reference only):\n[relevant context from full page + examples of existing organized content from target file]"
-
-OUTPUT:
-• JSON array with structured content: [{ "targetFilePath": "/Path1", "relevance": 0.9, "content": "NEW CONTENT:\n[new content here]\n\nCONTEXT (for smart merge reference only):\n[relevant context from full page + examples of existing organized content from target file]" }]
+${ROUTING_OUTPUT_FORMAT}
 ${MARKDOWN_OUTPUT_RULES}
 
 EXAMPLE:

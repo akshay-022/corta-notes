@@ -165,6 +165,55 @@ Keep things concise unless the user specifically asks for more detail.
 
 **CRITICAL FORMATTING RULE:** OUTPUT ONLY CLEAN MARKDOWN - never use HTML tags like <br>, <div>, <p>. Use real line breaks and proper Markdown syntax only.`
 
+export const PARA_METHODOLOGY_GUIDELINES = `PARA METHODOLOGY GUIDELINES (Tiago Forte):
+Organize content by ACTIONABILITY, not topic:
+
+• **Projects** - Things with a deadline and specific outcome (e.g., "Launch new feature", "Q1 Planning")
+• **Areas** - Ongoing responsibilities to maintain (e.g., "Team Management", "Personal Health")  
+• **Resources** - Topics of ongoing interest for future reference (e.g., "Design Inspiration", "Learning Resources")
+• **Archive** - Inactive items from the other three categories
+
+ROUTING PRIORITY BY ACTIONABILITY:
+1. Projects (most actionable) → Areas → Resources → Archive (least actionable)
+2. Ask: "When will I need this?" not "What category does this belong to?"
+
+PARA ROUTING DECISION TREE:
+• Does this content have a deadline and specific outcome? → Route to **Projects** folder
+• Is this an ongoing responsibility I need to maintain? → Route to **Areas** folder  
+• Is this useful information I might reference later? → Route to **Resources** folder
+• No longer active/relevant? → Route to **Archive** or don't organize
+
+PARA PRINCIPLES - AVOID THESE MISTAKES:
+❌ DON'T organize by topic/subject ("Marketing", "Engineering")
+✅ DO organize by actionability ("Active Projects", "Areas to Maintain")
+❌ DON'T create deep folder hierarchies  
+✅ DO keep it flat with clear action levels
+❌ DON'T ask "What is this about?"
+✅ DO ask "When will I need to act on this?"
+
+Route content where you'll actually look for it when you need to take action.`
+
+export const ROUTING_CONTEXT_INSTRUCTIONS = `=== NEW CONTENT TO BE ORGANIZED ===
+These are the ONLY new unorganized paragraphs that need to be added to target files:
+
+{NEW_CONTENT_LIST}
+
+=== CONTEXT (for understanding only) ===
+This is the full page context where the new content was written. Use this to understand the context and flow:
+
+{FULL_PAGE_TEXT}
+
+=== END CONTEXT ==={ORGANIZATION_RULES_SECTION}`
+
+export const ROUTING_OUTPUT_FORMAT = `IMPORTANT: 
+- Your "content" field should include the new content AND context (including examples of existing organized content)
+- Structure your output to help the smart merge system understand what's new vs context
+- The smart merge system needs context that includes examples of existing organized content to make intelligent merging decisions
+- Format: "NEW CONTENT:\\n[new content]\\n\\nCONTEXT (for smart merge reference only):\\n[relevant context from full page + examples of existing organized content from target file]"
+
+OUTPUT:
+• JSON array with structured content: [{ "targetFilePath": "/Path1", "relevance": 0.9, "content": "NEW CONTENT:\\n[new content here]\\n\\nCONTEXT (for smart merge reference only):\\n[relevant context from full page + examples of existing organized content from target file]" }]`
+
 export const BRAINSTORMING_FUNCTION_CALLING_RULES = `
 You have access to a rewrite_editor function that can replace the user's editor content with new markdown content.
 
