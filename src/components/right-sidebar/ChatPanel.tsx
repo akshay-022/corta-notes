@@ -30,6 +30,7 @@ type Props = {
   selections: SelectionObject[]
   setSelections: (selections: SelectionObject[]) => void
   onApplyAiResponseToEditor?: (responseText: string, selections?: SelectionObject[]) => void
+  onPageUpdate?: (updatedPage: Page) => void
   editor?: Editor | null
   isMobile?: boolean
 }
@@ -64,6 +65,7 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   selections,
   setSelections,
   onApplyAiResponseToEditor,
+  onPageUpdate,
   editor,
   isMobile = false
 }: Props, ref) {
@@ -585,18 +587,15 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                               return
                             }
 
-                            if (updatedPage && editor) {
-                              logger.info('Updating editor with fresh content from database')
-                              // Update the editor with fresh content
-                              editor.commands.setContent(updatedPage.content)
-                              
-                              // Also update any page state if needed
-                              if (onApplyAiResponseToEditor) {
-                                onApplyAiResponseToEditor('', []) // Clear any selections
-                              }
+                            if (updatedPage) {
+                              // Emit custom event with updated page content
+                              window.dispatchEvent(new CustomEvent('updatePageContent', {
+                                detail: { updatedPage }
+                              }))
+                              logger.info('Emitted updatePageContent event with fresh data')
                             }
                           } catch (error) {
-                            logger.error('Error refreshing page content:', error)
+                            logger.error('Error refreshing page:', error)
                           }
                         }
                       }, 1000); // Give user 1 second to see the success message

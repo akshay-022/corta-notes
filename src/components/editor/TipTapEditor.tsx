@@ -194,14 +194,44 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     setTimeout(() => titleInputRef.current?.focus(), 0)
   }
 
-
-
   // Initialize organization rules from page metadata
   useEffect(() => {
     const pageMetadata = page.metadata as any
     const rules = pageMetadata?.organizationRules || ''
     setOrganizationRules(rules)
   }, [page.metadata])
+
+  // Update editor content when page prop changes (for external updates like from chat panel)
+  useEffect(() => {
+    if (editor && page.uuid !== currentPageRef.current) {
+      logger.info('Page UUID changed, updating editor content', { 
+        oldUuid: currentPageRef.current, 
+        newUuid: page.uuid 
+      })
+      currentPageRef.current = page.uuid
+      const newContent = showSummary ? (page.page_summary || page.content) : page.content
+      editor.commands.setContent(newContent as any)
+      setTitle(page.title)
+    } else if (editor && page.uuid === currentPageRef.current) {
+      // Same page but content might have been updated externally
+      const currentEditorContent = JSON.stringify(editor.getJSON())
+      const newContent = showSummary ? (page.page_summary || page.content) : page.content
+      const newContentString = JSON.stringify(newContent)
+      
+      if (currentEditorContent !== newContentString && !isUserTyping) {
+        logger.info('Page content updated externally, refreshing editor', { pageUuid: page.uuid })
+        editor.commands.setContent(newContent as any)
+        setTitle(page.title)
+      }
+    }
+  }, [page, editor, showSummary, isUserTyping])
+
+  // Update title when page prop changes
+  useEffect(() => {
+    if (!isUserEditingTitle) {
+      setTitle(page.title)
+    }
+  }, [page.title, isUserEditingTitle])
 
   // Open organization rules dialog
   const openOrganizationRules = () => {

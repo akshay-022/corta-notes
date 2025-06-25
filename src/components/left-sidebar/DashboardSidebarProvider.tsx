@@ -644,6 +644,7 @@ export default function DashboardSidebarProvider({ children }: { children: React
               selections={selections}
               setSelections={setSelections}
               onApplyAiResponseToEditor={undefined} // Mobile doesn't need this callback
+              onPageUpdate={updatePage}
               editor={null} // Mobile doesn't pass editor reference
               isMobile={true}
             />
@@ -727,6 +728,7 @@ export default function DashboardSidebarProvider({ children }: { children: React
                 selections={selections}
                 setSelections={setSelections}
                 onApplyAiResponseToEditor={undefined}
+                onPageUpdate={updatePage}
                 editor={null}
                 isMobile={false}
               />

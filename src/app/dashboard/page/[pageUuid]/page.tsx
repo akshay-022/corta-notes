@@ -87,6 +87,29 @@ export default function DashboardPageByUuid() {
     fetchPageFromSupabase()
   }, [pageUuid]) // Only depend on pageUuid - fetch fresh data every time
 
+  // Listen for page content updates from chat panel
+  useEffect(() => {
+    const handlePageContentUpdate = (event: CustomEvent) => {
+      const { updatedPage } = event.detail
+      if (updatedPage && updatedPage.uuid === pageUuid) {
+        logger.info('Received page content update from chat panel', { pageUuid: updatedPage.uuid })
+        setActivePage(updatedPage)
+        
+        // Update context too
+        if (notesCtx) {
+          notesCtx.setActivePage(updatedPage)
+          notesCtx.updatePage(updatedPage)
+        }
+      }
+    }
+
+    window.addEventListener('updatePageContent', handlePageContentUpdate as EventListener)
+    
+    return () => {
+      window.removeEventListener('updatePageContent', handlePageContentUpdate as EventListener)
+    }
+  }, [pageUuid, notesCtx])
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center">
