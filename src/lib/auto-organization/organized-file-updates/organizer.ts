@@ -89,22 +89,33 @@ export async function organizePage({ editor, pageUuid, pageTitle }: OrganizePage
     const { fileTreeContext } = await getFileTreeContext()
     const fullPageText = editor.getText()
     
-    // Get organization rules from page metadata
+    // Get global organization rules from profile for routing decisions
     const supabase = createClient()
-    const { data: page } = await supabase
-      .from('pages')
-      .select('metadata')
-      .eq('uuid', pageUuid)
-      .single()
+    const { data: { user } } = await supabase.auth.getUser()
     
-    const pageMetadata = page?.metadata as any
-    const organizationRules = pageMetadata?.organizationRules || ''
-    
-    if (organizationRules) {
-      logger.info('Using page organization rules', { pageUuid, rules: organizationRules })
+    let globalOrganizationRules = ''
+    if (user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('metadata')
+        .eq('user_id', user.id)
+        .single()
+      
+      if (profile?.metadata) {
+        const profileMetadata = profile.metadata as any
+        globalOrganizationRules = profileMetadata.globalOrganizationRules || ''
+      }
     }
     
-    const routingPrompt = buildRoutingPrompt(pageTitle, paragraphs, fileTreeContext, fullPageText, organizationRules)
+    if (globalOrganizationRules) {
+      logger.info('Using global organization rules for routing', { 
+        pageUuid, 
+        globalRulesLength: globalOrganizationRules.length
+      })
+    }
+    
+    // Pass ONLY global rules to routing prompt (for file destination decisions)
+    const routingPrompt = buildRoutingPrompt(pageTitle, paragraphs, fileTreeContext, fullPageText, globalOrganizationRules)
 
     let routingResponse: any[] = []
     try {

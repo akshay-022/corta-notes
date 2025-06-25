@@ -89,7 +89,37 @@ export default function Sidebar({
   const [showHiddenItems, setShowHiddenItems] = useState(false)
   const [fileHistory, setFileHistory] = useState<FileHistoryItem[]>([])
 
+  // Add state for global organization instructions
+  const [globalOrganizationRules, setGlobalOrganizationRules] = useState('')
+  const [isGlobalOrganizationRulesOpen, setIsGlobalOrganizationRulesOpen] = useState(false)
+
   const router = useRouter();
+
+  // Load global organization rules from profiles table
+  useEffect(() => {
+    const loadGlobalOrganizationRules = async () => {
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('metadata')
+            .eq('user_id', user.id)
+            .single()
+          
+          if (profile?.metadata) {
+            const metadata = profile.metadata as any
+            setGlobalOrganizationRules(metadata.globalOrganizationRules || '')
+          }
+        }
+      } catch (error) {
+        logger.error('Failed to load global organization rules:', error)
+      }
+    }
+    
+    loadGlobalOrganizationRules()
+  }, [])
 
   // Auto-trigger rename mode for newly created items
   useEffect(() => {
@@ -201,6 +231,46 @@ export default function Sidebar({
   const handleOrganizationCancel = () => {
     setOrganizingItem(null)
     setOrganizationInstructions('')
+  }
+
+  // Global organization rules functions
+  const openGlobalOrganizationRules = () => {
+    setIsGlobalOrganizationRulesOpen(true)
+  }
+
+  const saveGlobalOrganizationRules = async () => {
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      // First, get current profile metadata
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('metadata')
+        .eq('user_id', user.id)
+        .single()
+
+      const currentMetadata = (profile?.metadata as any) || {}
+      const updatedMetadata = {
+        ...currentMetadata,
+        globalOrganizationRules: globalOrganizationRules.trim()
+      }
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({ metadata: updatedMetadata })
+        .eq('user_id', user.id)
+
+      if (error) {
+        logger.error('Error saving global organization rules:', error)
+      } else {
+        logger.info('Global organization rules saved successfully')
+        setIsGlobalOrganizationRulesOpen(false)
+      }
+    } catch (error) {
+      logger.error('Exception saving global organization rules:', error)
+    }
   }
 
   const handleSearchDocumentSelect = (doc: SuperMemoryDocument) => {
@@ -815,7 +885,16 @@ export default function Sidebar({
             {/* Auto-organized notes section - takes all remaining space */}
             <div className="flex-1 flex flex-col min-h-0">
               <div className="px-4 pb-2 flex-shrink-0">
-                <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">Auto-organized notes</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">Auto-organized notes</h3>
+                  <button
+                    onClick={openGlobalOrganizationRules}
+                    className="text-[#969696] hover:text-[#cccccc] transition-colors p-1 rounded hover:bg-[#2a2d2e]"
+                    title="Edit global organization instructions"
+                  >
+                    <Edit size={12} />
+                  </button>
+                </div>
               </div>
 
               {/* File tree - only organized notes and folders - takes all remaining space */}
@@ -990,6 +1069,55 @@ export default function Sidebar({
               </button>
               <button
                 onClick={handleOrganizationSubmit}
+                className="px-3 py-1.5 bg-[#007acc] hover:bg-[#005a9e] text-white text-sm rounded transition-colors"
+              >
+                Save Instructions
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global Organization Rules Dialog */}
+      {isGlobalOrganizationRulesOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-[#2a2a2a] border border-[#404040] rounded-lg p-6 w-96 max-w-[90vw]">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-[#cccccc] font-medium">Global Organization Instructions</h3>
+              <button
+                onClick={() => setIsGlobalOrganizationRulesOpen(false)}
+                className="text-[#969696] hover:text-[#cccccc] transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-[#969696] text-sm mb-2">
+                Set global instructions for how all your notes should be organized.
+              </p>
+              <p className="text-[#888888] text-xs mb-4">
+                These rules will be applied to all auto-organization. For example: "Group work tasks into 'Work' folder, keep meeting notes in 'Meetings', use date-based folders for journals."
+              </p>
+              <textarea
+                value={globalOrganizationRules}
+                onChange={(e) => setGlobalOrganizationRules(e.target.value)}
+                placeholder="Enter your global organization preferences..."
+                className="w-full bg-[#1a1a1a] border border-[#404040] rounded px-3 py-2 text-[#cccccc] text-sm resize-none"
+                rows={6}
+                autoFocus
+              />
+            </div>
+            
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setIsGlobalOrganizationRulesOpen(false)}
+                className="px-3 py-1.5 text-sm text-[#969696] hover:text-[#cccccc] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveGlobalOrganizationRules}
                 className="px-3 py-1.5 bg-[#007acc] hover:bg-[#005a9e] text-white text-sm rounded transition-colors"
               >
                 Save Instructions
