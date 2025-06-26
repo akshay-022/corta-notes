@@ -59,7 +59,7 @@ export const TIPTAP_FORMATTING_PROMPT = `Markdown Formatting Rules (apply strict
 • OUTPUT CLEAN MARKDOWN - not plain text, not HTML, not JSON
 • Prefer numbered lists (1. 2. 3.) or bullet lists (- item) for easy scanning
 • Break complex ideas into concise bullets (one idea per line, ≤ 18 words)
-• Bold **keywords** or short phrases to highlight important concepts
+• Bold **keywords** to highlight important concepts. All the most important statements should have bolded parts/keywords that represent the key concept!!
 • Use ## headings for major sections, ### for subsections (but avoid excessive nesting)
 • No walls of text – keep paragraphs ≤ 2-3 sentences or use bullets instead
 • Never output raw HTML tags like <br> – use real line breaks or Markdown only
@@ -67,6 +67,9 @@ export const TIPTAP_FORMATTING_PROMPT = `Markdown Formatting Rules (apply strict
 • Keep the user's authentic voice and urgency – but prioritise readability
 • Double line breaks for paragraph separation, single line breaks within lists
 • Headings MUST be descriptions of content below it. NOT the page title of the page you sent to or received from!!!!!
+• If there is a standalone statement, do not give it a heading that is the same as the statement. In such cases no heading is ok. Heading should not be a repeated version of a point below it.
+
+• See in general, you are just someone who must organize somewhat unorganized content into a very easily readable form. Like what a human may like to read. Don't do stupid things like repeat a heading and the point directly under it etc. Just use common sense. 
 `
 
 export const ULTRA_CONDENSED_ORGANIZATION_TEMPLATE = `CONDENSED CONTENT RULES:
@@ -210,6 +213,20 @@ WHAT NOT TO DO:
 • ❌ Don't output raw HTML.
 `
 
+export const FAITHFUL_MERGE_RULES = `FAITHFUL MERGE RULES (preserve author's wording & structure):
+• KEEP EVERY HEADING and sub-heading exactly as the user wrote it – never merge or rename headings.
+• KEEP EVERY BULLET (or numbered item) the user wrote – do not drop bullets unless they are exact duplicates.
+• Do not generalise or rewrite the user's wording. Only minimal typo fixes are allowed.
+• You may re-order bullets **within the same heading** for logical flow, but never move a bullet to a different heading.
+• If you need to create new headings, only do so when the user clearly indicated a new section (e.g., blank lines + clear topic shift).
+• Maintain original emphasis: retain **bold** and *italic* markers. Do NOT use HTML tags.
+• Output must follow TIPTAP_FORMATTING_PROMPT – clean Markdown, no HTML.
+`
+
+export const MERGE_INCLUDE_ALL_TODAY = `MERGE COMPLETENESS RULE:
+MUST include every heading, paragraph, and bullet from TODAY'S EXISTING CONTENT in the merged output.  
+Do NOT omit, summarise, or merge away any part of today's content.  
+Simply weave NEW CONTENT into the correct places while preserving all original text.` 
 
 
 
@@ -297,17 +314,3 @@ FUNCTION PARAMETER RULES:
 - No explanations, no status messages, no extra text
 - Just the pure content that should appear in the editor` 
 
-export const FAITHFUL_MERGE_RULES = `FAITHFUL MERGE RULES (preserve author's wording & structure):
-• KEEP EVERY HEADING and sub-heading exactly as the user wrote it – never merge or rename headings.
-• KEEP EVERY BULLET (or numbered item) the user wrote – do not drop bullets unless they are exact duplicates.
-• Do not generalise or rewrite the user's wording. Only minimal typo fixes are allowed.
-• You may re-order bullets **within the same heading** for logical flow, but never move a bullet to a different heading.
-• If you need to create new headings, only do so when the user clearly indicated a new section (e.g., blank lines + clear topic shift).
-• Maintain original emphasis: retain **bold** and *italic* markers. Do NOT use HTML tags.
-• Output must follow TIPTAP_FORMATTING_PROMPT – clean Markdown, no HTML.
-`
-
-export const MERGE_INCLUDE_ALL_TODAY = `MERGE COMPLETENESS RULE:
-MUST include every heading, paragraph, and bullet from TODAY'S EXISTING CONTENT in the merged output.  
-Do NOT omit, summarise, or merge away any part of today's content.  
-Simply weave NEW CONTENT into the correct places while preserving all original text.` 
