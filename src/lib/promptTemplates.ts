@@ -1,9 +1,9 @@
 // PROMPTS FOR ROUTING CONTENT TO FILES
 
-export const ANTI_NEW_FILE_CREATION_RULES = `🚨 CRITICAL: AVOID CREATING NEW FILES AT ALL COSTS!
+export const ANTI_NEW_FILE_CREATION_RULES = `🚨 CRITICAL: AVOID CREATING NEW FILES AT ALL COSTS (UNLESS it best fits inside a DIR that has no files in it)!
 • If content has already been routed to existing files, it's EXTREMELY UNLIKELY you need to create a new file
 • ALWAYS use existing files first - they exist for a reason
-• Only create new files if content is 100% unique and fits nowhere else
+• Only create new files if content is 100% unique and fits nowhere else. (This rises higher if content fits best inside a leaf node DIR)
 • When in doubt, USE AN EXISTING FILE rather than create new one
 • Write FULL FILE PATHS (like "/Project Notes/Sprint Planning") to avoid creating accidental new notes
 • Partial paths create unwanted new files - ALWAYS use complete paths from file tree
