@@ -8,6 +8,11 @@ export const ANTI_NEW_FILE_CREATION_RULES = `🚨 CRITICAL: AVOID CREATING NEW F
 • Write FULL FILE PATHS (like "/Project Notes/Sprint Planning") to avoid creating accidental new notes
 • Partial paths create unwanted new files - ALWAYS use complete paths from file tree
 
+If you are creating a new file, the title MUST explain what is inside the file!!!!
+If a DIR has no files in it, ANY path that contains that DIR path must also include a suitable file name at the end of the path!!!!
+
+If something is in Corta/strategising, do not put general strategising in it, unless its directly related to Corta (Where Corta is just a random example here)!! Redundant adding of content to files is NOT good.
+
 ROUTING PRIORITY:
 1. FIRST: Try existing files (even if not perfect match)
 2. SECOND: Use broader existing categories  
