@@ -1,5 +1,5 @@
 import { RefinementItem, LineEdit } from '@/thought-tracking/core/organization/types'
-import { TIPTAP_FORMATTING_PROMPT, EDITING_USER_CONTENT_FOR_ORGANIZATION } from '@/lib/promptTemplates'
+import { TIPTAP_FORMATTING_PROMPT, FAITHFUL_MERGE_RULES, EDITING_USER_CONTENT_PRESERVE } from '@/lib/promptTemplates'
 import { Editor } from '@tiptap/core'
 import Document from '@tiptap/extension-document'
 import Paragraph from '@tiptap/extension-paragraph'
@@ -482,7 +482,9 @@ ${newText}${organizationRulesSection}
 
 ${TIPTAP_FORMATTING_PROMPT}
 
-${EDITING_USER_CONTENT_FOR_ORGANIZATION}
+${FAITHFUL_MERGE_RULES}
+
+${EDITING_USER_CONTENT_PRESERVE}
 
 RELEVANCE FILTER:
 • Everything you add MUST be related to "${pageTitle || 'this page'}"

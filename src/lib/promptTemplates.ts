@@ -1,5 +1,3 @@
-
-
 // PROMPTS FOR ROUTING CONTENT TO FILES
 
 export const ANTI_NEW_FILE_CREATION_RULES = `🚨 CRITICAL: AVOID CREATING NEW FILES AT ALL COSTS!
@@ -123,7 +121,7 @@ WHAT TO DO:
 • Use the user's original structure - just make it more concise
 
 HIGHLIGHTING STRATEGY:
-• **Bold**: Key terms and important conclusions  
+• **Bold**: Key terms and important conclusions
 • *Italics*: The 20% most important content that gives the immediate gist
 • Together, bold + italics should help users scan and understand quickly
 
@@ -161,12 +159,12 @@ BAD :
 Bets you could make:
 Make people add links – your retrieval will be way better than ChatGPT hence direct impact on your work.
 Make writing extremely easy – something ChatGPT does not do.
-Memory parsable – making memory parsable for users doesn’t seem like a big deal right now.
+Memory parsable – making memory parsable for users doesn't seem like a big deal right now.
 Precise references – in references, reference exactly what the user said so their communication bandwidth is improved.
 User control – let users only mark things as stale, annotate, etc., giving them more control than ChatGPT.
 Proactive autocompletes – autocompletes in the background without needing to write prompts, based on the notes you write.
 Thinking about Corta – this is me strategising about Corta too.
-Countering ChatGPT – there must be an extreme amount of thought given to how you won’t let ChatGPT kill you.
+Countering ChatGPT – there must be an extreme amount of thought given to how you won't let ChatGPT kill you.
 Transparency – there should be a way for people to see into your actual product.
 Eliminate biases – you must not have internal biases.
 No internal biases – definitely no internal biases.
@@ -181,15 +179,34 @@ GOOD :
 Bets you could make:
 Make people add links – your retrieval will be way better than ChatGPT hence direct impact on your work.
 Make writing extremely easy – something ChatGPT does not do.
-Memory parsable – making memory parsable for users doesn’t seem like a big deal right now.
+Memory parsable – making memory parsable for users doesn't seem like a big deal right now.
 Precise references – in references, reference exactly what the user said so their communication bandwidth is improved.
 User control – let users only mark things as stale, annotate, etc., giving them more control than ChatGPT.
 Proactive autocompletes – autocompletes in the background without needing to write prompts, based on the notes you write.
 Thinking about Corta – this is me strategising about Corta too.
-Countering ChatGPT – there must be an extreme amount of thought given to how you won’t let ChatGPT kill you.
+Countering ChatGPT – there must be an extreme amount of thought given to how you won't let ChatGPT kill you.
 Transparency – there should be a way for people to see into your actual product.
 Eliminate biases – you must not have internal biases.
 No internal biases – definitely no internal biases. 
+`
+
+export const EDITING_USER_CONTENT_PRESERVE = `USER CONTENT PRESERVATION RULES (no summarisation):
+
+CORE PRINCIPLE: PRESERVE THE USER'S AUTHENTIC VOICE & HEADINGS
+• Keep every heading exactly as written – never rename or merge headings.
+• Keep every bullet / numbered item – do not drop or combine bullets.
+• Do not generalise or rewrite the user's wording. Only minimal typo fixes are allowed.
+• Maintain original emphasis: retain **bold** and *italic* markers. Do NOT use HTML tags.
+• Use proper Markdown only – no <br>, <u>, <div>, or HTML of any sort.
+• You may re-order bullets within the SAME heading for logical flow, but never move content across headings.
+• NEVER delete important content. If something feels irrelevant, leave it in place – the user decides later.
+
+WHAT NOT TO DO:
+• ❌ Don't change "Bets I'm making" to "Key Assumptions".
+• ❌ Don't change "Random thoughts" to "Miscellaneous Ideas".
+• ❌ Don't shorten or paraphrase sentences (except tiny typo fixes).
+• ❌ Don't add corporate language or fluff.
+• ❌ Don't output raw HTML.
 `
 
 
@@ -278,3 +295,12 @@ FUNCTION PARAMETER RULES:
 - The "content" parameter must ONLY contain clean markdown for the editor
 - No explanations, no status messages, no extra text
 - Just the pure content that should appear in the editor` 
+
+export const FAITHFUL_MERGE_RULES = `FAITHFUL MERGE RULES (preserve author's wording & structure):
+• KEEP EVERY HEADING and sub-heading exactly as the user wrote it – never merge or rename headings.
+• KEEP EVERY BULLET (or numbered item) the user wrote – do not drop bullets unless they are exact duplicates.
+• Do not generalise or rewrite the user's wording. Only minimal typo fixes are allowed.
+• You may re-order bullets **within the same heading** for logical flow, but never move a bullet to a different heading.
+• If you need to create new headings, only do so when the user clearly indicated a new section (e.g., blank lines + clear topic shift).
+• Maintain original emphasis: retain **bold** and *italic* markers. Do NOT use HTML tags.
+• Output must follow TIPTAP_FORMATTING_PROMPT – clean Markdown, no HTML.` 
