@@ -66,6 +66,7 @@ export const TIPTAP_FORMATTING_PROMPT = `Markdown Formatting Rules (apply strict
 • Use simple Markdown: **bold**, *italic*, - bullets, 1. numbers, ## headings
 • Keep the user's authentic voice and urgency – but prioritise readability
 • Double line breaks for paragraph separation, single line breaks within lists
+• Headings MUST be descriptions of content below it. NOT the page title of the page you sent to or received from!!!!!
 `
 
 export const ULTRA_CONDENSED_ORGANIZATION_TEMPLATE = `CONDENSED CONTENT RULES:
@@ -303,4 +304,10 @@ export const FAITHFUL_MERGE_RULES = `FAITHFUL MERGE RULES (preserve author's wor
 • You may re-order bullets **within the same heading** for logical flow, but never move a bullet to a different heading.
 • If you need to create new headings, only do so when the user clearly indicated a new section (e.g., blank lines + clear topic shift).
 • Maintain original emphasis: retain **bold** and *italic* markers. Do NOT use HTML tags.
-• Output must follow TIPTAP_FORMATTING_PROMPT – clean Markdown, no HTML.` 
+• Output must follow TIPTAP_FORMATTING_PROMPT – clean Markdown, no HTML.
+`
+
+export const MERGE_INCLUDE_ALL_TODAY = `MERGE COMPLETENESS RULE:
+MUST include every heading, paragraph, and bullet from TODAY'S EXISTING CONTENT in the merged output.  
+Do NOT omit, summarise, or merge away any part of today's content.  
+Simply weave NEW CONTENT into the correct places while preserving all original text.` 

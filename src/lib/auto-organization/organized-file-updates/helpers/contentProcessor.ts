@@ -1,5 +1,5 @@
 import { RefinementItem, LineEdit } from '@/thought-tracking/core/organization/types'
-import { TIPTAP_FORMATTING_PROMPT, FAITHFUL_MERGE_RULES, EDITING_USER_CONTENT_PRESERVE } from '@/lib/promptTemplates'
+import { TIPTAP_FORMATTING_PROMPT, FAITHFUL_MERGE_RULES, EDITING_USER_CONTENT_PRESERVE, MERGE_INCLUDE_ALL_TODAY } from '@/lib/promptTemplates'
 import { Editor } from '@tiptap/core'
 import Document from '@tiptap/extension-document'
 import Paragraph from '@tiptap/extension-paragraph'
@@ -483,6 +483,8 @@ ${newText}${organizationRulesSection}
 ${TIPTAP_FORMATTING_PROMPT}
 
 ${FAITHFUL_MERGE_RULES}
+
+${MERGE_INCLUDE_ALL_TODAY}
 
 ${EDITING_USER_CONTENT_PRESERVE}
 
