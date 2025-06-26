@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { FileText } from 'lucide-react'
+import { FileText, RotateCcw, AlertTriangle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { FileHistoryItem } from './fileHistoryUtils'
+import { FileHistoryItem, EnhancedFileHistoryItem } from './fileHistoryUtils'
 import { createClient } from '@/lib/supabase/supabase-client'
+import { revertService, loadEnhancedHistoryFromStorage } from '@/lib/auto-organization/organized-file-updates/reverting-files'
+import logger from '@/lib/logger'
 
 interface FileHistoryProps {
   isMobile?: boolean
@@ -19,6 +21,9 @@ export default function FileHistory({ isMobile, setSidebarOpen, onSeeAll }: File
   const [history, setHistory] = useState<FileHistoryItem[]>([])
   const [showAll, setShowAll] = useState(false)
   const [animatingItems, setAnimatingItems] = useState<Set<string>>(new Set())
+  const [enhancedHistory, setEnhancedHistory] = useState<EnhancedFileHistoryItem[]>([])
+  const [revertingItems, setRevertingItems] = useState<Set<string>>(new Set())
+  const [confirmRevert, setConfirmRevert] = useState<EnhancedFileHistoryItem | null>(null)
   const router = useRouter()
 
   // Load history from Supabase profile metadata on mount
@@ -44,6 +49,15 @@ export default function FileHistory({ isMobile, setSidebarOpen, onSeeAll }: File
     init()
   }, [])
 
+  // Load enhanced history from localStorage on mount
+  useEffect(() => {
+    const loadEnhancedHistory = () => {
+      const enhanced = loadEnhancedHistoryFromStorage()
+      setEnhancedHistory(enhanced)
+    }
+    loadEnhancedHistory()
+  }, [])
+
   // Listen for file history updates
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -64,9 +78,23 @@ export default function FileHistory({ isMobile, setSidebarOpen, onSeeAll }: File
         data: { user },
       } = await supabase.auth.getUser()
       if (!user?.id) return
+      
+      // First, get current metadata to preserve existing keys
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('metadata')
+        .eq('user_id', user.id)
+        .single()
+      
+      const currentMetadata = (profile?.metadata as any) || {}
+      const updatedMetadata = {
+        ...currentMetadata,
+        fileHistory: updatedHistory  // Only update fileHistory, preserve other keys
+      }
+      
       await supabase
         .from('profiles')
-        .update({ metadata: { fileHistory: updatedHistory } })
+        .update({ metadata: updatedMetadata })
         .eq('user_id', user.id)
     } catch (err) {
       console.error('Failed to save file history to Supabase', err)
@@ -109,6 +137,64 @@ export default function FileHistory({ isMobile, setSidebarOpen, onSeeAll }: File
     if (!isMobile) {
       setSidebarOpen(false)
     }
+  }
+
+  const handleRevertClick = (e: React.MouseEvent, item: FileHistoryItem) => {
+    e.stopPropagation() // Prevent file navigation
+    
+    // Find the enhanced history item for this file
+    const enhancedItem = enhancedHistory.find(h => h.uuid === item.uuid)
+    if (enhancedItem) {
+      setConfirmRevert(enhancedItem)
+    } else {
+      logger.warn('No enhanced history found for revert', { uuid: item.uuid })
+    }
+  }
+
+  const confirmRevertAction = async () => {
+    if (!confirmRevert) return
+
+    setRevertingItems(prev => new Set([...prev, confirmRevert.uuid]))
+    
+    try {
+      const result = await revertService.revertFileChange(confirmRevert)
+      
+      if (result.success) {
+        logger.info('File successfully reverted', { 
+          pageUuid: result.pageUuid?.substring(0, 8),
+          pageTitle: result.pageTitle 
+        })
+        
+        // Remove from enhanced history
+        setEnhancedHistory(prev => prev.filter(h => h.uuid !== confirmRevert.uuid))
+        
+        // Show success feedback (you could add a toast notification here)
+        console.log(`✅ Successfully reverted "${result.pageTitle}"`)
+        
+        // Refresh the page if user is currently viewing the reverted file
+        const currentPath = window.location.pathname
+        if (currentPath.includes(confirmRevert.uuid)) {
+          window.location.reload()
+        }
+      } else {
+        logger.error('Revert failed', { error: result.error })
+        console.error(`❌ Revert failed: ${result.error}`)
+      }
+    } catch (error) {
+      logger.error('Revert operation error', { error })
+      console.error('❌ Revert operation error:', error)
+    } finally {
+      setRevertingItems(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(confirmRevert.uuid)
+        return newSet
+      })
+      setConfirmRevert(null)
+    }
+  }
+
+  const cancelRevert = () => {
+    setConfirmRevert(null)
   }
 
   const getTimeAgo = (timestamp: number) => {
@@ -156,6 +242,8 @@ export default function FileHistory({ isMobile, setSidebarOpen, onSeeAll }: File
       <div className="space-y-0">
         {displayedItems.map((item, index) => {
           const isAnimating = animatingItems.has(item.uuid)
+          const isReverting = revertingItems.has(item.uuid)
+          const canRevert = enhancedHistory.some(h => h.uuid === item.uuid)
           
           return (
             <div
@@ -163,6 +251,7 @@ export default function FileHistory({ isMobile, setSidebarOpen, onSeeAll }: File
               className={`
                 flex items-center hover:bg-[#2a2d2e] text-sm group transition-all duration-300 cursor-pointer
                 ${isAnimating ? 'animate-pulse bg-[#2a2d2e]' : ''}
+                ${isReverting ? 'opacity-60' : ''}
               `}
               style={{ 
                 paddingLeft: '16px', 
@@ -197,12 +286,70 @@ export default function FileHistory({ isMobile, setSidebarOpen, onSeeAll }: File
                     {item.action === 'created' ? 'new' : 'upd'}
                   </span>
                   <span>{getTimeAgo(item.timestamp)}</span>
+                  
+                  {/* Revert button - only show if we have enhanced history for this item */}
+                  {canRevert && (
+                    <button
+                      onClick={(e) => handleRevertClick(e, item)}
+                      disabled={isReverting}
+                      className={`
+                        p-1 rounded transition-colors opacity-0 group-hover:opacity-100
+                        ${isReverting 
+                          ? 'text-[#666] cursor-not-allowed' 
+                          : 'text-[#969696] hover:text-[#ff6b6b] hover:bg-[#3a2a2a]'
+                        }
+                      `}
+                      title={isReverting ? 'Reverting...' : 'Revert this change'}
+                    >
+                      <RotateCcw size={12} className={isReverting ? 'animate-spin' : ''} />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
           )
         })}
       </div>
+
+      {/* Confirmation Dialog */}
+      {confirmRevert && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-[#2a2a2a] border border-[#404040] rounded-lg p-6 w-96 max-w-[90vw]">
+            <div className="flex items-center gap-3 mb-4">
+              <AlertTriangle size={20} className="text-[#ff6b6b]" />
+              <h3 className="text-[#cccccc] font-medium">
+                {revertService.getRevertPreview(confirmRevert).action}
+              </h3>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-[#cccccc] text-sm mb-2">
+                {revertService.getRevertPreview(confirmRevert).description}
+              </p>
+              {revertService.getRevertPreview(confirmRevert).warning && (
+                <p className="text-[#ff6b6b] text-xs">
+                  ⚠️ {revertService.getRevertPreview(confirmRevert).warning}
+                </p>
+              )}
+            </div>
+            
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={cancelRevert}
+                className="px-4 py-2 text-[#cccccc] hover:bg-[#3a3a3a] rounded transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmRevertAction}
+                className="px-4 py-2 bg-[#ff6b6b] text-white hover:bg-[#ff5555] rounded transition-colors"
+              >
+                {confirmRevert.action === 'created' ? 'Delete File' : 'Revert Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 } 

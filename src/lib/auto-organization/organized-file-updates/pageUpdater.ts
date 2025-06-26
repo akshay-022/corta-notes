@@ -3,7 +3,13 @@ import { ContentProcessor } from '@/lib/auto-organization/organized-file-updates
 import { ensureMetadataMarkedOrganized } from '@/lib/auto-organization/organized-file-updates/helpers/organized-file-metadata'
 import logger from '@/lib/logger'
 import { Page } from '@/lib/supabase/types'
-import { postFileHistoryUpdate, FileHistoryItem } from '@/components/left-sidebar/fileHistoryUtils'
+import { 
+  postFileHistoryUpdate, 
+  FileHistoryItem, 
+  postEnhancedFileUpdate,
+  createEnhancedFileHistoryItem 
+} from '@/components/left-sidebar/fileHistoryUtils'
+import { addEnhancedHistoryItem } from './reverting-files'
 
 export interface OrganizedChunk {
   targetFilePath: string // e.g. "/Projects/AI Journal"
@@ -26,19 +32,35 @@ async function ensurePageForPath(userId: string, filePath: string, supabase: any
   let currentPage: Page | null = null
   let wasCreated = false
 
+  logger.info('📂 Path parsing details', {
+    originalPath: filePath,
+    segments,
+    segmentCount: segments.length,
+    lastSegmentWillBe: segments.length > 0 ? 'file' : 'unknown'
+  })
+
   // iterate through segments
   for (let i = 0; i < segments.length; i++) {
     const title = segments[i]
     const isLast = i === segments.length - 1
     const type = isLast ? 'file' : 'folder'
 
-    // Look up existing
+    logger.info(`🔍 Looking for existing ${type}`, {
+      segmentIndex: i,
+      title,
+      type,
+      isLast,
+      parentUuid: parentUuid?.substring(0, 8) || 'root'
+    })
+
+    // Look up existing - first try exact match, then case-insensitive
     let query = supabase
       .from('pages')
       .select('*')
       .eq('user_id', userId)
       .eq('title', title)
       .eq('type', type)
+      .eq('organized', true)
       .eq('is_deleted', false)
 
     if (parentUuid) {
@@ -47,7 +69,61 @@ async function ensurePageForPath(userId: string, filePath: string, supabase: any
       query = query.is('parent_uuid', null)
     }
 
-    const { data: existing } = await query.single()
+    let { data: exactResults, error: exactError } = await query
+
+    let existing = null
+    
+    if (exactResults && exactResults.length > 0) {
+      existing = exactResults[0] // Take the first exact match
+      if (exactResults.length > 1) {
+        logger.warn(`⚠️ Found ${exactResults.length} exact matches for "${title}", using first one`, {
+          title,
+          type,
+          foundTitles: exactResults.map((r: any) => ({ title: r.title, uuid: r.uuid.substring(0, 8) }))
+        })
+      } else {
+        logger.info(`✅ Found exact match for "${title}"`, {
+          title,
+          uuid: existing.uuid.substring(0, 8)
+        })
+      }
+    } else {
+      // If exact match failed, try case-insensitive search
+      logger.info(`🔍 No exact match for "${title}", trying case-insensitive search`)
+      
+      let caseInsensitiveQuery = supabase
+        .from('pages')
+        .select('*')
+        .eq('user_id', userId)
+        .ilike('title', title) // Case-insensitive LIKE
+        .eq('type', type)
+        .eq('organized', true)
+        .eq('is_deleted', false)
+
+      if (parentUuid) {
+        caseInsensitiveQuery = caseInsensitiveQuery.eq('parent_uuid', parentUuid)
+      } else {
+        caseInsensitiveQuery = caseInsensitiveQuery.is('parent_uuid', null)
+      }
+
+      const { data: caseInsensitiveResults } = await caseInsensitiveQuery
+      
+      if (caseInsensitiveResults && caseInsensitiveResults.length > 0) {
+        existing = caseInsensitiveResults[0] // Take the first match
+        if (caseInsensitiveResults.length > 1) {
+          logger.warn(`⚠️ Found ${caseInsensitiveResults.length} case-insensitive matches for "${title}", using first one`, {
+            searchedFor: title,
+                         foundTitles: caseInsensitiveResults.map((r: any) => ({ title: r.title, uuid: r.uuid.substring(0, 8) }))
+          })
+        } else {
+          logger.info(`✅ Found case-insensitive match`, {
+            searchedFor: title,
+            foundTitle: existing.title,
+            uuid: existing.uuid.substring(0, 8)
+          })
+        }
+      }
+    }
 
     if (existing) {
       logger.info(`📁 Found existing ${type}`, { title, uuid: existing.uuid.substring(0, 8) })
@@ -140,6 +216,10 @@ export async function applyOrganizationChunks(chunks: OrganizedChunk[]): Promise
         organizationRulesLength: organizationRules.length
       })
 
+      // Capture old content for revert functionality
+      const oldContent = page.content
+      const oldContentText = page.content_text || ''
+
       if (isNewFile) {
         console.log('🎯 === NEW FILE PATH ===')
         // For brand-new files call smartMerge too (existing content may be empty)
@@ -198,6 +278,21 @@ export async function applyOrganizationChunks(chunks: OrganizedChunk[]): Promise
         .eq('uuid', page.uuid)
 
       if (upErr) throw upErr
+
+      // Create enhanced history items with revert capability
+      const enhancedHistoryItem = createEnhancedFileHistoryItem(
+        page.uuid,
+        page.title,
+        isNewFile ? 'created' : 'updated',
+        oldContent,
+        newContentJSON,
+        oldContentText,
+        newContentText,
+        chunk.targetFilePath
+      )
+
+      // Save to localStorage for revert functionality
+      addEnhancedHistoryItem(enhancedHistoryItem)
 
       if (isNewFile) {
         created.push({ uuid: page.uuid, title: page.title, action: 'created', timestamp: Date.now(), path: chunk.targetFilePath })

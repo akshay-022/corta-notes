@@ -25,6 +25,20 @@ export const MULTIPLE_DESTINATIONS_STRATEGY = `MULTIPLE DESTINATIONS STRATEGY:
 `
 
 
+export const ROUTING_TEXT_PRESERVATION_RULES = `🔒 CRITICAL TEXT PRESERVATION RULES:
+• Copy the user's unorganized paragraphs EXACTLY AS WRITTEN - do not rephrase, paraphrase, or rewrite
+• Keep the user's original wording, tone, urgency, and voice completely intact
+• Do NOT "improve" or "clean up" the text - preserve it character-for-character
+• Do NOT add explanations, context, or interpretations to the user's original text
+• Do NOT change casual language to formal language
+• Do NOT fix grammar, spelling, or formatting in the user's original content
+• Your job is ROUTING ONLY - deciding WHERE content goes, not HOW it should be written
+• The smart merge system will handle formatting - you must preserve the raw, authentic user text
+
+EXAMPLE:
+❌ BAD (rephrased): "Complete the API authentication feature development"
+✅ GOOD (preserved): "fix that login bug thing asap"`
+
 export const ROUTING_CONTEXT_INSTRUCTIONS = `=== NEW CONTENT TO BE ORGANIZED ===
 These are the ONLY new unorganized paragraphs that need to be added to target files:
 
@@ -41,10 +55,11 @@ export const ROUTING_OUTPUT_FORMAT = `IMPORTANT:
 - Your "content" field should include the new content AND context (including examples of existing organized content)
 - Structure your output to help the smart merge system understand what's new vs context
 - The smart merge system needs context that includes examples of existing organized content to make intelligent merging decisions
-- Format: "NEW CONTENT:\\n[new content]\\n\\nCONTEXT (for smart merge reference only):\\n[relevant context from full page + examples of existing organized content from target file]"
+- 🔒 PRESERVE USER TEXT EXACTLY: In the "NEW CONTENT" section, copy the user's unorganized paragraphs word-for-word without any changes
+- Format: "NEW CONTENT:\\n[exact user text with no modifications]\\n\\nCONTEXT (for smart merge reference only):\\n[relevant context from full page + examples of existing organized content from target file]"
 
 OUTPUT:
-• JSON array with structured content: [{ "targetFilePath": "/Path1", "relevance": 0.9, "content": "NEW CONTENT:\\n[new content here]\\n\\nCONTEXT (for smart merge reference only):\\n[relevant context from full page + examples of existing organized content from target file]" }]`
+• JSON array with structured content: [{ "targetFilePath": "/Path1", "relevance": 0.9, "content": "NEW CONTENT:\\n[user's exact unorganized text here - no rephrasing]\\n\\nCONTEXT (for smart merge reference only):\\n[relevant context from full page + examples of existing organized content from target file]" }]`
 
 
 
@@ -65,6 +80,9 @@ export const TIPTAP_FORMATTING_PROMPT = `Markdown Formatting Rules (apply strict
 • Prefer numbered lists (1. 2. 3.) or bullet lists (- item) for easy scanning
 • Break complex ideas into concise bullets (one idea per line, ≤ 18 words)
 • Bold **keywords** to highlight important concepts. All the most important statements should have bolded parts/keywords that represent the key concept!!
+
+BOLDING EXAMPLES:
+**Archipelago** for creation. **Archipelago** of ideas, want ways to connect them. In convergence mode. Help people do this. **Hemingway** would end with the **next beginning** in mind and not when he got exhausted. To ensure he gets to write better.
 • Use ## headings for major sections, ### for subsections (but avoid excessive nesting)
 • No walls of text – keep paragraphs ≤ 2-3 sentences or use bullets instead
 • Never output raw HTML tags like <br> – use real line breaks or Markdown only

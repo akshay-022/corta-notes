@@ -24,7 +24,8 @@ import {
   EDITING_USER_CONTENT_FOR_ORGANIZATION,
   PARA_METHODOLOGY_GUIDELINES,
   ROUTING_CONTEXT_INSTRUCTIONS,
-  ROUTING_OUTPUT_FORMAT
+  ROUTING_OUTPUT_FORMAT,
+  ROUTING_TEXT_PRESERVATION_RULES
 } from '@/lib/promptTemplates'
 
 interface ParagraphInfo {
@@ -52,6 +53,33 @@ export async function organizePage({ editor, pageUuid, pageTitle }: OrganizePage
   if (isOrganizing) {
     logger.info('Auto-organization already running – skipping', { pageUuid })
     return
+  }
+
+  // Check if current page is already organized - if so, skip organization
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (user?.id) {
+    const { data: currentPage } = await supabase
+      .from('pages')
+      .select('organized, title')
+      .eq('uuid', pageUuid)
+      .eq('user_id', user.id)
+      .single()
+    
+    if (currentPage?.organized) {
+      logger.info('🚫 Skipping organization - current page is already organized', { 
+        pageUuid: pageUuid.substring(0, 8),
+        pageTitle: currentPage.title || pageTitle,
+        organized: true
+      })
+      return
+    } else {
+      logger.info('✅ Current page is unorganized - proceeding with organization', {
+        pageUuid: pageUuid.substring(0, 8),
+        pageTitle: currentPage?.title || pageTitle,
+        organized: false
+      })
+    }
   }
 
   // Ensure every paragraph has metadata.id before we proceed
@@ -89,10 +117,7 @@ export async function organizePage({ editor, pageUuid, pageTitle }: OrganizePage
     const { fileTreeContext } = await getFileTreeContext()
     const fullPageText = editor.getText()
     
-    // Get global organization rules from profile for routing decisions
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    
+    // Get global organization rules from profile for routing decisions (reuse supabase client from above)
     let globalOrganizationRules = ''
     if (user) {
       const { data: profile } = await supabase
@@ -133,6 +158,7 @@ export async function organizePage({ editor, pageUuid, pageTitle }: OrganizePage
     // Treat routing response as chunks directly (expects content field)
     const chunks: OrganizedChunk[] = routingResponse.filter(
       (c: any) => c.targetFilePath && c.content,
+      
     )
 
     logger.info('🤖 LLM routing returned chunks', { 
@@ -317,6 +343,8 @@ Follow these rules when organizing content.\n` : ''
 
   return `Route to ALL RELEVANT existing [FILE]s from the file tree. NEVER route to [DIR]s.
 ${ANTI_NEW_FILE_CREATION_RULES}
+
+${ROUTING_TEXT_PRESERVATION_RULES}
 
 ${PARA_METHODOLOGY_GUIDELINES}
 
