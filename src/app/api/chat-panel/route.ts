@@ -27,7 +27,7 @@ export async function POST(req: Request) {
   logger.info('Chat panel API called', { hasKey: !!process.env.OPENAI_API_KEY });
   
   try {
-    const { conversationHistory, currentMessage, thoughtContext, selections, currentPageUuid } = await req.json();
+    const { conversationHistory, currentMessage, thoughtContext, selections, currentPageUuid, model } = await req.json();
 
     if (!currentMessage) {
       return NextResponse.json({ error: 'currentMessage is required' }, { status: 400 });
@@ -43,7 +43,8 @@ export async function POST(req: Request) {
       currentMessage,
       thoughtContext,
       selections,
-      currentPageUuid
+      currentPageUuid,
+      model: model || 'gpt-4o' // Default to gpt-4o if no model specified
     });
   } catch (error) {
     logger.error('LLM API Error:', error);
@@ -60,9 +61,10 @@ async function handleUnifiedStreamingRequest(params: {
   currentMessage: string,
   thoughtContext?: string,
   selections?: any[],
-  currentPageUuid?: string
+  currentPageUuid?: string,
+  model?: string
 }) {
-  const { conversationHistory, currentMessage, thoughtContext, selections, currentPageUuid } = params;
+  const { conversationHistory, currentMessage, thoughtContext, selections, currentPageUuid, model } = params;
   
   logger.info('=== UNIFIED STREAMING REQUEST START ===', { 
     currentMessage: currentMessage.substring(0, 100) + '...',
@@ -165,16 +167,17 @@ Use these guidelines when suggesting content organization, structure, or when us
       }
     }));
 
+    // Call OpenAI with streaming and function calling
+    const selectedModel = model || 'gpt-4o'; // Default to gpt-4o if no model specified
+    
     logger.info('Calling OpenAI with unified streaming + function calling', { 
       messageCount: messages.length,
       toolCount: tools.length,
-      model: 'chatgpt-4o-latest',
+      model: selectedModel,
       hasPageUuid: !!currentPageUuid
     });
-
-    // Call OpenAI with streaming and function calling
     const stream = await openai.chat.completions.create({
-      model: "gpt-4o", // Use GPT-4o for function calling
+      model: selectedModel,
       messages,
       tools,
       tool_choice: 'auto', // Let AI decide

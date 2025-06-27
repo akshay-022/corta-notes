@@ -105,6 +105,17 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
   const [showConversations, setShowConversations] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleInputValue, setTitleInputValue] = useState('')
+  
+  // Model selection state
+  const [selectedModel, setSelectedModel] = useState<string>('gpt-4o')
+  
+  // Available models
+  const availableModels = [
+    { id: 'gpt-4o', name: 'GPT-4o', description: '' },
+    { id: 'o3-mini', name: 'o3-mini', description: '' },
+    { id: 'o3', name: 'o3', description: '' },
+    { id: 'chatgpt-4o-latest', name: 'ChatGPT (chat only, no actions)', description: '' }
+  ]
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -140,6 +151,21 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
     logger.info('ChatPanel mounted, loading conversations in background...')
     loadConversations()
   }, []) // Keep empty dependency array to run only once
+  
+  // Load saved model from localStorage
+  useEffect(() => {
+    const savedModel = localStorage.getItem('corta-selected-model')
+    if (savedModel && availableModels.some(m => m.id === savedModel)) {
+      setSelectedModel(savedModel)
+      logger.info('Loaded saved model from localStorage', { model: savedModel })
+    }
+  }, [])
+  
+  // Save model to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem('corta-selected-model', selectedModel)
+    logger.info('Saved model to localStorage', { model: selectedModel })
+  }, [selectedModel])
 
   // Scroll to bottom when panel opens
   useEffect(() => {
@@ -583,7 +609,8 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
         thoughtContextLength: thoughtContext.length,
         lastAiMessageTimestamp,
         lastUserMessageTimestamp,
-        hasEditor: !!editor
+        hasEditor: !!editor,
+        selectedModel: selectedModel
       })
 
       console.log('Sending messages to LLM API', { 
@@ -605,6 +632,7 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
           thoughtContext, // Separate thought context
           selections: selections.length > 0 ? selections : undefined,
           currentPageUuid: currentPage?.uuid,
+          model: selectedModel, // Add selected model
 
           // No useFunction flag - let AI decide always
         }),
@@ -790,7 +818,7 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
     } finally {
       setIsLoading(false)
     }
-  }, [input, selections, isLoading, activeConversation, currentPage, allPages, editor, extractFileReferencesAsSelections])
+  }, [input, selections, isLoading, activeConversation, currentPage, allPages, editor, extractFileReferencesAsSelections, selectedModel])
 
   // handleKeyDown will be created inside ChatInputWrapper
 
@@ -900,19 +928,19 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
         allPages={allPages}
       >
         {({ handleKeyDown: mentionHandleKeyDown }) => {
-          const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              handleSubmit()
-            } else if (e.key === 'Backspace' && !input && selections.length > 0) {
-              e.preventDefault()
-              removeSelection(selections[selections.length - 1].id)
-            }
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit()
+    } else if (e.key === 'Backspace' && !input && selections.length > 0) {
+      e.preventDefault()
+      removeSelection(selections[selections.length - 1].id)
+    }
             // @ mention handling
             mentionHandleKeyDown(e)
           }, [handleSubmit, input, selections, mentionHandleKeyDown])
-          
-          return (
+
+  return (
     <div 
       className={`${
         isMobile 
@@ -1276,6 +1304,21 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
                   <ArrowUp size={14} style={{ color: '#60a5fa' }} />
                 )}
               </button>
+            </div>
+            {/* Model Selector */}
+            <div className="mt-2 flex items-center gap-2 text-xs">
+              <span className="text-[#969696]">Model:</span>
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="bg-[#2a2a2a] border border-[#404040] rounded px-2 py-1 text-[#cccccc] text-xs focus:outline-none focus:border-[#007acc] transition-colors"
+              >
+                {availableModels.map(model => (
+                  <option key={model.id} value={model.id}>
+                    {model.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <QuickOpenPalette anchorRef={textareaRef} />
           </div>
