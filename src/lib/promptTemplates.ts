@@ -55,7 +55,7 @@ export const ROUTING_OUTPUT_FORMAT = `IMPORTANT:
 - Your "content" field should include the new content AND context (including examples of existing organized content)
 - Structure your output to help the smart merge system understand what's new vs context
 - The smart merge system needs context that includes examples of existing organized content to make intelligent merging decisions
-- 🔒 PRESERVE USER TEXT EXACTLY: In the "NEW CONTENT" section, copy the user's unorganized paragraphs word-for-word without any changes
+- 🔒 PRESERVE USER TEXT EXACTLY: In the "NEW CONTENT" section, copy the user's unorganized paragraphs that should go in that route word-for-word without any changes
 - Format: "NEW CONTENT:\\n[exact user text with no modifications]\\n\\nCONTEXT (for smart merge reference only):\\n[relevant context from full page + examples of existing organized content from target file]"
 
 OUTPUT:
