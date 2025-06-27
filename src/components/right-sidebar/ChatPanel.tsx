@@ -16,6 +16,7 @@ import { useRouter } from 'next/navigation'
 import { QuickOpenProvider } from './folder-tagging-for-ai/QuickOpenContext'
 import QuickOpenPalette from './folder-tagging-for-ai/QuickOpenPalette'
 import { ChatInputWrapper } from './folder-tagging-for-ai/ChatInputWrapper'
+import ModelSelector from './ModelSelector'
 
 // Simple selection object type
 type SelectionObject = {
@@ -111,10 +112,10 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
   
   // Available models
   const availableModels = [
-    { id: 'gpt-4o', name: 'GPT-4o', description: '' },
-    { id: 'o3-mini', name: 'o3-mini', description: '' },
-    { id: 'o3', name: 'o3', description: '' },
-    { id: 'chatgpt-4o-latest', name: 'ChatGPT (chat only, no actions)', description: '' }
+    { id: 'gpt-4o', name: 'gpt-4o', description: 'Most capable model with actions' },
+    { id: 'o3-mini', name: 'o3-mini', description: 'Fast and efficient reasoning' },
+    { id: 'o3', name: 'o3', description: 'Advanced reasoning capabilities' },
+    { id: 'chatgpt-4o-latest', name: 'ChatGPT (Chat only, no actions)', description: 'Chat only, no actions' }
   ]
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   
@@ -916,10 +917,50 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
     textarea.focus()
   }, [input, buildFullPath, textareaRef, setInput, selections, setSelections])
 
+  // Create the multi-file select handler
+  const handleMultipleFileSelect = React.useCallback((pages: Page[]) => {
+    console.log('🎯 ChatPanel handleMultipleFileSelect ENTRY:', { count: pages.length, files: pages.map(p => p.title) })
+    
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    // Find the last @ in the input and remove it
+    const lastAtIndex = input.lastIndexOf('@')
+    if (lastAtIndex === -1) return
+    
+    const newText = input.slice(0, lastAtIndex)
+    console.log('🔄 ChatPanel Multi-select: removing @ text, newText:', newText)
+    
+    // Update both textarea and React state
+    textarea.value = newText
+    setInput(newText)
+    
+    // Add all files as selections
+    const fileSelections: SelectionObject[] = pages.map(page => ({
+      id: page.uuid,
+      text: page.title || '',
+      startLine: 1,
+      endLine: (page.content_text || '').split('\n').length
+    }))
+    
+    const updatedSelections = [...selections, ...fileSelections]
+    setSelections(updatedSelections)
+    console.log('📋 Added multiple file selections:', { 
+      newFiles: pages.map(p => buildFullPath(p)),
+      totalSelections: updatedSelections.length 
+    })
+    
+    // Put cursor at the end
+    const newCursorPos = newText.length
+    textarea.setSelectionRange(newCursorPos, newCursorPos)
+    textarea.focus()
+  }, [input, buildFullPath, textareaRef, setInput, selections, setSelections])
+
   return (
     <QuickOpenProvider 
       pages={allPages} 
       onSelectFile={handleFileSelect}
+      onSelectMultipleFiles={handleMultipleFileSelect}
     >
       <ChatInputWrapper
         input={input}
@@ -1305,20 +1346,14 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
                 )}
               </button>
             </div>
-            {/* Model Selector - Minimalist Box Design */}
+            {/* Model Selector - Custom Dropdown */}
             <div className="mt-2 flex items-center gap-2 text-xs">
               <span className="text-[#969696]">Model:</span>
-              <select
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
-                className="bg-[#2a2a2a] border border-[#404040] rounded px-2 py-1 text-[#cccccc] text-xs focus:outline-none focus:border-[#404040] transition-colors cursor-pointer"
-              >
-                {availableModels.map(model => (
-                  <option key={model.id} value={model.id}>
-                    {model.name}
-                  </option>
-                ))}
-              </select>
+              <ModelSelector
+                selectedModel={selectedModel}
+                onModelChange={setSelectedModel}
+                availableModels={availableModels}
+              />
             </div>
             <QuickOpenPalette anchorRef={textareaRef} />
           </div>

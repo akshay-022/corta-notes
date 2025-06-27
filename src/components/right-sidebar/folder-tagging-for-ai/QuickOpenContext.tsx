@@ -11,11 +11,15 @@ interface QuickOpenContextValue {
   isOpen: boolean
   inputText: string // the actual text after @ in chat input
   items: Page[] // children under currentPath + filter applied (folders first)
+  selectedFiles: Page[] // multi-selected files
   // actions
   open: (caretIndex?: number) => void
   close: () => void
   setInputText: (value: string) => void
   selectFile: (page: Page) => void
+  toggleFileSelection: (page: Page) => void
+  finishSelection: () => void
+  clearSelection: () => void
 }
 
 const QuickOpenContext = createContext<QuickOpenContextValue | null>(null)
@@ -23,12 +27,14 @@ const QuickOpenContext = createContext<QuickOpenContextValue | null>(null)
 interface Props {
   pages: Page[] // full flat list from Supabase
   onSelectFile: (page: Page) => void // consumer callback when user chooses file
+  onSelectMultipleFiles?: (pages: Page[]) => void // consumer callback for multi-select
   children: ReactNode
 }
 
-export function QuickOpenProvider({ pages, onSelectFile, children }: Props) {
+export function QuickOpenProvider({ pages, onSelectFile, onSelectMultipleFiles, children }: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const [inputText, setInputText] = useState('')
+  const [selectedFiles, setSelectedFiles] = useState<Page[]>([])
 
   // helper: parse input text after @ and find matching files/folders
   const getMatchingFiles = useCallback(
@@ -98,7 +104,10 @@ export function QuickOpenProvider({ pages, onSelectFile, children }: Props) {
     setIsOpen(true)
     setInputText('')
   }
-  const close = () => setIsOpen(false)
+  const close = () => {
+    setIsOpen(false)
+    setSelectedFiles([]) // Clear selection when closing
+  }
 
   const updateInputText = (value: string) => {
     setInputText(value)
@@ -112,14 +121,54 @@ export function QuickOpenProvider({ pages, onSelectFile, children }: Props) {
     }
   }
 
+  const toggleFileSelection = (page: Page) => {
+    if (page.type === 'folder') {
+      // For folders, navigate directly (don't multi-select)
+      selectFile(page)
+      return
+    }
+    
+    setSelectedFiles(prev => {
+      const isAlreadySelected = prev.some(f => f.uuid === page.uuid)
+      if (isAlreadySelected) {
+        return prev.filter(f => f.uuid !== page.uuid)
+      } else {
+        return [...prev, page]
+      }
+    })
+  }
+
+  const finishSelection = () => {
+    if (selectedFiles.length === 0) return
+    
+    // Use multi-select callback if available, otherwise fall back to individual calls
+    if (onSelectMultipleFiles) {
+      onSelectMultipleFiles(selectedFiles)
+    } else {
+      // Fallback: send files individually
+      selectedFiles.forEach(file => onSelectFile(file))
+    }
+    
+    setSelectedFiles([])
+    close()
+  }
+
+  const clearSelection = () => {
+    setSelectedFiles([])
+  }
+
       const value: QuickOpenContextValue = {
       isOpen,
       inputText,
       items,
+      selectedFiles,
       open,
       close,
       setInputText: updateInputText,
       selectFile,
+      toggleFileSelection,
+      finishSelection,
+      clearSelection,
     }
 
   return (

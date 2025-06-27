@@ -1,5 +1,5 @@
 import { useQuickOpen } from './QuickOpenContext'
-import { FileText, Folder } from 'lucide-react'
+import { FileText, Folder, Check } from 'lucide-react'
 import React, { useRef, useEffect } from 'react'
 
 interface Props {
@@ -16,6 +16,10 @@ export default function QuickOpenPalette({ anchorRef }: Props) {
     items,
     inputText,
     selectFile,
+    selectedFiles,
+    toggleFileSelection,
+    finishSelection,
+    clearSelection,
   } = useQuickOpen()
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -37,6 +41,29 @@ export default function QuickOpenPalette({ anchorRef }: Props) {
       ref={containerRef}
       className="fixed z-50 rounded-md bg-[#1e1e1e] border border-[#333] shadow-lg max-h-64 overflow-y-auto"
     >
+      {/* Header with selected count and actions */}
+      {selectedFiles.length > 0 && (
+        <div className="p-2 border-b border-[#333] bg-[#2a2a2a] flex items-center justify-between">
+          <span className="text-xs text-gray-300">
+            {selectedFiles.length} file{selectedFiles.length !== 1 ? 's' : ''} selected
+          </span>
+          <div className="flex gap-1">
+            <button
+              onClick={clearSelection}
+              className="text-xs px-2 py-1 text-gray-400 hover:text-white hover:bg-gray-600 rounded"
+            >
+              Clear
+            </button>
+            <button
+              onClick={finishSelection}
+              className="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+      
       <div className="max-h-64 overflow-y-auto">
         {items.length === 0 ? (
           <div className="p-3 text-sm text-white">
@@ -44,18 +71,39 @@ export default function QuickOpenPalette({ anchorRef }: Props) {
           </div>
         ) : (
           items.map((item, index) => {
+            const isSelected = selectedFiles.some(f => f.uuid === item.uuid)
+            const isFile = item.type !== 'folder'
+            
             return (
               <button
                 key={item.uuid}
-                onClick={() => selectFile(item)}
+                onClick={() => isFile ? toggleFileSelection(item) : selectFile(item)}
                 className="w-full flex items-center gap-2 p-2 text-left hover:bg-gray-700 text-sm text-white"
               >
-                {item.type === 'folder' ? (
-                  <Folder size={16} className="text-blue-400" />
+                {/* Checkbox for files, folder icon for folders */}
+                {isFile ? (
+                  <div className={`w-4 h-4 border rounded flex items-center justify-center ${
+                    isSelected 
+                      ? 'bg-blue-600 border-blue-600' 
+                      : 'border-gray-400 hover:border-gray-300'
+                  }`}>
+                    {isSelected && <Check size={12} className="text-white" />}
+                  </div>
                 ) : (
+                  <Folder size={16} className="text-blue-400" />
+                )}
+                
+                {/* File/folder icon */}
+                {isFile && (
                   <FileText size={16} className="text-gray-300" />
                 )}
+                
                 <span className="truncate">{item.title}</span>
+                
+                {/* Visual indicator for folders */}
+                {!isFile && (
+                  <span className="text-xs text-gray-500 ml-auto">→</span>
+                )}
               </button>
             )
           })
