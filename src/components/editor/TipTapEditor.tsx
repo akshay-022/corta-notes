@@ -9,7 +9,7 @@ import Underline from '@tiptap/extension-underline'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Page, PageUpdate } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/supabase-client'
-import { Info, Edit2, Save, X, FileText, Eye, Edit3, MessageSquare, Zap } from 'lucide-react'
+import { Info, Edit2, Save, X, FileText, Eye, Edit3, MessageSquare, ArrowUp } from 'lucide-react'
 
 import { setupAutoOrganization, organizePage } from '@/lib/auto-organization/organized-file-updates'
 import { useNotes } from '@/components/left-sidebar/DashboardSidebarProvider'
@@ -38,7 +38,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   const [isOrganizationRulesOpen, setIsOrganizationRulesOpen] = useState(false)
   const [organizationRules, setOrganizationRules] = useState('')
   const [isOrganizeDialogOpen, setIsOrganizeDialogOpen] = useState(false)
-  const [organizationInstructions, setOrganizationInstructions] = useState('')
+  const [routingInstructions, setRoutingInstructions] = useState('')
   const [isOrganizing, setIsOrganizing] = useState(false)
 
   
@@ -195,13 +195,13 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     setTimeout(() => titleInputRef.current?.focus(), 0)
   }
 
-  // Initialize organization rules and instructions from page metadata
+  // Initialize organization rules and routing instructions from page metadata
   useEffect(() => {
     const pageMetadata = page.metadata as any
     const rules = pageMetadata?.organizationRules || ''
-    const instructions = pageMetadata?.organizationInstructions || ''
+    const instructions = pageMetadata?.routingInstructions || ''
     setOrganizationRules(rules)
-    setOrganizationInstructions(instructions)
+    setRoutingInstructions(instructions)
   }, [page.metadata])
 
   // Update editor content when page prop changes (for external updates like from chat panel)
@@ -280,29 +280,28 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   // Open organize dialog
   const openOrganizeDialog = () => {
     setIsOrganizeDialogOpen(true)
-    // Load existing organization instructions from page metadata
+    // Load existing routing instructions from page metadata
     const pageMetadata = page.metadata as any || {}
-    setOrganizationInstructions(pageMetadata.organizationInstructions || '')
+    setRoutingInstructions(pageMetadata.routingInstructions || '')
   }
 
   // Handle organize page with instructions
   const handleOrganizePage = async () => {
     if (isOrganizing || !editor) return
     
-    setIsOrganizing(true)
-    logger.info('🗂️ Starting manual organization with instructions', { 
+    logger.info('🗂️ Starting manual organization with routing instructions', { 
       pageUuid: page.uuid, 
       pageTitle: page.title,
-      hasInstructions: !!organizationInstructions.trim() 
+      hasInstructions: !!routingInstructions.trim() 
     })
 
     try {
-      // First, save the organization instructions to page metadata if provided
-      if (organizationInstructions.trim()) {
+      // First, save the routing instructions to page metadata if provided
+      if (routingInstructions.trim()) {
         const currentMetadata = page.metadata as any || {}
         const updatedMetadata = {
           ...currentMetadata,
-          organizationInstructions: organizationInstructions.trim()
+          routingInstructions: routingInstructions.trim()
         }
         
         await supabase
@@ -313,28 +312,37 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
           })
           .eq('uuid', page.uuid)
         
-        logger.info('🗂️ Saved organization instructions to page metadata', { pageUuid: page.uuid })
+        logger.info('🗂️ Saved routing instructions to page metadata', { pageUuid: page.uuid })
       }
 
-      // Use the same frontend organizePage function that double-enter uses
-      await organizePage({ 
+      // Close dialog immediately - don't block user
+      setIsOrganizeDialogOpen(false)
+      
+      // Set organizing state to show button feedback
+      setIsOrganizing(true)
+      
+      // Run organization in background - don't await
+      organizePage({ 
         editor, 
         pageUuid: page.uuid, 
         pageTitle: page.title 
+      }).then(() => {
+        logger.info('🗂️ ✅ Organization completed successfully', { pageUuid: page.uuid })
+        
+        // Refresh organized notes if the callback is available
+        if (pageRefreshCallbackRef.current) {
+          pageRefreshCallbackRef.current()
+        }
+      }).catch((error) => {
+        logger.error('🗂️ ❌ Organization error:', error)
+        // Don't show alert - just log the error since user is no longer waiting
+      }).finally(() => {
+        setIsOrganizing(false)
       })
       
-      logger.info('🗂️ ✅ Organization completed successfully', { pageUuid: page.uuid })
-      setIsOrganizeDialogOpen(false)
-      
-      // Refresh organized notes if the callback is available
-      if (pageRefreshCallbackRef.current) {
-        await pageRefreshCallbackRef.current()
-      }
-      
     } catch (error) {
-      logger.error('🗂️ ❌ Organization error:', error)
-      alert('Failed to organize note. Please try again.')
-    } finally {
+      logger.error('🗂️ ❌ Error saving routing instructions:', error)
+      alert('Failed to save routing instructions. Please try again.')
       setIsOrganizing(false)
     }
   }
@@ -627,11 +635,11 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
             className={`p-1.5 rounded transition-colors ${
               isOrganizing 
                 ? 'text-gray-500 cursor-not-allowed' 
-                : 'text-yellow-400 hover:text-yellow-300 hover:bg-[#3a3a3a]'
+                : 'text-blue-400 hover:text-blue-300 hover:bg-[#3a3a3a]'
             }`}
-            title={isOrganizing ? "Organizing..." : "Organize this page"}
+            title={isOrganizing ? "Uploading in background..." : "Upload to Organized Brain"}
           >
-            <Zap size={14} />
+            <ArrowUp size={14} />
           </button>
 
           <div className="w-px h-4 bg-gray-600" />
@@ -1037,7 +1045,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-[#2a2a2a] border border-gray-600 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">Organize Page</h3>
+              <h3 className="text-lg font-semibold text-white">Upload to Organized Brain</h3>
               <button
                 onClick={() => setIsOrganizeDialogOpen(false)}
                 className="text-gray-400 hover:text-white transition-colors"
@@ -1049,17 +1057,17 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
             
             <div className="mb-4">
               <p className="text-sm text-gray-300 mb-3">
-                How should "{page.title}" be organized? Provide specific instructions to guide the AI.
+                Where should "{page.title}" content be routed? Provide specific routing instructions.
               </p>
               <p className="text-xs text-gray-400 mb-4">
                 For example: "Put this in the 'Work Projects' folder", "Create a new 'Meeting Notes' section", 
-                "Group similar ideas together", or "Keep urgent tasks at the top".
+                "Route similar ideas to the same file", or "Keep urgent tasks in a separate file".
               </p>
               
               <textarea
-                value={organizationInstructions}
-                onChange={(e) => setOrganizationInstructions(e.target.value)}
-                placeholder="Enter organization instructions (optional)..."
+                value={routingInstructions}
+                onChange={(e) => setRoutingInstructions(e.target.value)}
+                placeholder="Enter routing instructions (optional)..."
                 className="w-full h-32 bg-[#1a1a1a] border border-gray-600 rounded p-3 text-gray-200 text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none"
                 disabled={isOrganizing}
                 autoFocus
@@ -1080,18 +1088,18 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                 className={`px-4 py-2 rounded transition-colors flex items-center gap-2 ${
                   isOrganizing 
                     ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-                    : 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
                 }`}
               >
                 {isOrganizing ? (
                   <>
-                    <Zap size={16} className="animate-pulse" />
-                    Organizing...
+                    <ArrowUp size={16} className="animate-pulse" />
+                    Uploading...
                   </>
                 ) : (
                   <>
-                    <Zap size={16} />
-                    Organize
+                    <ArrowUp size={16} />
+                    Upload
                   </>
                 )}
               </button>

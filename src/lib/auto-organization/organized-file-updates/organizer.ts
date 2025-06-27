@@ -56,12 +56,15 @@ export async function organizePage({ editor, pageUuid, pageTitle }: OrganizePage
   }
 
   // Check if current page is already organized - if so, skip organization
+  // Also get page metadata for routing instructions
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
+  let pageRoutingInstructions = ''
+  
   if (user?.id) {
     const { data: currentPage } = await supabase
       .from('pages')
-      .select('organized, title')
+      .select('organized, title, metadata')
       .eq('uuid', pageUuid)
       .eq('user_id', user.id)
       .single()
@@ -79,6 +82,18 @@ export async function organizePage({ editor, pageUuid, pageTitle }: OrganizePage
         pageTitle: currentPage?.title || pageTitle,
         organized: false
       })
+      
+      // Extract routing instructions from page metadata
+      if (currentPage?.metadata) {
+        const pageMetadata = currentPage.metadata as any
+        pageRoutingInstructions = pageMetadata.routingInstructions || ''
+        if (pageRoutingInstructions) {
+          logger.info('📍 Found page-specific routing instructions', { 
+            pageUuid: pageUuid.substring(0, 8),
+            instructionsLength: pageRoutingInstructions.length
+          })
+        }
+      }
     }
   }
 
@@ -139,8 +154,8 @@ export async function organizePage({ editor, pageUuid, pageTitle }: OrganizePage
       })
     }
     
-    // Pass ONLY global rules to routing prompt (for file destination decisions)
-    const routingPrompt = buildRoutingPrompt(pageTitle, paragraphs, fileTreeContext, fullPageText, globalOrganizationRules)
+    // Pass both global rules and page-specific routing instructions to routing prompt
+    const routingPrompt = buildRoutingPrompt(pageTitle, paragraphs, fileTreeContext, fullPageText, globalOrganizationRules, pageRoutingInstructions)
 
     let routingResponse: any[] = []
     try {
@@ -327,6 +342,7 @@ function buildRoutingPrompt(
   fileTreeContext: string,
   fullPageText: string,
   organizationRules?: string,
+  routingInstructions?: string,
 ) {
   const newContentList = paragraphs.map((p, i) => `${i + 1}. ${p.content}`).join('\n')
   
@@ -336,10 +352,16 @@ ${organizationRules}
 
 Follow these rules when organizing content.\n` : ''
 
+  const routingInstructionsSection = routingInstructions?.trim() ? 
+    `\n\nROUTING INSTRUCTIONS FOR THIS PAGE:
+${routingInstructions}
+
+Follow these specific routing instructions when deciding where to place content.\n` : ''
+
   const contextInstructions = ROUTING_CONTEXT_INSTRUCTIONS
     .replace('{NEW_CONTENT_LIST}', newContentList)
     .replace('{FULL_PAGE_TEXT}', fullPageText)
-    .replace('{ORGANIZATION_RULES_SECTION}', organizationRulesSection)
+    .replace('{ORGANIZATION_RULES_SECTION}', organizationRulesSection + routingInstructionsSection)
 
   return `Route to ALL RELEVANT existing [FILE]s from the file tree. NEVER route to [DIR]s.
 ${ANTI_NEW_FILE_CREATION_RULES}
