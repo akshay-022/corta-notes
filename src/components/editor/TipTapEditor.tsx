@@ -586,9 +586,15 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       className="flex-1 bg-[#1a1a1a] flex flex-col overflow-hidden w-full"
       data-editor
     >
-      {/* Minimal toolbar - hidden when chat is open */}
-      {!notesCtx?.isChatOpen && (
-        <div className="absolute top-4 right-4 md:right-6 z-10">
+      {/* Minimal toolbar - always visible, positioned to avoid chat panel */}
+      <div 
+        className="absolute top-4 z-10 transition-all duration-[25ms]"
+        style={{ 
+          right: notesCtx?.isChatOpen 
+            ? `${(notesCtx?.chatPanelWidth || 400) + 16}px` 
+            : '16px' 
+        }}
+      >
         <div className="flex items-center gap-1 bg-[#2a2a2a] rounded-lg p-1 border border-gray-700">
           {/* Summary Toggle - show for organized pages */}
           {page.organized && (
@@ -658,7 +664,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
             }}
             className={`p-1.5 rounded transition-colors ${
               notesCtx?.isChatOpen 
-                ? 'text-blue-400 bg-blue-500/20' 
+                ? 'text-blue-400' 
                 : 'text-gray-400 hover:text-white hover:bg-[#3a3a3a]'
             }`}
             title={notesCtx?.isChatOpen ? "Close Chat" : "Open Chat (⌘K)"}
@@ -666,8 +672,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
             <MessageSquare size={14} />
           </button>
         </div>
-        </div>
-      )}
+      </div>
 
       {/* Saving indicator */}
       {isSaving && (
