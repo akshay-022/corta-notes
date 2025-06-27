@@ -402,7 +402,7 @@ export class ContentProcessor {
         } : 'NO_FIRST_NODE'
       })
 
-      // Get today's date boundaries (start and end of today)
+      // Get today's date boundaries (start and end of today) in LOCAL timezone
       const today = new Date()
       const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
       const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1)
@@ -422,16 +422,19 @@ export class ContentProcessor {
         }
         
         const nodeDate = new Date(lastUpdated)
+        // Convert to local date for comparison (ignoring timezone)
+        const nodeDateLocal = new Date(nodeDate.getFullYear(), nodeDate.getMonth(), nodeDate.getDate())
+        const todayLocal = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+        
         console.log(`🔍 Node ${nodeIndex} date analysis:`, {
           lastUpdated,
           nodeDate: nodeDate.toISOString(),
-          nodeDateTimestamp: nodeDate.getTime(),
-          isAfterStartOfToday: nodeDate >= startOfToday,
-          isBeforeEndOfToday: nodeDate < endOfToday,
-          isInTodayRange: nodeDate >= startOfToday && nodeDate < endOfToday
+          nodeDateLocal: nodeDateLocal.toISOString(),
+          todayLocal: todayLocal.toISOString(),
+          isToday: nodeDateLocal.getTime() === todayLocal.getTime()
         })
 
-        if (nodeDate >= startOfToday && nodeDate < endOfToday) {
+        if (nodeDateLocal.getTime() === todayLocal.getTime()) {
           console.log(`🔍 Node ${nodeIndex} IS TODAY'S CONTENT - incrementing boundary`)
           boundaryIndex = nodeIndex + 1
           console.log(`🔍 New boundaryIndex: ${boundaryIndex}`)

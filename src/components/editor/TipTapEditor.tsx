@@ -745,9 +745,17 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                           <span>Last Updated:</span>
                           <input
                             type="datetime-local"
-                            value={new Date(selectedParagraphMetadata.metadata.lastUpdated).toISOString().slice(0, 16)}
+                            value={(() => {
+                              const date = new Date(selectedParagraphMetadata.metadata.lastUpdated)
+                              // Convert to local timezone for input display
+                              const offset = date.getTimezoneOffset() * 60000
+                              const localDate = new Date(date.getTime() - offset)
+                              return localDate.toISOString().slice(0, 16)
+                            })()}
                             onChange={(e) => {
-                              const newTimestamp = new Date(e.target.value).toISOString()
+                              // Convert local datetime-local input back to UTC for storage
+                              const localDate = new Date(e.target.value)
+                              const newTimestamp = localDate.toISOString()
                               const newMetadata = {
                                 ...selectedParagraphMetadata.metadata,
                                 lastUpdated: newTimestamp
