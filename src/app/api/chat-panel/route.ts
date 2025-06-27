@@ -158,32 +158,42 @@ Use these guidelines when suggesting content organization, structure, or when us
       { role: 'user' as const, content: enhancedCurrentMessage }
     ];
 
-    // Define available functions
-    const tools = EDITOR_FUNCTIONS.map(func => ({
+    // Call OpenAI with streaming and function calling
+    const selectedModel = model || 'gpt-4o'; // Default to gpt-4o if no model specified
+    
+    // Only add tools for models that support function calling
+    const supportsTools = selectedModel !== 'chatgpt-4o-latest';
+    const tools = supportsTools ? EDITOR_FUNCTIONS.map(func => ({
       type: 'function' as const,
       function: {
         name: func.name,
         description: func.description,
         parameters: func.parameters
       }
-    }));
-
-    // Call OpenAI with streaming and function calling
-    const selectedModel = model || 'gpt-4o'; // Default to gpt-4o if no model specified
+    })) : undefined;
     
     logger.info('Calling OpenAI with unified streaming + function calling', { 
       messageCount: messages.length,
-      toolCount: tools.length,
+      toolCount: tools?.length || 0,
       model: selectedModel,
+      supportsTools,
       hasPageUuid: !!currentPageUuid
     });
-    const stream = await openai.chat.completions.create({
-      model: selectedModel,
-      messages,
-      tools,
-      tool_choice: 'auto', // Let AI decide
-      stream: true,
-    });
+
+    // Create the API call with conditional tools
+    const stream = supportsTools && tools 
+      ? await openai.chat.completions.create({
+          model: selectedModel,
+          messages,
+          tools,
+          tool_choice: 'auto', // Let AI decide
+          stream: true,
+        })
+      : await openai.chat.completions.create({
+          model: selectedModel,
+          messages,
+          stream: true,
+        });
 
     // Create streaming response with function calling support
     const encoder = new TextEncoder();

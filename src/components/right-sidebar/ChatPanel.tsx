@@ -1305,13 +1305,13 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
                 )}
               </button>
             </div>
-            {/* Model Selector */}
+            {/* Model Selector - Minimalist Box Design */}
             <div className="mt-2 flex items-center gap-2 text-xs">
               <span className="text-[#969696]">Model:</span>
               <select
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
-                className="bg-[#2a2a2a] border border-[#404040] rounded px-2 py-1 text-[#cccccc] text-xs focus:outline-none focus:border-[#007acc] transition-colors"
+                className="bg-[#2a2a2a] border border-[#404040] rounded px-2 py-1 text-[#cccccc] text-xs focus:outline-none focus:border-[#404040] transition-colors cursor-pointer"
               >
                 {availableModels.map(model => (
                   <option key={model.id} value={model.id}>
