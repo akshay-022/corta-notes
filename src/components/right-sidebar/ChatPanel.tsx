@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useCallback, useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react'
+import React, { memo, useCallback, useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react'
 import { XIcon, SendIcon, Edit2, MessageSquare, ArrowUp } from 'lucide-react'
 import { createClient } from '@/lib/supabase/supabase-client'
 import { Conversation, ChatMessage, Page } from '@/lib/supabase/types'
@@ -13,6 +13,9 @@ import {
 import logger from '@/lib/logger'
 import ChatPagination from './pagination/ChatPagination'
 import { useRouter } from 'next/navigation'
+import { QuickOpenProvider } from './folder-tagging-for-ai/QuickOpenContext'
+import QuickOpenPalette from './folder-tagging-for-ai/QuickOpenPalette'
+import { ChatInputWrapper } from './folder-tagging-for-ai/ChatInputWrapper'
 
 // Simple selection object type
 type SelectionObject = {
@@ -69,6 +72,23 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   editor,
   isMobile = false
 }: Props, ref) {
+  return (
+    <ChatPanelInner {...{ isOpen, onClose, currentPage, allPages, selections, setSelections, onApplyAiResponseToEditor, onPageUpdate, editor, isMobile }} ref={ref} />
+  )
+}))
+
+const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanelInner({ 
+  isOpen,
+  onClose,
+  currentPage,
+  allPages = [],
+  selections,
+  setSelections,
+  onApplyAiResponseToEditor,
+  onPageUpdate,
+  editor,
+  isMobile = false
+}: Props, ref) {
   const supabase = createClient()
   const router = useRouter()
   
@@ -91,6 +111,8 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const messagesContainerRef = useRef<HTMLDivElement>(null)
 
   const MESSAGES_PER_PAGE = 20
+
+  // MentionInput will be created inside the QuickOpenProvider
 
   // Simple scroll to bottom function
   const scrollToBottom = useCallback(() => {
@@ -384,12 +406,102 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     }
   }))
 
+  // Extract file references from input and add them as selections
+  const extractFileReferencesAsSelections = useCallback((messageText: string): string => {
+    console.log('🔍 Extracting file references as selections from message:', messageText)
+    
+    // Find all @filename references (not folders ending with /)
+    const fileReferenceRegex = /@([^@\s]+(?:\/[^@\s\/]+)*)\s/g
+    const matches = Array.from(messageText.matchAll(fileReferenceRegex))
+    
+    console.log('📄 Found file references:', matches.map(m => m[1]))
+    
+    let cleanedMessage = messageText
+    const newSelections: SelectionObject[] = []
+    
+    for (const match of matches) {
+      const fullPath = match[1] // e.g., "Resources/Books/SomeFile"
+      const pathSegments = fullPath.split('/')
+      const filename = pathSegments[pathSegments.length - 1] // Last segment is the filename
+      
+      console.log('🔍 Looking for file:', { fullPath, filename, pathSegments })
+      
+      // Find the file in allPages by traversing the path
+      let currentParentUuid: string | null = null
+      let targetFile: Page | null = null
+      
+      // Navigate through folders to find the target file
+      for (let i = 0; i < pathSegments.length; i++) {
+        const segment = pathSegments[i]
+        const isLastSegment = i === pathSegments.length - 1
+        
+        const page = allPages.find(p => 
+          p.title === segment && 
+          p.parent_uuid === currentParentUuid && 
+          !p.is_deleted &&
+          (isLastSegment ? p.type !== 'folder' : p.type === 'folder') // Last segment should be a file, others should be folders
+        )
+        
+        if (!page) {
+          console.log('❌ Could not find segment:', segment, 'with parent:', currentParentUuid)
+          break
+        }
+        
+        if (isLastSegment) {
+          targetFile = page
+          console.log('✅ Found target file:', { title: page.title, uuid: page.uuid.slice(0, 8) })
+        } else {
+          currentParentUuid = page.uuid
+          console.log('📁 Found folder:', { title: page.title, uuid: page.uuid.slice(0, 8) })
+        }
+      }
+      
+      if (targetFile && targetFile.content_text) {
+        // Create a selection object for this file
+        const fileSelection: SelectionObject = {
+          id: targetFile.uuid,
+          text: targetFile.content_text,
+          startLine: 1,
+          endLine: targetFile.content_text.split('\n').length
+        }
+        
+        newSelections.push(fileSelection)
+        console.log('📄 Added file as selection:', { filename: fullPath, contentLength: targetFile.content_text.length })
+        
+        // Replace the @filename reference with just the filename for cleaner message
+        cleanedMessage = cleanedMessage.replace(match[0], `${filename} `)
+      } else {
+        console.log('❌ Could not find file content for:', fullPath)
+      }
+    }
+    
+    // Add the new file selections to existing selections
+    if (newSelections.length > 0) {
+      const updatedSelections = [...selections, ...newSelections]
+      setSelections(updatedSelections)
+      console.log('📋 Added file selections to context:', { 
+        newFileSelections: newSelections.length,
+        totalSelections: updatedSelections.length 
+      })
+    }
+    
+    console.log('🔄 File extraction complete:', { 
+      originalMessage: messageText,
+      cleanedMessage,
+      fileSelectionsAdded: newSelections.length 
+    })
+    
+    return cleanedMessage
+  }, [allPages, selections, setSelections])
+
   const handleSubmit = useCallback(async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
     
     if (!input.trim() || isLoading || !activeConversation) return
 
-    const userMessageContent = input
+    // Extract file references and add them as selections
+    const userMessageContent = extractFileReferencesAsSelections(input)
+    
     setInput('')
     setIsLoading(true)
     
@@ -492,7 +604,8 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
           currentMessage: userMessageContent,
           thoughtContext, // Separate thought context
           selections: selections.length > 0 ? selections : undefined,
-          currentPageUuid: currentPage?.uuid
+          currentPageUuid: currentPage?.uuid,
+
           // No useFunction flag - let AI decide always
         }),
       })
@@ -677,22 +790,129 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     } finally {
       setIsLoading(false)
     }
-  }, [input, selections, isLoading, activeConversation, currentPage, allPages, editor])
+  }, [input, selections, isLoading, activeConversation, currentPage, allPages, editor, extractFileReferencesAsSelections])
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSubmit()
-    } else if (e.key === 'Backspace' && !input && selections.length > 0) {
-      e.preventDefault()
-      removeSelection(selections[selections.length - 1].id)
-    }
-  }, [handleSubmit, input, selections])
+  // handleKeyDown will be created inside ChatInputWrapper
 
   // Don't unmount when closed - just hide to preserve state
   // if (!isOpen) return null
 
+  // Build full path by traversing parent relationships
+  const buildFullPath = React.useCallback((page: Page): string => {
+    console.log('🏗️ ChatPanel buildFullPath called for:', { title: page.title, uuid: page.uuid.slice(0, 8), parent_uuid: page.parent_uuid?.slice(0, 8) })
+    
+    const pathSegments: string[] = []
+    let currentPage: Page | null = page
+    
+    // Traverse up the parent chain
+    while (currentPage) {
+      console.log('🔍 Processing page:', { title: currentPage.title, uuid: currentPage.uuid.slice(0, 8), parent_uuid: currentPage.parent_uuid?.slice(0, 8) })
+      pathSegments.unshift(currentPage.title)
+      
+      // Find parent
+      if (currentPage.parent_uuid) {
+        const parent = allPages.find(p => p.uuid === currentPage.parent_uuid)
+        console.log('🔍 Found parent:', parent ? { title: parent.title, uuid: parent.uuid.slice(0, 8) } : 'NOT FOUND')
+        currentPage = parent || null
+      } else {
+        console.log('🔍 No parent_uuid, stopping')
+        currentPage = null
+      }
+    }
+    
+    const fullPath = pathSegments.join('/')
+    console.log('🏗️ ChatPanel buildFullPath result:', { pathSegments, fullPath })
+    return fullPath
+  }, [allPages])
+
+  // Create the file select handler
+  const handleFileSelect = React.useCallback((page: Page) => {
+    console.log('🎯 ChatPanel handleFileSelect ENTRY:', { title: page.title, type: page.type, uuid: page.uuid.slice(0, 8) })
+    
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    // Find the last @ in the input
+    const lastAtIndex = input.lastIndexOf('@')
+    if (lastAtIndex === -1) return
+    
+    const isFolder = page.type === 'folder'
+    let newText
+    
+    if (isFolder) {
+      // For folders: build full path + /
+      const fullPath = buildFullPath(page)
+      const replacement = `@${fullPath}/`
+      console.log('📁 ChatPanel Folder logic:', { fullPath, replacement })
+      newText = input.slice(0, lastAtIndex) + replacement
+    } else {
+      // For files: remove the @ text completely
+      newText = input.slice(0, lastAtIndex)
+      console.log('📄 ChatPanel File logic: removing @ text, newText:', newText)
+    }
+    
+    console.log('🔄 ChatPanel Updating text:', { 
+      oldInput: input, 
+      newText, 
+      lastAtIndex,
+      isFolder
+    })
+    
+    // Update both textarea and React state
+    textarea.value = newText
+    setInput(newText)
+    
+    // If this was a file (not folder), add it directly as a selection
+    if (!isFolder) {
+      console.log('📋 File selected, adding as selection immediately')
+      // We already have the file object, so add it directly as a selection
+      const fileSelection: SelectionObject = {
+        id: page.uuid,
+        text: page.title || '',
+        startLine: 1,
+        endLine: (page.content_text || '').split('\n').length
+      }
+      
+      const updatedSelections = [...selections, fileSelection]
+      setSelections(updatedSelections)
+      console.log('📋 Added file selection directly:', { 
+        filename: buildFullPath(page),
+        contentLength: page.content_text?.length || 0,
+        totalSelections: updatedSelections.length 
+      })
+    }
+    
+    // Put cursor at the end
+    const newCursorPos = newText.length
+    textarea.setSelectionRange(newCursorPos, newCursorPos)
+    textarea.focus()
+  }, [input, buildFullPath, textareaRef, setInput, selections, setSelections])
+
   return (
+    <QuickOpenProvider 
+      pages={allPages} 
+      onSelectFile={handleFileSelect}
+    >
+      <ChatInputWrapper
+        input={input}
+        setInput={setInput}
+        textareaRef={textareaRef}
+        allPages={allPages}
+      >
+        {({ handleKeyDown: mentionHandleKeyDown }) => {
+          const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              handleSubmit()
+            } else if (e.key === 'Backspace' && !input && selections.length > 0) {
+              e.preventDefault()
+              removeSelection(selections[selections.length - 1].id)
+            }
+            // @ mention handling
+            mentionHandleKeyDown(e)
+          }, [handleSubmit, input, selections, mentionHandleKeyDown])
+          
+          return (
     <div 
       className={`${
         isMobile 
@@ -1057,10 +1277,15 @@ const ChatPanel = memo(forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                 )}
               </button>
             </div>
+            <QuickOpenPalette anchorRef={textareaRef} />
           </div>
         </div>
       )}
     </div>
+          )
+        }}
+      </ChatInputWrapper>
+    </QuickOpenProvider>
   )
 }))
 

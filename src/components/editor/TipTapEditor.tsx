@@ -297,9 +297,8 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     console.log('📝 Selected text:', { text: selectedText, length: selectedText.length })
     
     if (selectedText.trim()) {
-      const selectionId = `selection-${Date.now()}`
       const newSelection = {
-        id: selectionId,
+        id: page.uuid,
         text: selectedText.trim(),
         startLine: 1, // TipTap doesn't have line numbers, so we use 1
         endLine: 1

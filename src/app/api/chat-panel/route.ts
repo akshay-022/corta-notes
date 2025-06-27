@@ -114,16 +114,18 @@ async function handleUnifiedStreamingRequest(params: {
         enhancedCurrentMessage += `\n\n\n\n\n\n\n\n\n\n${thoughtContext}\n\n\n\n\n\n\n\n\n\n\n`;
       }
     
-      // Add user selections if available
-      if (selections && selections.length > 0) {
-        enhancedCurrentMessage += `\n\nUSER SELECTIONS (This is VERY IMPORTANT. The user's query is probably about this idea/text. Use this as primary context if relevant):\n${JSON.stringify(selections, null, 2)}\n\n`;
-      }
-    
-      // Add memory context from SuperMemory if available  
-      if (relevantDocuments.length > 0) {
-        const memoryContext = formatMemoryContext(relevantDocuments);
-        enhancedCurrentMessage += `\n\nADDITIONAL KNOWLEDGE BASE CONTEXT:\n${memoryContext}`;
-      }
+          // Add user selections if available
+    if (selections && selections.length > 0) {
+      enhancedCurrentMessage += `\n\nUSER SELECTIONS (This is VERY IMPORTANT. The user's query is probably about this idea/text. Use this as primary context if relevant):\n${JSON.stringify(selections, null, 2)}\n\n`;
+    }
+
+
+
+    // Add memory context from SuperMemory if available  
+    if (relevantDocuments.length > 0) {
+      const memoryContext = formatMemoryContext(relevantDocuments);
+      enhancedCurrentMessage += `\n\nADDITIONAL KNOWLEDGE BASE CONTEXT:\n${memoryContext}`;
+    }
 
     // Enhanced system message that includes function calling instructions
     let systemMessage = `${BRAINSTORMING_SYSTEM_PROMPT}
