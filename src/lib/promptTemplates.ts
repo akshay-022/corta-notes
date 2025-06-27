@@ -79,7 +79,7 @@ export const TIPTAP_FORMATTING_PROMPT = `Markdown Formatting Rules (apply strict
 • OUTPUT CLEAN MARKDOWN - not plain text, not HTML, not JSON
 • Prefer numbered lists (1. 2. 3.) or bullet lists (- item) for easy scanning
 • Break complex ideas into concise bullets (one idea per line, ≤ 18 words)
-• Bold **keywords** to highlight important concepts. All the most important statements should have bolded parts/keywords that represent the key concept!!
+• Bold **keywords** to highlight important concepts. All the most important statements should have bolded parts/keywords that represent the key concept!! Because an unbolded wall of text is very difficult to read. Bold only 10-20% of content. NOT more.
 
 BOLDING EXAMPLES:
 **Archipelago** for creation. **Archipelago** of ideas, want ways to connect them. In convergence mode. Help people do this. **Hemingway** would end with the **next beginning** in mind and not when he got exhausted. To ensure he gets to write better.
