@@ -1,6 +1,6 @@
 import { memoryService } from '@/lib/memory/memory-service-supermemory'
 import { MemoryDocument } from '@/lib/memory/types'
-import { createClient } from '@/lib/supabase/supabase-client'
+import { createClient } from '@/lib/supabase/supabase-server'
 
 export interface RelevantMemory {
   id: string
