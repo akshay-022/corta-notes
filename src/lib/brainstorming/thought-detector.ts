@@ -147,16 +147,8 @@ export function createThoughtContext(
     context += '\n\n'
   }
   
-  // Get brain state summary
-  try {
-    const { getBrainState } = require('@/lib/thought-tracking/brain-state')
-    const brainState = getBrainState()
-    if (brainState?.summary) {
-      context += `Here is a summary of the user's brain state until now:\n${brainState.summary}\n\n\n\n`
-    }
-  } catch (error) {
-    console.error('Error getting brain state for context:', error)
-  }
+  // Removed brain state summary - thought-tracking system not used
+  // Brain state functionality was part of the thought-tracking system that's being removed
   
   // Current page content (highest priority)
   if (currentPage) {

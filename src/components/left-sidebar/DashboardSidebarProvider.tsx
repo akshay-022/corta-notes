@@ -316,17 +316,14 @@ export default function DashboardSidebarProvider({ children }: { children: React
       }
     }
 
-    // Listen for thought-tracking events
-    window.addEventListener('thought-tracking:organization-complete', handleOrganizationComplete)
-    window.addEventListener('thought-tracking:organization-error', handleOrganizationError)
+    // Removed thought-tracking event listeners - not used anymore
     
     // Listen for optimized cache update events
     window.addEventListener('message', handleCacheUpdate)
     window.addEventListener('message', handleRefreshRequired)
 
     return () => {
-      window.removeEventListener('thought-tracking:organization-complete', handleOrganizationComplete)
-      window.removeEventListener('thought-tracking:organization-error', handleOrganizationError)
+      // Removed thought-tracking event listener cleanup - not used anymore
       window.removeEventListener('message', handleCacheUpdate)
       window.removeEventListener('message', handleRefreshRequired)
     }
@@ -483,44 +480,10 @@ export default function DashboardSidebarProvider({ children }: { children: React
   }
 
   const sendForOrganization = async (page: Page) => {
-    if (!user) return
-    try {
-      const organizationInstructions = (page.metadata as any)?.organizationInstructions || ''
-      const response = await fetch('/api/organize-note', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          noteId: page.uuid,
-          noteContent: page.content,
-          organizationInstructions: organizationInstructions,
-          fileTree: pages
-        }),
-      })
-      const result = await response.json()
-      if (result.success) {
-        console.log('🗂️ Organization successful, refreshing organized notes...')
-        
-        // Refresh organized notes to show newly created/updated files
-        await refreshOrganizedNotes()
-        
-        if (result.changedPaths && result.changedPaths.length > 0) {
-          const foldersToHighlight = new Set<string>()
-          result.changedPaths.forEach((path: string) => {
-            const pathParts = path.split('/')
-            pathParts.forEach((folderName: string) => {
-              foldersToHighlight.add(folderName.trim())
-            })
-          })
-          setHighlightedFolders(foldersToHighlight)
-          console.log('🗂️ ✅ Highlighting folders:', Array.from(foldersToHighlight))
-        }
-      } else {
-        alert(`Organization failed: ${result.error}`)
-      }
-    } catch (error) {
-      console.error('❌ Organization error:', error)
-      alert('Failed to organize note. Please try again.')
-    }
+    // This function is deprecated - organization now happens in the frontend
+    // using the organizePage function. The organize button in the editor should be used instead.
+    console.warn('sendForOrganization is deprecated - use the organize button in the editor instead')
+    alert('This organization method is deprecated. Please use the organize button (⚡) in the editor toolbar.')
   }
 
   const togglePageVisibility = async (page: Page) => {

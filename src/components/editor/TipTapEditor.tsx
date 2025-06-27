@@ -9,9 +9,9 @@ import Underline from '@tiptap/extension-underline'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Page, PageUpdate } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/supabase-client'
-import { Info, Edit2, Save, X, FileText, Eye, Edit3, MessageSquare } from 'lucide-react'
+import { Info, Edit2, Save, X, FileText, Eye, Edit3, MessageSquare, Zap } from 'lucide-react'
 
-import { setupAutoOrganization } from '@/lib/auto-organization/organized-file-updates'
+import { setupAutoOrganization, organizePage } from '@/lib/auto-organization/organized-file-updates'
 import { useNotes } from '@/components/left-sidebar/DashboardSidebarProvider'
 import logger from '@/lib/logger'
 import { DateDividerPlugin } from '@/lib/organized-notes-formatting/dateDividerPlugin'
@@ -37,6 +37,9 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   const [showSummary, setShowSummary] = useState(false) // Toggle between content and summary
   const [isOrganizationRulesOpen, setIsOrganizationRulesOpen] = useState(false)
   const [organizationRules, setOrganizationRules] = useState('')
+  const [isOrganizeDialogOpen, setIsOrganizeDialogOpen] = useState(false)
+  const [organizationInstructions, setOrganizationInstructions] = useState('')
+  const [isOrganizing, setIsOrganizing] = useState(false)
 
   
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -192,11 +195,13 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     setTimeout(() => titleInputRef.current?.focus(), 0)
   }
 
-  // Initialize organization rules from page metadata
+  // Initialize organization rules and instructions from page metadata
   useEffect(() => {
     const pageMetadata = page.metadata as any
     const rules = pageMetadata?.organizationRules || ''
+    const instructions = pageMetadata?.organizationInstructions || ''
     setOrganizationRules(rules)
+    setOrganizationInstructions(instructions)
   }, [page.metadata])
 
   // Update editor content when page prop changes (for external updates like from chat panel)
@@ -272,8 +277,67 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     }
   }
 
-  // Organize the entire page
+  // Open organize dialog
+  const openOrganizeDialog = () => {
+    setIsOrganizeDialogOpen(true)
+    // Load existing organization instructions from page metadata
+    const pageMetadata = page.metadata as any || {}
+    setOrganizationInstructions(pageMetadata.organizationInstructions || '')
+  }
 
+  // Handle organize page with instructions
+  const handleOrganizePage = async () => {
+    if (isOrganizing || !editor) return
+    
+    setIsOrganizing(true)
+    logger.info('🗂️ Starting manual organization with instructions', { 
+      pageUuid: page.uuid, 
+      pageTitle: page.title,
+      hasInstructions: !!organizationInstructions.trim() 
+    })
+
+    try {
+      // First, save the organization instructions to page metadata if provided
+      if (organizationInstructions.trim()) {
+        const currentMetadata = page.metadata as any || {}
+        const updatedMetadata = {
+          ...currentMetadata,
+          organizationInstructions: organizationInstructions.trim()
+        }
+        
+        await supabase
+          .from('pages')
+          .update({ 
+            metadata: updatedMetadata,
+            updated_at: new Date().toISOString()
+          })
+          .eq('uuid', page.uuid)
+        
+        logger.info('🗂️ Saved organization instructions to page metadata', { pageUuid: page.uuid })
+      }
+
+      // Use the same frontend organizePage function that double-enter uses
+      await organizePage({ 
+        editor, 
+        pageUuid: page.uuid, 
+        pageTitle: page.title 
+      })
+      
+      logger.info('🗂️ ✅ Organization completed successfully', { pageUuid: page.uuid })
+      setIsOrganizeDialogOpen(false)
+      
+      // Refresh organized notes if the callback is available
+      if (pageRefreshCallbackRef.current) {
+        await pageRefreshCallbackRef.current()
+      }
+      
+    } catch (error) {
+      logger.error('🗂️ ❌ Organization error:', error)
+      alert('Failed to organize note. Please try again.')
+    } finally {
+      setIsOrganizing(false)
+    }
+  }
 
   // Capture current selection when opening chat (only when Command+K is pressed)
   const captureCurrentSelection = useCallback(() => {
@@ -453,22 +517,22 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     }
   }
 
-  // Setup auto-organization triggers when editor is ready
-  useEffect(() => {
-    let cleanup: (() => void) | undefined
+  // Setup auto-organization triggers when editor is ready - COMMENTED OUT
+  // useEffect(() => {
+  //   let cleanup: (() => void) | undefined
 
-      if (editor) {
-      // Clean up previous listeners if any
-      if (cleanup) cleanup()
+  //     if (editor) {
+  //     // Clean up previous listeners if any
+  //     if (cleanup) cleanup()
 
-              cleanup = setupAutoOrganization(editor, page.uuid, page.title)
-      logger.info('⚡ Auto-organization initialized for page', { pageUuid: page.uuid })
-      }
+  //             cleanup = setupAutoOrganization(editor, page.uuid, page.title)
+  //     logger.info('⚡ Auto-organization initialized for page', { pageUuid: page.uuid })
+  //     }
 
-    return () => {
-      if (cleanup) cleanup()
-    }
-  }, [editor, page.uuid, page.title])
+  //   return () => {
+  //     if (cleanup) cleanup()
+  //   }
+  // }, [editor, page.uuid, page.title])
 
   // Update editor content when page changes or toggle changes
   useEffect(() => {
@@ -556,7 +620,21 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
             <Edit3 size={14} />
           </button>
           
+          {/* Organize Button */}
+          <button
+            onClick={openOrganizeDialog}
+            disabled={isOrganizing}
+            className={`p-1.5 rounded transition-colors ${
+              isOrganizing 
+                ? 'text-gray-500 cursor-not-allowed' 
+                : 'text-yellow-400 hover:text-yellow-300 hover:bg-[#3a3a3a]'
+            }`}
+            title={isOrganizing ? "Organizing..." : "Organize this page"}
+          >
+            <Zap size={14} />
+          </button>
 
+          <div className="w-px h-4 bg-gray-600" />
           
           {/* Chat Toggle Button */}
           <button
@@ -948,6 +1026,74 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
               >
                 Save Rules
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Organize Dialog */}
+      {isOrganizeDialogOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-[#2a2a2a] border border-gray-600 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Organize Page</h3>
+              <button
+                onClick={() => setIsOrganizeDialogOpen(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+                disabled={isOrganizing}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-300 mb-3">
+                How should "{page.title}" be organized? Provide specific instructions to guide the AI.
+              </p>
+              <p className="text-xs text-gray-400 mb-4">
+                For example: "Put this in the 'Work Projects' folder", "Create a new 'Meeting Notes' section", 
+                "Group similar ideas together", or "Keep urgent tasks at the top".
+              </p>
+              
+              <textarea
+                value={organizationInstructions}
+                onChange={(e) => setOrganizationInstructions(e.target.value)}
+                placeholder="Enter organization instructions (optional)..."
+                className="w-full h-32 bg-[#1a1a1a] border border-gray-600 rounded p-3 text-gray-200 text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none"
+                disabled={isOrganizing}
+                autoFocus
+              />
+            </div>
+            
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setIsOrganizeDialogOpen(false)}
+                className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
+                disabled={isOrganizing}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleOrganizePage}
+                disabled={isOrganizing}
+                className={`px-4 py-2 rounded transition-colors flex items-center gap-2 ${
+                  isOrganizing 
+                    ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                    : 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                }`}
+              >
+                {isOrganizing ? (
+                  <>
+                    <Zap size={16} className="animate-pulse" />
+                    Organizing...
+                  </>
+                ) : (
+                  <>
+                    <Zap size={16} />
+                    Organize
+                  </>
+                )}
               </button>
             </div>
           </div>
