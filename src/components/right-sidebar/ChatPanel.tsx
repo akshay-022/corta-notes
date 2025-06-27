@@ -168,7 +168,7 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
     logger.info('Saved model to localStorage', { model: selectedModel })
   }, [selectedModel])
 
-  // Scroll to bottom when panel opens
+  // Scroll to bottom when panel opens and focus input
   useEffect(() => {
     if (isOpen) {
       logger.info('ChatPanel became visible', { 
@@ -177,10 +177,19 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
         isMobile: isMobile,
         messageCount: messages.length
       })
+      
       // If there are already messages loaded, scroll to bottom immediately
       if (messages.length > 0) {
         scrollToBottomImmediate()
       }
+      
+      // Focus the input when chat panel opens
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus()
+          logger.info('🎯 Auto-focused chat input on panel open')
+        }
+      }, 100) // Small delay to ensure the panel is fully rendered
     }
   }, [isOpen]) // Remove scrollToBottom and messages.length dependencies to prevent multiple calls
 
