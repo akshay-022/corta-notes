@@ -478,7 +478,9 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
             console.log('🚀 Command+K pressed! Opening chat')
             notesCtx.setIsChatOpen(true)
           } else {
-            console.log('💬 Command+K pressed! Chat already open, selection captured')
+            console.log('💬 Command+K pressed! Chat already open, focusing input')
+            // Emit custom event to focus chat input
+            window.dispatchEvent(new CustomEvent('focusChatInput'))
           }
         }
       }

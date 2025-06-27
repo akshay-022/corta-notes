@@ -184,6 +184,19 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
     }
   }, [isOpen]) // Remove scrollToBottom and messages.length dependencies to prevent multiple calls
 
+  // Listen for focus chat input event (from Cmd+K)
+  useEffect(() => {
+    const handleFocusChatInput = () => {
+      if (isOpen && textareaRef.current) {
+        logger.info('🎯 Focusing chat input from Cmd+K event')
+        textareaRef.current.focus()
+      }
+    }
+
+    window.addEventListener('focusChatInput', handleFocusChatInput)
+    return () => window.removeEventListener('focusChatInput', handleFocusChatInput)
+  }, [isOpen])
+
   // Note: Function calling now happens on server-side via API
 
   // ------------------- LOAD MESSAGES FUNCTION -------------------
