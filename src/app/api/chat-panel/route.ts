@@ -76,12 +76,13 @@ async function handleUnifiedStreamingRequest(params: {
   });
 
   try {
-    // Get relevant memories
-    const relevantDocuments = await getRelevantMemories(currentMessage, 5, currentPageUuid);
-    logger.info('Retrieved relevant memories', { 
-      documentCount: relevantDocuments.length,
-      pageUuid: currentPageUuid 
-    });
+    // Get relevant memories - COMMENTED OUT
+    // const relevantDocuments = await getRelevantMemories(currentMessage, 5, currentPageUuid);
+    // logger.info('Retrieved relevant memories', { 
+    //   documentCount: relevantDocuments.length,
+    //   pageUuid: currentPageUuid 
+    // });
+    const relevantDocuments: any[] = []; // Empty array to replace the memory retrieval
 
     // Get organization instructions from current page if available
     let organizationInstructions = '';

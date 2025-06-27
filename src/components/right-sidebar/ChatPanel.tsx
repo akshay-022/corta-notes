@@ -838,8 +838,8 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
       pathSegments.unshift(currentPage.title)
       
       // Find parent
-      if (currentPage.parent_uuid) {
-        const parent = allPages.find(p => p.uuid === currentPage.parent_uuid)
+      if (currentPage?.parent_uuid) {
+        const parent = allPages.find(p => p.uuid === currentPage?.parent_uuid!)
         console.log('🔍 Found parent:', parent ? { title: parent.title, uuid: parent.uuid.slice(0, 8) } : 'NOT FOUND')
         currentPage = parent || null
       } else {
