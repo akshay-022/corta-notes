@@ -1377,7 +1377,7 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
                 availableModels={availableModels}
               />
             </div>
-            <QuickOpenPalette anchorRef={textareaRef} />
+            <QuickOpenPalette anchorRef={textareaRef} isMobile={isMobile} />
           </div>
         </div>
       )}

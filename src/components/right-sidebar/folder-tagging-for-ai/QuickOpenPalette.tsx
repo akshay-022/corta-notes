@@ -4,13 +4,14 @@ import React, { useRef, useEffect } from 'react'
 
 interface Props {
   anchorRef: React.RefObject<HTMLTextAreaElement | null>
+  isMobile?: boolean
 }
 
 /**
  * Floating palette that lists folders/files according to QuickOpenContext.
  * Render this once in ChatPanel so it can position relative to the textarea.
  */
-export default function QuickOpenPalette({ anchorRef }: Props) {
+export default function QuickOpenPalette({ anchorRef, isMobile = false }: Props) {
   const {
     isOpen,
     items,
@@ -24,15 +25,32 @@ export default function QuickOpenPalette({ anchorRef }: Props) {
 
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Position palette under anchor
+  // Position palette above anchor
   useEffect(() => {
     if (!isOpen || !anchorRef.current || !containerRef.current) return
+    
     const rect = anchorRef.current.getBoundingClientRect()
-    containerRef.current.style.left = `${rect.left}px`
-    containerRef.current.style.top = `${rect.top - 4}px`
-    containerRef.current.style.transform = 'translateY(-100%)'
-    containerRef.current.style.width = `${rect.width}px`
-  }, [isOpen, anchorRef])
+    
+    if (isMobile) {
+      // On mobile, position relative to the fixed input area
+      // The input area is fixed at bottom-4 (16px from bottom)
+      // We want the palette to appear just above the textarea
+      containerRef.current.style.left = `${rect.left}px`
+      containerRef.current.style.bottom = `${window.innerHeight - rect.top + 8}px` // 8px gap above textarea
+      containerRef.current.style.top = 'auto'
+      containerRef.current.style.transform = 'none'
+      containerRef.current.style.width = `${rect.width}px`
+      containerRef.current.style.position = 'fixed'
+    } else {
+      // Desktop positioning (existing logic)
+      containerRef.current.style.left = `${rect.left}px`
+      containerRef.current.style.top = `${rect.top - 4}px`
+      containerRef.current.style.bottom = 'auto'
+      containerRef.current.style.transform = 'translateY(-100%)'
+      containerRef.current.style.width = `${rect.width}px`
+      containerRef.current.style.position = 'fixed'
+    }
+  }, [isOpen, anchorRef, isMobile])
 
   if (!isOpen) return null
 
