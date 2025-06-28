@@ -284,7 +284,8 @@ export default function Sidebar({
     )
     
     if (matchingPage) {
-      setActivePage(matchingPage)
+      // Navigate to the page using router.push like other navigation
+      router.push(`/dashboard/page/${matchingPage.uuid}`)
       setSidebarOpen(false)
     } else {
       console.log('No matching local page found for search result:', doc)
@@ -786,7 +787,7 @@ export default function Sidebar({
                       )
                     }
 
-                    // Create drag item for the search result
+                    // Make search results both clickable and draggable
                     const dragItem: DragItem = {
                       id: correspondingPage.uuid,
                       type: 'note',
@@ -808,7 +809,15 @@ export default function Sidebar({
                         <div
                           {...dragHandlers}
                           style={{ paddingLeft: '16px', paddingRight: '16px' }}
-                          onClick={() => handleSearchDocumentSelect(doc)}
+                          onClick={(e) => {
+                            // Only handle click if not dragging
+                            if (!dragAndDrop.dragState.isDragging) {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              logger.info('Search result clicked', { title: doc.title, id: doc.id })
+                              handleSearchDocumentSelect(doc)
+                            }
+                          }}
                           className="flex items-center w-full"
                         >
                           <div className="flex items-center gap-1 flex-1 min-w-0">
@@ -826,8 +835,6 @@ export default function Sidebar({
                               </div>
                             )}
                           </div>
-                          
-                          {/* Hide/Show button temporarily disabled */}
                         </div>
                       </DragDropStyles>
                     )

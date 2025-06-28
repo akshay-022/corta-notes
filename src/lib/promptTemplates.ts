@@ -51,6 +51,16 @@ This is the full page context where the new content was written. Use this to und
 
 === END CONTEXT ==={ORGANIZATION_RULES_SECTION}`
 
+export const ULTRA_HIGH_PRIORITY_ROUTING_COMPLIANCE = `🚨🚨🚨 ULTRA HIGH PRIORITY ROUTING INSTRUCTIONS - MUST FOLLOW AND PUT IN THE LOCATIONS USER WANTS 🚨🚨🚨:
+
+⚠️ CRITICAL (only if routing instructions are present): If present, these routing instructions are VERY IMPORTANT and take ABSOLUTE PRIORITY over what you think may be best.
+⚠️ The user has explicitly specified WHERE content should go - you MUST follow these instructions exactly.
+⚠️ Do NOT deviate from these instructions even if you think there might be a better location.
+⚠️ If the user said something should go somewhere specific, it MUST go there.
+However the user will NOT give the exact route. They will give descriptors that you must use to find the exact correct file!!!!!!
+
+ROUTING INSTRUCTION COMPLIANCE IS NON-NEGOTIABLE.`
+
 export const ROUTING_OUTPUT_FORMAT = `IMPORTANT: 
 - Your "content" field should include the new content AND context (including examples of existing organized content)
 - Structure your output to help the smart merge system understand what's new vs context
@@ -89,8 +99,25 @@ BOLDING EXAMPLES:
 • Use simple Markdown: **bold**, *italic*, - bullets, 1. numbers, ## headings
 • Keep the user's authentic voice and urgency – but prioritise readability
 • Double line breaks for paragraph separation, single line breaks within lists
+
+🚨🚨🚨 ULTRA CRITICAL HEADING RULES - MUST FOLLOW EXACTLY 🚨🚨🚨:
+• Headings MUST be ULTRA-DESCRIPTIVE and SPECIFIC to the exact content below them
+• NEVER use generic headings like "Thinking", "Strategising", "Ideas", "Notes", "Random thoughts"
+• Instead use SPECIFIC descriptive headings that tell exactly what the bullets are about
+• Example: Instead of "Thinking, Strategising" → use "Organizational Complexity For Users" or "Product Differentiation Strategy"
+• Example: Instead of "Ideas" → use "Marketing Campaign Concepts" or "User Interface Improvements"
+• Example: Instead of "Notes" → use "Client Meeting Action Items" or "Technical Architecture Decisions"
+• The heading should be so descriptive that someone can understand the topic WITHOUT reading the bullets
+• If bullets are about API bugs → heading should be "API Authentication Issues" not "Technical Notes"
+• If bullets are about user feedback → heading should be "User Experience Pain Points" not "Feedback"
 • Headings MUST be descriptions of content below it. NOT the page title of the page you sent to or received from!!!!!
 • If there is a standalone statement, do not give it a heading that is the same as the statement. In such cases no heading is ok. Heading should not be a repeated version of a point below it.
+
+DESCRIPTIVE HEADING EXAMPLES:
+❌ BAD: "Random thoughts" → ✅ GOOD: "Product Market Fit Hypotheses"
+❌ BAD: "Ideas" → ✅ GOOD: "Revenue Stream Optimization"
+❌ BAD: "Notes" → ✅ GOOD: "Sprint Retrospective Insights"
+❌ BAD: "Thinking" → ✅ GOOD: "Customer Acquisition Strategy"
 
 • See in general, you are just someone who must organize somewhat unorganized content into a very easily readable form. Like what a human may like to read. Don't do stupid things like repeat a heading and the point directly under it etc. Just use common sense. 
 `

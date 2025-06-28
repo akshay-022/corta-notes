@@ -25,7 +25,8 @@ import {
   PARA_METHODOLOGY_GUIDELINES,
   ROUTING_CONTEXT_INSTRUCTIONS,
   ROUTING_OUTPUT_FORMAT,
-  ROUTING_TEXT_PRESERVATION_RULES
+  ROUTING_TEXT_PRESERVATION_RULES,
+  ULTRA_HIGH_PRIORITY_ROUTING_COMPLIANCE
 } from '@/lib/promptTemplates'
 
 interface ParagraphInfo {
@@ -353,17 +354,19 @@ ${organizationRules}
 Follow these rules when organizing content.\n` : ''
 
   const routingInstructionsSection = routingInstructions?.trim() ? 
-    `\n\nROUTING INSTRUCTIONS FOR THIS PAGE:
-${routingInstructions}
-
-Follow these specific routing instructions when deciding where to place content.\n` : ''
+    `\n\n${ULTRA_HIGH_PRIORITY_ROUTING_COMPLIANCE.replace('🚨🚨🚨 ULTRA HIGH PRIORITY ROUTING INSTRUCTIONS - MUST FOLLOW AND PUT IN THE LOCATIONS USER WANTS 🚨🚨🚨:', `🚨🚨🚨 ULTRA HIGH PRIORITY ROUTING INSTRUCTIONS - MUST FOLLOW AND PUT IN THE LOCATIONS USER WANTS 🚨🚨🚨:
+${routingInstructions}`)}\n` : ''
 
   const contextInstructions = ROUTING_CONTEXT_INSTRUCTIONS
     .replace('{NEW_CONTENT_LIST}', newContentList)
     .replace('{FULL_PAGE_TEXT}', fullPageText)
-    .replace('{ORGANIZATION_RULES_SECTION}', organizationRulesSection + routingInstructionsSection)
+    .replace('{ORGANIZATION_RULES_SECTION}', organizationRulesSection)
 
-  return `Route to ALL RELEVANT existing [FILE]s from the file tree. NEVER route to [DIR]s.
+  // Put routing instructions at the very top if they exist
+  const topPrioritySection = routingInstructions?.trim() ? 
+    `${routingInstructionsSection}\n\n===============================================\n\n` : ''
+
+  return `${topPrioritySection}Route to ALL RELEVANT existing [FILE]s from the file tree. NEVER route to [DIR]s.
 ${ANTI_NEW_FILE_CREATION_RULES}
 
 ${ROUTING_TEXT_PRESERVATION_RULES}
