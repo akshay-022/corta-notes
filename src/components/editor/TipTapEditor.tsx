@@ -767,7 +767,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
         </div>
       </div>
 
-      {/* Bubble Menu for Paragraph Metadata */}
+      {/* Bubble Menu for Paragraph Metadata - COMMENTED OUT 
       {editor && (
         <BubbleMenu 
           editor={editor} 
@@ -789,7 +789,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                     }
                   </div>
                   
-                  {/* Node Type */}
+                  Node Type
                   {selectedParagraphMetadata.nodeType && (
                     <div className="p-2 bg-[#1a1a1a] rounded">
                       <div className="text-gray-400">
@@ -798,7 +798,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                     </div>
                   )}
                   
-                  {/* ID */}
+                  ID
                   <div className="p-2 bg-[#1a1a1a] rounded">
                     <div className="text-gray-400">
                       ID: <span className="text-gray-200 font-mono text-xs break-all">{selectedParagraphMetadata.id || 'No ID'}</span>
@@ -807,7 +807,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
 
                   {selectedParagraphMetadata.metadata && (
                     <>
-                      {/* Organization Status */}
+                      Organization Status
                       {selectedParagraphMetadata.metadata.isOrganized !== undefined && (
                         <div className="p-2 bg-[#1a1a1a] rounded">
                           <div className="text-gray-400 flex items-center justify-between">
@@ -830,7 +830,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                         </div>
                       )}
 
-                      {/* Last Updated - Now editable for debugging boundary issues */}
+                      Last Updated - Now editable for debugging boundary issues
                       {selectedParagraphMetadata.metadata.lastUpdated && (
                       <div className="p-2 bg-[#1a1a1a] rounded">
                         <div className="text-gray-400 flex items-center justify-between">
@@ -863,7 +863,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                       </div>
                       )}
 
-                      {/* Where Organized - Read only for now */}
+                      Where Organized - Read only for now
                       {selectedParagraphMetadata.metadata.whereOrganized && 
                        selectedParagraphMetadata.metadata.whereOrganized.length > 0 && (
                         <div className="p-2 bg-[#1a1a1a] rounded">
@@ -884,7 +884,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                         </div>
                       )}
 
-                      {/* Other Metadata Fields - Inline Editable */}
+                      Other Metadata Fields - Inline Editable
                       {Object.entries(selectedParagraphMetadata.metadata).filter(([key]) => 
                         !['isOrganized', 'lastUpdated', 'whereOrganized', 'organizationStatus', 'id'].includes(key)
                       ).length > 0 && (
@@ -947,7 +947,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                             ))}
                           </div>
                           
-                          {/* Add new field button */}
+                          Add new field button
                           <button
                             onClick={() => {
                               const newMetadata = {
@@ -963,7 +963,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                         </div>
                       )}
 
-                      {/* Add Field button if no other metadata exists */}
+                      Add Field button if no other metadata exists
                       {Object.entries(selectedParagraphMetadata.metadata).filter(([key]) => 
                         !['isOrganized', 'lastUpdated', 'whereOrganized', 'organizationStatus', 'id'].includes(key)
                       ).length === 0 && (
@@ -998,6 +998,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
           </div>
         </BubbleMenu>
       )}
+      */}
 
       {/* Formatting toolbar bubble menu */}
       {editor && <FormattingBubbleMenu editor={editor} />}
