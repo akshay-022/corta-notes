@@ -59,7 +59,14 @@ export const ULTRA_HIGH_PRIORITY_ROUTING_COMPLIANCE = `🚨🚨🚨 ULTRA HIGH P
 ⚠️ If the user said something should go somewhere specific, it MUST go there.
 However the user will NOT give the exact route. They will give descriptors that you must use to find the exact correct file!!!!!!
 
-ROUTING INSTRUCTION COMPLIANCE IS NON-NEGOTIABLE.`
+ROUTING INSTRUCTION COMPLIANCE IS NON-NEGOTIABLE.
+
+Also, if the user tells you to route to certain places, bias towards putting most content in the curent page that is relevant there. For example, if I am thinking about Cicero and then that sparks in me that twitter today is like oration back then. And i ask you to put it in my blogs section. The blog should probably talk abou both things. 
+Even if I ask you to put it in the cicero section, since the twitter musings are importnat things I got from Cicero, it should also go in the Cicero section. 
+
+Bias towards putting all the possibly relevant content of the current page in every file you route to. More bias towards putting related content than keeping out vaguely related content.
+
+`
 
 export const ROUTING_OUTPUT_FORMAT = `IMPORTANT: 
 - Your "content" field should include the new content AND context (including examples of existing organized content)
