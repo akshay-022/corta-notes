@@ -19,6 +19,41 @@ ROUTING PRIORITY:
 3. LAST RESORT: Create new file (almost never needed)
 `
 
+
+export const PARA_WORKSPACE_EXAMPLE = `📂 **PARA Workspace Example (Akshay's setup)**
+
+The user may certainly create their own structures and you must give that higher priority. But the below for auto organization is a good starting point as a general rule of thumb.
+
+Root
+├── **Projects/**
+│   ├── *Corta* – active work for your startup
+│   └── *Blogs* – articles you're drafting or maintaining
+├── **Areas/**
+│   ├── *Co-Founders* – ongoing partnership notes & meeting agendas
+│   ├── *Girls* – relationship reflections & next actions
+│   └── *Startup Ideas* – evergreen list you incubate over time
+├── **Resources/**
+│   ├── *Books* – highlights & summaries from your reading
+│   ├── *Founders* – wisdom collected from other founders
+│   └── *Friends* – lessons and advice from your personal network
+├── **Me/**
+│   └── (personal reflections, daily journal, self-reviews)
+├── **TODOs** – universal task list
+└── **Archives/**
+    └── (completed or inactive material you may want for reference)
+
+Guidelines:
+• **Projects** = short-term endeavors with explicit outcomes (e.g., ship new feature; publish blog series).
+• **Areas** = long-term responsibilities you must maintain at a steady standard (relationships, idea pipelines).
+• **Resources** = reference material you'll consult again (book notes, founder insights, research).
+• **Me** = notes about *you* (goals, reflections, personal metrics).
+• **TODOs** = quick-capture inbox of tasks before they're routed to the right Project or Area.
+• **Archives** = anything no longer active but worth storing for posterity.
+
+Use this mental model when deciding where new notes belong.`
+
+
+
 export const MULTIPLE_DESTINATIONS_STRATEGY = `MULTIPLE DESTINATIONS STRATEGY:
 • Same content can appear in multiple files (Project Notes, Bug Tracker, Daily Tasks, etc.) but its SUPER rare.
 • If content fits 3 files very very well, create 3 separate JSON objects with same content. But doing things like putting TODOs in ideas is just stupid and wrong.
@@ -76,7 +111,10 @@ export const ROUTING_OUTPUT_FORMAT = `IMPORTANT:
 - Format: "NEW CONTENT:\\n[exact user text with no modifications]\\n\\nCONTEXT (for smart merge reference only):\\n[relevant context from full page + examples of existing organized content from target file]"
 
 OUTPUT:
-• JSON array with structured content: [{ "targetFilePath": "/Path1", "relevance": 0.9, "content": "NEW CONTENT:\\n[user's exact unorganized text here - no rephrasing]\\n\\nCONTEXT (for smart merge reference only):\\n[relevant context from full page + examples of existing organized content from target file]" }]`
+• JSON array with structured content: [{ "targetFilePath": "/Path1", "relevance": 0.9, "content": "NEW CONTENT:\\n[user's exact unorganized text here - no rephrasing]\\n\\nCONTEXT (for smart merge reference only):\\n[relevant context from full page + examples of existing organized content from target file]" }]
+
+${PARA_WORKSPACE_EXAMPLE}
+`
 
 
 
@@ -463,4 +501,3 @@ FUNCTION PARAMETER RULES:
 - The "content" parameter must ONLY contain clean markdown for the editor
 - No explanations, no status messages, no extra text
 - Just the pure content that should appear in the editor` 
-
