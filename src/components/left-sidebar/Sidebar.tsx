@@ -704,20 +704,22 @@ export default function Sidebar({
               </button>
             </div>
 
-            {/* Sync Button - For Development */}
-            <div className="pb-2">
-              <button
-                onClick={onManualSync}
-                className="w-full bg-transparent hover:bg-[#2a2a2a] text-[#cccccc] rounded-lg py-1 text-sm flex items-center gap-1 transition-all duration-200"
-                style={{ paddingLeft: '16px', paddingRight: '16px' }}
-                title="Sync notes to SuperMemory (Dev)"
-              >
-                <div className="w-4 h-4 flex items-center justify-center">
-                  <RefreshCw size={14} className="text-[#969696]" />
-                </div>
-                <span className="ml-1 text-[#969696]">Sync to Memory</span>
-              </button>
-            </div>
+            {/* Sync Button temporarily disabled */}
+            {false && (
+              <div className="pb-2">
+                <button
+                  onClick={onManualSync}
+                  className="w-full bg-transparent hover:bg-[#2a2a2a] text-[#cccccc] rounded-lg py-1 text-sm flex items-center gap-1 transition-all duration-200"
+                  style={{ paddingLeft: '16px', paddingRight: '16px' }}
+                  title="Sync notes to SuperMemory (Dev)"
+                >
+                  <div className="w-4 h-4 flex items-center justify-center">
+                    <RefreshCw size={14} className="text-[#969696]" />
+                  </div>
+                  <span className="ml-1 text-[#969696]">Sync to Memory</span>
+                </button>
+              </div>
+            )}
 
             {/* Export Button */}
             <div className="pb-4">
