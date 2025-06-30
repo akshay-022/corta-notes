@@ -166,10 +166,20 @@ async function ensurePageForPath(userId: string, filePath: string, supabase: any
   return { page: currentPage, wasCreated }
 }
 
-export async function applyOrganizationChunks(chunks: OrganizedChunk[]): Promise<ApplyResult> {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user?.id) {
+export async function applyOrganizationChunks(
+  chunks: OrganizedChunk[],
+  supabaseParam?: any,
+  userIdParam?: string
+): Promise<ApplyResult> {
+  const supabase = supabaseParam ?? createClient()
+
+  let userId = userIdParam
+  if (!userId) {
+    const { data: { user } } = await supabase.auth.getUser()
+    userId = user?.id
+  }
+
+  if (!userId) {
     logger.error('applyOrganizationChunks: no authenticated user')
     return { created: [], updated: [] }
   }
@@ -178,9 +188,19 @@ export async function applyOrganizationChunks(chunks: OrganizedChunk[]): Promise
   const updated: FileHistoryItem[] = []
 
   for (const chunk of chunks) {
+    logger.info('📦 Starting chunk processing', {
+      targetPath: chunk.targetFilePath,
+      contentFirst100: chunk.content.substring(0, 100),
+      contentLength: chunk.content.length
+    })
     try {
-      const { page, wasCreated } = await ensurePageForPath(user.id, chunk.targetFilePath, supabase)
+      const { page, wasCreated } = await ensurePageForPath(userId, chunk.targetFilePath, supabase)
       if (!page) continue
+      logger.info('📄 ensurePageForPath result', {
+        pageUuid: page.uuid.substring(0,8),
+        pageTitle: page.title,
+        wasCreated
+      })
 
       const isNewFile = wasCreated
 
@@ -306,6 +326,10 @@ export async function applyOrganizationChunks(chunks: OrganizedChunk[]): Promise
         pageTitle: page.title,
         isNewFile: wasCreated,
         chunkContentLength: chunk.content.length
+      })
+      logger.info('✅ Finished chunk processing', {
+        pageUuid: page.uuid.substring(0,8),
+        action: wasCreated ? 'created' : 'updated'
       })
     } catch (err) {
       logger.error('Failed to apply chunk', { chunk, err })

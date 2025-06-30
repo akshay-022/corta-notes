@@ -161,30 +161,40 @@ export default function Sidebar({
     loadFileHistory()
   }, [])
 
-  // Listen for file history updates
+  // Listen for profile metadata updates via Supabase realtime to refresh fileHistory
   useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data.type === 'FILE_HISTORY_UPDATE' && event.data.data) {
-        const newItems: FileHistoryItem[] = event.data.data
-        setFileHistory(prevHistory => {
-          // Create a map of existing items by uuid for deduplication
-          const existingMap = new Map(prevHistory.map(item => [item.uuid, item]))
-          
-          // Add new items, replacing any existing ones with same uuid
-          newItems.forEach(item => {
-            existingMap.set(item.uuid, item)
-          })
-          
-          // Convert back to array and sort by timestamp (newest first)
-          return Array.from(existingMap.values())
-            .sort((a, b) => b.timestamp - a.timestamp)
-            .slice(0, 10) // Keep only 10 most recent
+    const supabase = createClient()
+    let channel: any
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user?.id) return
+
+      channel = supabase
+        .channel('profile-filehistory')
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `user_id=eq.${user.id}`
+        }, (payload: any) => {
+          try {
+            const metadata = (payload.new as any)?.metadata
+            const newHistory: FileHistoryItem[] | undefined = metadata?.fileHistory
+            if (newHistory && Array.isArray(newHistory)) {
+              setFileHistory(newHistory)
+            }
+          } catch (err) {
+            console.error('Failed to process realtime profile update', err)
+          }
         })
+        .subscribe()
+    })()
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel)
       }
     }
-
-    window.addEventListener('message', handleMessage)
-    return () => window.removeEventListener('message', handleMessage)
   }, [])
 
   const startRename = (item: Page) => {

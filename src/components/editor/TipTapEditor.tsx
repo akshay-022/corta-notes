@@ -300,53 +300,42 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     })
 
     try {
-      // First, save the routing instructions to page metadata if provided
+      // Save routing instructions to metadata first (same as before)
       if (routingInstructions.trim()) {
         const currentMetadata = page.metadata as any || {}
         const updatedMetadata = {
           ...currentMetadata,
           routingInstructions: routingInstructions.trim()
         }
-        
         await supabase
           .from('pages')
-          .update({ 
-            metadata: updatedMetadata,
-            updated_at: new Date().toISOString()
-          })
+          .update({ metadata: updatedMetadata, updated_at: new Date().toISOString() })
           .eq('uuid', page.uuid)
-        
-        logger.info('🗂️ Saved routing instructions to page metadata', { pageUuid: page.uuid })
       }
 
-      // Close dialog immediately - don't block user
       setIsOrganizeDialogOpen(false)
-      
-      // Set organizing state to show button feedback
       setIsOrganizing(true)
-      
-      // Run organization in background - don't await
-      organizePage({ 
-        editor, 
-        pageUuid: page.uuid, 
-        pageTitle: page.title 
-      }).then(() => {
-        logger.info('🗂️ ✅ Organization completed successfully', { pageUuid: page.uuid })
-        
-        // Refresh organized notes if the callback is available
-        if (pageRefreshCallbackRef.current) {
-          pageRefreshCallbackRef.current()
-        }
-      }).catch((error) => {
-        logger.error('🗂️ ❌ Organization error:', error)
-        // Don't show alert - just log the error since user is no longer waiting
-      }).finally(() => {
-        setIsOrganizing(false)
+
+      // Gather plain text of entire editor as contentText
+      const contentText = editor.getText()
+
+      await fetch('/api/organize-note', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pageUuid: page.uuid,
+          pageTitle: page.title,
+          contentText,
+          routingInstructions: routingInstructions.trim(),
+          organizationRules: organizationRules.trim()
+        })
       })
-      
-    } catch (error) {
-      logger.error('🗂️ ❌ Error saving routing instructions:', error)
-      alert('Failed to save routing instructions. Please try again.')
+      // We don't need to parse response; realtime listener will update sidebar
+
+    } catch (err) {
+      logger.error('Organization request failed', err)
+      alert('Failed to organize note. Please try again.')
+    } finally {
       setIsOrganizing(false)
     }
   }

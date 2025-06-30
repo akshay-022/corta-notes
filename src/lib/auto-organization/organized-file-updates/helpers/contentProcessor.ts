@@ -18,6 +18,7 @@ import HorizontalRule from '@tiptap/extension-horizontal-rule'
 import Underline from '@tiptap/extension-underline'
 import { NodeMetadata } from '@/lib/tiptap/NodeMetadata'
 import { Markdown } from 'tiptap-markdown'
+import { callLLM } from '@/lib/llm/callLLM'
 
 // TipTap extensions for markdown parsing
 const extensions = [
@@ -432,21 +433,69 @@ JSON output only:
 
 `
 
-      const res = await fetch('/api/llm', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, model: 'o3-mini' }),
+      console.log('🔥 === ABOUT TO MAKE LLM CALL ===')
+      console.log('🔥 LLM call details:', {
+        promptLength: prompt.length,
+        model: 'o3-mini',
+        hasPromptTemplates: {
+          TIPTAP_FORMATTING_PROMPT: !!TIPTAP_FORMATTING_PROMPT,
+          FAITHFUL_MERGE_RULES: !!FAITHFUL_MERGE_RULES,
+          MERGE_INCLUDE_ALL_TODAY: !!MERGE_INCLUDE_ALL_TODAY,
+          EDITING_USER_CONTENT_PRESERVE: !!EDITING_USER_CONTENT_PRESERVE
+        }
       })
-      if (!res.ok) throw new Error('LLM merge failed')
-      const data = await res.json()
-      const cleaned = (data.response || '')
+
+      const response = await callLLM({ model: 'o3-mini', prompt })
+      
+      console.log('🔥 LLM response received:', {
+        responseLength: response?.length || 0,
+        responsePreview: response?.substring(0, 200) + '...'
+      })
+      
+      if (!response) {
+        console.error('🚨 LLM call returned empty response')
+        throw new Error('LLM call returned empty response')
+      }
+      
+      console.log('🔥 LLM response data:', {
+        hasResponse: !!response,
+        responseLength: response.length,
+        responsePreview: response.substring(0, 200) + '...'
+      })
+      
+      const cleaned = response
         .replace(/```json\s*/i, '')
         .replace(/```/g, '')
         .trim()
 
-      const parsed = JSON.parse(cleaned)
+      console.log('🔥 Cleaned LLM response:', {
+        cleanedLength: cleaned.length,
+        cleanedPreview: cleaned.substring(0, 200) + '...'
+      })
+
+      let parsed: any
+      try {
+        parsed = JSON.parse(cleaned)
+        console.log('🔥 JSON parsing successful:', {
+          parsedKeys: Object.keys(parsed),
+          hasMergedText: !!parsed.mergedText
+        })
+      } catch (parseErr) {
+        console.error('🚨 JSON parsing failed:', {
+          error: parseErr,
+          cleanedContent: cleaned.substring(0, 500)
+        })
+        throw new Error(`JSON parsing failed: ${parseErr}`)
+      }
+
       const mergedText: string = parsed.mergedText
-      if (!mergedText) throw new Error('LLM missing mergedText field')
+      if (!mergedText) {
+        console.error('🚨 LLM response missing mergedText field:', {
+          parsedKeys: Object.keys(parsed),
+          parsed
+        })
+        throw new Error('LLM missing mergedText field')
+      }
 
       console.log('🤖 LLM merge result analysis:', {
         mergedTextLength: mergedText.length,
@@ -527,8 +576,18 @@ JSON output only:
 
       return result
     } catch (err) {
-      console.error('smartMergeTipTapContent fallback', err)
+      console.error('🚨🚨🚨 SMART MERGE FAILED - FALLING BACK TO SIMPLE APPEND 🚨🚨🚨')
+      console.error('🚨 Error details:', {
+        error: err,
+        errorMessage: err instanceof Error ? err.message : 'Unknown error',
+        errorStack: err instanceof Error ? err.stack : undefined,
+        pageUuid: pageUuid.substring(0, 8),
+        newTextLength: newText.length,
+        hasExistingContent: !!existingContent
+      })
+      
       // fallback to simple append
+      console.log('🔄 Using simple append fallback')
       return this.mergeIntoTipTapContent(existingContent, newText, pageUuid)
     }
   }
