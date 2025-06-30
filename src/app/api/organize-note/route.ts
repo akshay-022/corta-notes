@@ -130,7 +130,15 @@ export async function POST(request: NextRequest) {
       ...updated.map(uuid => createFileHistoryItem(uuid, titleMap[uuid]||'Untitled', 'updated'))
     ]
 
-    const newHistory = [...historyItems, ...currentHistory].slice(0,20)
+    // Merge new items with existing history, ensuring only one entry per uuid (keep latest)
+    const combined = [...historyItems, ...currentHistory]
+    const uniqMap = new Map<string, any>()
+    for (const item of combined) {
+      if (!uniqMap.has(item.uuid)) {
+        uniqMap.set(item.uuid, item) // first occurrence is newest because combined is ordered
+      }
+    }
+    const newHistory = Array.from(uniqMap.values()).slice(0, 20)
 
     console.log('🔍 organize-note: About to update profile metadata', {
       userId: user.id,
@@ -154,7 +162,17 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    return NextResponse.json({ created, updated }, { status: 202 })
+    logger.info('🎉 Organization complete - returning response with file history', {
+      created: created.length,
+      updated: updated.length,
+      fileHistoryCount: newHistory.length
+    })
+
+    return NextResponse.json({ 
+      created, 
+      updated, 
+      fileHistory: newHistory 
+    }, { status: 202 })
   } catch (err: any) {
     logger.error('organize-note API error', err)
     return NextResponse.json({ error: err.message || 'Server error' }, { status: 500 })

@@ -184,157 +184,190 @@ export async function applyOrganizationChunks(
     return { created: [], updated: [] }
   }
 
+  logger.info('🚀 Starting parallel processing of organization chunks', {
+    chunkCount: chunks.length,
+    chunks: chunks.map(c => ({ path: c.targetFilePath, contentLength: c.content.length }))
+  })
+
+  // Process all chunks in parallel
+  const chunkResults = await Promise.all(
+    chunks.map(async (chunk) => {
+      logger.info('📦 Starting chunk processing', {
+        targetPath: chunk.targetFilePath,
+        contentFirst100: chunk.content.substring(0, 100),
+        contentLength: chunk.content.length
+      })
+      
+      try {
+        const { page, wasCreated } = await ensurePageForPath(userId!, chunk.targetFilePath, supabase)
+        if (!page) return null
+        
+        logger.info('📄 ensurePageForPath result', {
+          pageUuid: page.uuid.substring(0,8),
+          pageTitle: page.title,
+          wasCreated
+        })
+
+        const isNewFile = wasCreated
+
+        console.log('🎯 === ORGANIZATION CHUNK PROCESSING ===')
+        console.log('🎯 Chunk processing context:', {
+          targetFilePath: chunk.targetFilePath,
+          pageUuid: page.uuid.substring(0, 8),
+          pageTitle: page.title,
+          isNewFile,
+          wasCreated,
+          chunkContentLength: chunk.content.length,
+          chunkContentPreview: chunk.content.substring(0, 200) + (chunk.content.length > 200 ? '...' : '')
+        })
+
+        console.log('🎯 Existing page content analysis:', {
+          hasPageContent: !!page.content,
+          pageContentType: typeof page.content,
+          pageContentHasContent: !!(page.content as any)?.content,
+          pageContentLength: (page.content as any)?.content?.length,
+          pageContentText: page.content_text?.substring(0, 200) + (page.content_text && page.content_text.length > 200 ? '...' : '')
+        })
+
+        let newContentJSON: any
+        let newContentText: string
+
+        // Get organization rules from page metadata (may be undefined for brand-new page)
+        const pageMetadata = page.metadata as any
+        const organizationRules = pageMetadata?.organizationRules || ''
+
+        console.log('🎯 Organization rules:', {
+          hasPageMetadata: !!pageMetadata,
+          hasOrganizationRules: !!organizationRules,
+          organizationRulesLength: organizationRules.length
+        })
+
+        // Capture old content for revert functionality
+        const oldContent = page.content
+        const oldContentText = page.content_text || ''
+
+        if (isNewFile) {
+          console.log('🎯 === NEW FILE PATH ===')
+          // For brand-new files call smartMerge too (existing content may be empty)
+          const baseContent = page.content || { type: 'doc', content: [] }
+          console.log('🎯 Base content for new file:', {
+            baseContentType: typeof baseContent,
+            baseContentHasContent: !!(baseContent as any).content,
+            baseContentLength: (baseContent as any).content?.length
+          })
+          
+          newContentJSON = await contentProcessor.smartMergeTipTapContent(baseContent, chunk.content, page.uuid, organizationRules, page.title)
+          newContentText = chunk.content
+          
+          console.log('🎯 New file processing result:', {
+            newContentJSONType: typeof newContentJSON,
+            newContentJSONHasContent: !!newContentJSON?.content,
+            newContentJSONLength: newContentJSON?.content?.length,
+            newContentTextLength: newContentText.length
+          })
+        } else {
+          console.log('🎯 === EXISTING FILE PATH ===')
+          console.log('🎯 About to call smartMergeTipTapContent with:', {
+            existingContentType: typeof page.content,
+            existingContentHasContent: !!(page.content as any)?.content,
+            existingContentLength: (page.content as any)?.content?.length,
+            newChunkLength: chunk.content.length
+          })
+          
+          newContentJSON = await contentProcessor.smartMergeTipTapContent(page.content, chunk.content, page.uuid, organizationRules, page.title)
+          newContentText = (page.content_text || '') + '\n\n' + chunk.content
+          
+          console.log('🎯 Existing file processing result:', {
+            newContentJSONType: typeof newContentJSON,
+            newContentJSONHasContent: !!newContentJSON?.content,
+            newContentJSONLength: newContentJSON?.content?.length,
+            newContentTextLength: newContentText.length
+          })
+        }
+
+        // Mark all content as organized after processing
+        if (newContentJSON?.content) {
+          newContentJSON.content = ensureMetadataMarkedOrganized(newContentJSON.content, page.uuid)
+          logger.info('Applied ensureMetadataMarkedOrganized to content', { 
+            pageUuid: page.uuid, 
+            nodeCount: newContentJSON.content.length 
+          })
+        }
+
+        const { error: upErr } = await supabase
+          .from('pages')
+          .update({
+            content: newContentJSON,
+            content_text: newContentText,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('uuid', page.uuid)
+
+        if (upErr) throw upErr
+
+        // Create enhanced history items with revert capability
+        const enhancedHistoryItem = createEnhancedFileHistoryItem(
+          page.uuid,
+          page.title,
+          isNewFile ? 'created' : 'updated',
+          oldContent,
+          newContentJSON,
+          oldContentText,
+          newContentText,
+          chunk.targetFilePath
+        )
+
+        // Save to localStorage for revert functionality
+        addEnhancedHistoryItem(enhancedHistoryItem)
+
+        logger.info('📝 Processing organization chunk', {
+          targetPath: chunk.targetFilePath,
+          pageUuid: page.uuid.substring(0, 8),
+          pageTitle: page.title,
+          isNewFile: wasCreated,
+          chunkContentLength: chunk.content.length
+        })
+        logger.info('✅ Finished chunk processing', {
+          pageUuid: page.uuid.substring(0,8),
+          action: wasCreated ? 'created' : 'updated'
+        })
+
+        return {
+          historyItem: { 
+            uuid: page.uuid, 
+            title: page.title, 
+            action: isNewFile ? 'created' as const : 'updated' as const, 
+            timestamp: Date.now(), 
+            path: chunk.targetFilePath 
+          },
+          isNewFile
+        }
+      } catch (err) {
+        logger.error('Failed to apply chunk', { chunk, err })
+        return null
+      }
+    })
+  )
+
+  // Filter out null results and separate created/updated
+  const successfulResults = chunkResults.filter(result => result !== null)
   const created: FileHistoryItem[] = []
   const updated: FileHistoryItem[] = []
 
-  for (const chunk of chunks) {
-    logger.info('📦 Starting chunk processing', {
-      targetPath: chunk.targetFilePath,
-      contentFirst100: chunk.content.substring(0, 100),
-      contentLength: chunk.content.length
-    })
-    try {
-      const { page, wasCreated } = await ensurePageForPath(userId, chunk.targetFilePath, supabase)
-      if (!page) continue
-      logger.info('📄 ensurePageForPath result', {
-        pageUuid: page.uuid.substring(0,8),
-        pageTitle: page.title,
-        wasCreated
-      })
-
-      const isNewFile = wasCreated
-
-      console.log('🎯 === ORGANIZATION CHUNK PROCESSING ===')
-      console.log('🎯 Chunk processing context:', {
-        targetFilePath: chunk.targetFilePath,
-        pageUuid: page.uuid.substring(0, 8),
-        pageTitle: page.title,
-        isNewFile,
-        wasCreated,
-        chunkContentLength: chunk.content.length,
-        chunkContentPreview: chunk.content.substring(0, 200) + (chunk.content.length > 200 ? '...' : '')
-      })
-
-      console.log('🎯 Existing page content analysis:', {
-        hasPageContent: !!page.content,
-        pageContentType: typeof page.content,
-        pageContentHasContent: !!(page.content as any)?.content,
-        pageContentLength: (page.content as any)?.content?.length,
-        pageContentText: page.content_text?.substring(0, 200) + (page.content_text && page.content_text.length > 200 ? '...' : '')
-      })
-
-      let newContentJSON: any
-      let newContentText: string
-
-      // Get organization rules from page metadata (may be undefined for brand-new page)
-      const pageMetadata = page.metadata as any
-      const organizationRules = pageMetadata?.organizationRules || ''
-
-      console.log('🎯 Organization rules:', {
-        hasPageMetadata: !!pageMetadata,
-        hasOrganizationRules: !!organizationRules,
-        organizationRulesLength: organizationRules.length
-      })
-
-      // Capture old content for revert functionality
-      const oldContent = page.content
-      const oldContentText = page.content_text || ''
-
-      if (isNewFile) {
-        console.log('🎯 === NEW FILE PATH ===')
-        // For brand-new files call smartMerge too (existing content may be empty)
-        const baseContent = page.content || { type: 'doc', content: [] }
-        console.log('🎯 Base content for new file:', {
-          baseContentType: typeof baseContent,
-          baseContentHasContent: !!(baseContent as any).content,
-          baseContentLength: (baseContent as any).content?.length
-        })
-        
-        newContentJSON = await contentProcessor.smartMergeTipTapContent(baseContent, chunk.content, page.uuid, organizationRules, page.title)
-        newContentText = chunk.content
-        
-        console.log('🎯 New file processing result:', {
-          newContentJSONType: typeof newContentJSON,
-          newContentJSONHasContent: !!newContentJSON?.content,
-          newContentJSONLength: newContentJSON?.content?.length,
-          newContentTextLength: newContentText.length
-        })
-      } else {
-        console.log('🎯 === EXISTING FILE PATH ===')
-        console.log('🎯 About to call smartMergeTipTapContent with:', {
-          existingContentType: typeof page.content,
-          existingContentHasContent: !!(page.content as any)?.content,
-          existingContentLength: (page.content as any)?.content?.length,
-          newChunkLength: chunk.content.length
-        })
-        
-        newContentJSON = await contentProcessor.smartMergeTipTapContent(page.content, chunk.content, page.uuid, organizationRules, page.title)
-        newContentText = (page.content_text || '') + '\n\n' + chunk.content
-        
-        console.log('🎯 Existing file processing result:', {
-          newContentJSONType: typeof newContentJSON,
-          newContentJSONHasContent: !!newContentJSON?.content,
-          newContentJSONLength: newContentJSON?.content?.length,
-          newContentTextLength: newContentText.length
-        })
-      }
-
-      // Mark all content as organized after processing
-      if (newContentJSON?.content) {
-        newContentJSON.content = ensureMetadataMarkedOrganized(newContentJSON.content, page.uuid)
-        logger.info('Applied ensureMetadataMarkedOrganized to content', { 
-          pageUuid: page.uuid, 
-          nodeCount: newContentJSON.content.length 
-        })
-      }
-
-      const { error: upErr } = await supabase
-        .from('pages')
-        .update({
-          content: newContentJSON,
-          content_text: newContentText,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('uuid', page.uuid)
-
-      if (upErr) throw upErr
-
-      // Create enhanced history items with revert capability
-      const enhancedHistoryItem = createEnhancedFileHistoryItem(
-        page.uuid,
-        page.title,
-        isNewFile ? 'created' : 'updated',
-        oldContent,
-        newContentJSON,
-        oldContentText,
-        newContentText,
-        chunk.targetFilePath
-      )
-
-      // Save to localStorage for revert functionality
-      addEnhancedHistoryItem(enhancedHistoryItem)
-
-      if (isNewFile) {
-        created.push({ uuid: page.uuid, title: page.title, action: 'created', timestamp: Date.now(), path: chunk.targetFilePath })
-      } else {
-        updated.push({ uuid: page.uuid, title: page.title, action: 'updated', timestamp: Date.now(), path: chunk.targetFilePath })
-      }
-
-      logger.info('📝 Processing organization chunk', {
-        targetPath: chunk.targetFilePath,
-        pageUuid: page.uuid.substring(0, 8),
-        pageTitle: page.title,
-        isNewFile: wasCreated,
-        chunkContentLength: chunk.content.length
-      })
-      logger.info('✅ Finished chunk processing', {
-        pageUuid: page.uuid.substring(0,8),
-        action: wasCreated ? 'created' : 'updated'
-      })
-    } catch (err) {
-      logger.error('Failed to apply chunk', { chunk, err })
+  successfulResults.forEach(result => {
+    if (result!.isNewFile) {
+      created.push(result!.historyItem)
+    } else {
+      updated.push(result!.historyItem)
     }
-  }
+  })
+
+  logger.info('🎉 Parallel processing complete', {
+    totalChunks: chunks.length,
+    successfulChunks: successfulResults.length,
+    createdCount: created.length,
+    updatedCount: updated.length
+  })
 
   // Broadcast to sidebar UI
   if (created.length) postFileHistoryUpdate(created)

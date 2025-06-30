@@ -319,7 +319,12 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       // Gather plain text of entire editor as contentText
       const contentText = editor.getText()
 
-      await fetch('/api/organize-note', {
+      logger.info('📡 Sending organization request to API', { 
+        pageUuid: page.uuid.substring(0, 8),
+        contentLength: contentText.length 
+      })
+
+      const response = await fetch('/api/organize-note', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -330,7 +335,35 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
           organizationRules: organizationRules.trim()
         })
       })
-      // We don't need to parse response; realtime listener will update sidebar
+
+      if (!response.ok) {
+        throw new Error(`Organization failed: ${response.status}`)
+      }
+
+      logger.info('✅ Organization API completed successfully', { 
+        pageUuid: page.uuid.substring(0, 8),
+        status: response.status 
+      })
+
+      // Fetch updated file history from Supabase and broadcast to sidebar
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user?.id) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('metadata')
+            .eq('user_id', user.id)
+            .single()
+
+          const remoteHistory: any[] | undefined = (profile?.metadata as any)?.fileHistory
+          if (remoteHistory && Array.isArray(remoteHistory)) {
+            window.postMessage({ type: 'FILE_HISTORY_UPDATE', data: remoteHistory }, '*')
+            logger.info('📤 Dispatched FILE_HISTORY_UPDATE event', { items: remoteHistory.length })
+          }
+        }
+      } catch (refreshErr) {
+        logger.error('Failed to refresh file history after organization', refreshErr)
+      }
 
     } catch (err) {
       logger.error('Organization request failed', err)
@@ -950,7 +983,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                                     onChange={(e) => {
                                       let newValue: any = e.target.value
                                       // Try to parse as JSON if it looks like JSON
-                                      if (newValue.startsWith('{') || newValue.startsWith('[') || newValue === 'true' || newValue === 'false' || !isNaN(Number(newValue))) {
+                                      if (newValue.startsWith('{') || newValue.startsWith('[') || newValue.startsWith('true') || newValue.startsWith('false') || !isNaN(Number(newValue))) {
                                         try {
                                           newValue = JSON.parse(newValue)
                                         } catch {
