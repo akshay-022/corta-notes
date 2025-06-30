@@ -17,6 +17,7 @@ import logger from '@/lib/logger'
 import { DateDividerPlugin } from '@/lib/organized-notes-formatting/dateDividerPlugin'
 import { NodeMetadata } from '@/lib/tiptap/NodeMetadata'
 import { FormattingBubbleMenu } from '@/lib/tiptap/FormattingBubbleMenu'
+import { suggestDestinationsForPage, Suggestion, readCache } from '@/lib/auto-organization/organize-current-page/suggestionHelper'
 
 interface TipTapEditorProps {
   page: Page
@@ -40,6 +41,9 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   const [isOrganizeDialogOpen, setIsOrganizeDialogOpen] = useState(false)
   const [routingInstructions, setRoutingInstructions] = useState('')
   const [isOrganizing, setIsOrganizing] = useState(false)
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
+  const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false)
+  const [isUpdatingSuggestions, setIsUpdatingSuggestions] = useState(false)
 
   
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -575,6 +579,47 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     }
   }, [showSummary, page.uuid, editor])
 
+  // Fetch PARA suggestions when organize dialog opens
+  useEffect(() => {
+    if (!isOrganizeDialogOpen) {
+      setSuggestions([])
+      return
+    }
+
+    (async () => {
+      try {
+        setIsFetchingSuggestions(true)
+        const { suggestions: sugg, fromCache } = await suggestDestinationsForPage(page.uuid, page.title, page.content_text ?? '')
+        setSuggestions(sugg)
+        setIsUpdatingSuggestions(fromCache)
+      } catch (err) {
+        logger.error('Failed fetching PARA suggestions', err)
+      } finally {
+        setIsFetchingSuggestions(false)
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOrganizeDialogOpen])
+
+  // Listen for background suggestion refresh completion
+  useEffect(() => {
+    function handler(e: any) {
+      if (e.detail?.pageUuid === page.uuid) {
+        const newSug = readCache(page.uuid) || []
+        setSuggestions(newSug)
+        setIsUpdatingSuggestions(false)
+      }
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('paraSuggestionsUpdated', handler)
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('paraSuggestionsUpdated', handler)
+      }
+    }
+  }, [page.uuid])
+
   if (!editor) {
     return (
       <div className="flex-1 flex items-center justify-center bg-[#1a1a1a]">
@@ -1080,6 +1125,23 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                 disabled={isOrganizing}
                 autoFocus
               />
+
+              {/* Suggestions */}
+              {(isFetchingSuggestions || isUpdatingSuggestions) && (
+                <div className="text-xs text-gray-400 mt-2">
+                  {isFetchingSuggestions ? 'Loading suggestions...' : 'Updating suggestions...'}
+                </div>
+              )}
+              {suggestions.length > 0 && (
+                <div className="mt-4">
+                  <div className="text-gray-400 text-xs mb-1">Suggested locations:</div>
+                  <ul className="list-disc list-inside text-gray-300 text-sm pl-4">
+                    {suggestions.map((s) => (
+                      <li key={s.targetFilePath}>{s.targetFilePath}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
             
             <div className="flex justify-end gap-3">
