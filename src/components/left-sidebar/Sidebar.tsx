@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, LogOut, Plus, Edit3, Edit, Check, X, RefreshCw, Clock, Trash, Eye, EyeOff } from 'lucide-react'
+import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, LogOut, Plus, Edit3, Edit, Check, X, RefreshCw, Clock, Trash, Eye, EyeOff, Download } from 'lucide-react'
 import { Page } from '@/lib/supabase/types'
 import { DragDropStyles, isValidDrop, DropZoneIndicator } from '@/components/left-sidebar/DragDropStyles'
 import type { DragItem, DropTarget } from '@/hooks/useDragAndDrop'
@@ -695,7 +695,7 @@ export default function Sidebar({
             </div>
 
             {/* Sync Button - For Development */}
-            <div className="pb-4">
+            <div className="pb-2">
               <button
                 onClick={onManualSync}
                 className="w-full bg-transparent hover:bg-[#2a2a2a] text-[#cccccc] rounded-lg py-1 text-sm flex items-center gap-1 transition-all duration-200"
@@ -706,6 +706,49 @@ export default function Sidebar({
                   <RefreshCw size={14} className="text-[#969696]" />
                 </div>
                 <span className="ml-1 text-[#969696]">Sync to Memory</span>
+              </button>
+            </div>
+
+            {/* Export Button */}
+            <div className="pb-4">
+              <button
+                onClick={async () => {
+                  try {
+                    logger.info('🗂️ Starting export...')
+                    const response = await fetch('/api/export')
+                    
+                    if (!response.ok) {
+                      const errorData = await response.json()
+                      logger.error('❌ Export failed', { error: errorData })
+                      alert(`Export failed: ${errorData.error}`)
+                      return
+                    }
+                    
+                    // Get the blob and create download link
+                    const blob = await response.blob()
+                    const url = window.URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `corta-export-${new Date().toISOString().split('T')[0]}.zip`
+                    document.body.appendChild(a)
+                    a.click()
+                    document.body.removeChild(a)
+                    window.URL.revokeObjectURL(url)
+                    
+                    logger.info('✅ Export downloaded successfully')
+                  } catch (error) {
+                    logger.error('❌ Export error', { error })
+                    alert('Export failed. Please try again.')
+                  }
+                }}
+                className="w-full bg-transparent hover:bg-[#2a2a2a] text-[#cccccc] rounded-lg py-1 text-sm flex items-center gap-1 transition-all duration-200"
+                style={{ paddingLeft: '16px', paddingRight: '16px' }}
+                title="Export all organized pages as markdown files"
+              >
+                <div className="w-4 h-4 flex items-center justify-center">
+                  <Download size={14} className="text-[#969696]" />
+                </div>
+                <span className="ml-1 text-[#969696]">Export Markdown</span>
               </button>
             </div>
 

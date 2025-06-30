@@ -91,7 +91,70 @@ OUTPUT:
 // PROMPTS FOR ORGANIZING NEW CONTENT IN ORGANIZED PAGES
 
 
+
 // This only goes in smart merge
+
+
+
+export const ORGANIZATION_EXAMPLES = `🔥 ORGANIZATION EXAMPLES - WALLS OF BULLETS VS PROPER GROUPING 🔥
+
+❌ BAD EXAMPLE - Wall of bullets under generic heading:
+## Art of Strategy Book – Raw Strategic Learnings
+- Setting incentives forcing you to do things really really work. It will ensure you stay stressed.
+- Musk, Ellison, that model in a bikini who wasn't thin enough.
+- remember how Buffett played both sides hard. 1 bil to the side who supports bill if it fails.
+- If 2 people in potential prisoners dilemma you can almost always use that against them.
+- That's probably why religion also needed btw.
+- Capitalism has no invisible hand and is very susceptible to prisoners dilemmas.
+- Randomness v v imp to get outsized outcomes. Like irs case.
+- Think about all other perspectives always.
+- People do behave irrationally. Pride spite etc. take them as they are, not as you are.
+- Information asymmetry should always be looked for because people maximise expected value.
+- Don't bet against sucker bets. Bad odds. Someone who you know has more information than you.
+
+✅ GOOD EXAMPLE - Multiple specific headings with grouped bullets:
+## Incentive Design and Behavioral Control
+- Setting incentives forcing you to do things really really work. It will ensure you stay stressed.
+- Musk, Ellison, that model in a bikini who wasn't thin enough.
+
+## Strategic Game Theory Applications
+- remember how Buffett played both sides hard. 1 bil to the side who supports bill if it fails.
+- If 2 people in potential prisoners dilemma you can almost always use that against them.
+- Capitalism has no invisible hand and is very susceptible to prisoners dilemmas.
+- That's probably why religion also needed btw.
+
+## Information Asymmetry and Advantage
+- Information asymmetry should always be looked for because people maximise expected value.
+- Don't bet against sucker bets. Bad odds. Someone who you know has more information than you.
+- Randomness v v imp to get outsized outcomes. Like irs case.
+
+## Psychology and Perspective in Strategy
+- Think about all other perspectives always.
+- People do behave irrationally. Pride spite etc. take them as they are, not as you are.
+
+❌ BAD EXAMPLE - Generic meeting notes:
+## Meeting Notes
+- Need to hire 3 engineers
+- Budget approval required
+- User feedback shows confusion
+- Competitor launched similar feature  
+- Q3 revenue target missed
+- Marketing campaign underperforming
+
+✅ GOOD EXAMPLE - Specific meeting categories:
+## Hiring and Resource Needs
+- Need to hire 3 engineers
+- Budget approval required
+
+## Product and User Experience Issues
+- User feedback shows confusion
+- Competitor launched similar feature
+
+## Performance and Growth Concerns
+- Q3 revenue target missed  
+- Marketing campaign underperforming`
+
+
 export const TIPTAP_FORMATTING_PROMPT = `Markdown Formatting Rules (apply strictly):
 • OUTPUT CLEAN MARKDOWN - not plain text, not HTML, not JSON
 • Prefer numbered lists (1. 2. 3.) or bullet lists (- item) for easy scanning
@@ -109,7 +172,7 @@ BOLDING EXAMPLES:
 
 🚨🚨🚨 ULTRA CRITICAL HEADING RULES - MUST FOLLOW EXACTLY 🚨🚨🚨:
 • Headings MUST be ULTRA-DESCRIPTIVE and SPECIFIC to the exact content below them
-• NEVER use generic headings like "Thinking", "Strategising", "Ideas", "Notes", "Random thoughts"
+• NEVER use generic headings like "Thinking", "Strategising", "Ideas", "Notes", "Random thoughts", "Raw Learnings"
 • Instead use SPECIFIC descriptive headings that tell exactly what the bullets are about
 • Example: Instead of "Thinking, Strategising" → use "Organizational Complexity For Users" or "Product Differentiation Strategy"
 • Example: Instead of "Ideas" → use "Marketing Campaign Concepts" or "User Interface Improvements"
@@ -120,14 +183,29 @@ BOLDING EXAMPLES:
 • Headings MUST be descriptions of content below it. NOT the page title of the page you sent to or received from!!!!!
 • If there is a standalone statement, do not give it a heading that is the same as the statement. In such cases no heading is ok. Heading should not be a repeated version of a point below it.
 
+🚨🚨🚨 CRITICAL: AVOID WALLS OF BULLETS - BREAK INTO MULTIPLE HEADINGS 🚨🚨🚨:
+• NEVER put 8+ bullets under one heading - this creates unreadable walls of text
+• ALWAYS break large lists into 2-4 related topic groups with specific headings
+• Example: Instead of "Art of Strategy Book – Raw Strategic Learnings" with 11 bullets → Break into:
+  - "Incentive Design and Behavioral Control" (3 bullets)
+  - "Strategic Game Theory Applications" (3 bullets) 
+  - "Information Asymmetry Advantages" (2 bullets)
+  - "Psychology and Irrationality in Strategy" (3 bullets)
+• Each heading should have 2-5 bullets maximum for optimal readability
+• Group related concepts together under specific descriptive headings
+
 DESCRIPTIVE HEADING EXAMPLES:
 ❌ BAD: "Random thoughts" → ✅ GOOD: "Product Market Fit Hypotheses"
 ❌ BAD: "Ideas" → ✅ GOOD: "Revenue Stream Optimization"
 ❌ BAD: "Notes" → ✅ GOOD: "Sprint Retrospective Insights"
 ❌ BAD: "Thinking" → ✅ GOOD: "Customer Acquisition Strategy"
+❌ BAD: "Raw Strategic Learnings" with 11 bullets → ✅ GOOD: Multiple specific headings with 2-5 bullets each
 
 • See in general, you are just someone who must organize somewhat unorganized content into a very easily readable form. Like what a human may like to read. Don't do stupid things like repeat a heading and the point directly under it etc. Just use common sense. 
+
+${ORGANIZATION_EXAMPLES}
 `
+
 
 export const ULTRA_CONDENSED_ORGANIZATION_TEMPLATE = `CONDENSED CONTENT RULES:
 • NO explanations, introductions, or overviews
