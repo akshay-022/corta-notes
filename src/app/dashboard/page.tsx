@@ -30,7 +30,7 @@ export default function DashboardPage() {
   // Show minimal loading while redirecting
   return (
     <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center">
-      <div className="text-gray-400 text-sm">Redirecting to your notes...</div>
+      <div className="text-gray-400 text-sm">Click on any note to begin</div>
     </div>
   )
 } 

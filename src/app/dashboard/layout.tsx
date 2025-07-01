@@ -44,14 +44,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         if (existingPages && existingPages.length === 0) {
           logger.info('PARA check: no pages found – running initialisation');
+          
+          // Set flag in localStorage before creating PARA structure (for reload logic)
+          localStorage.setItem('corta-first-time-user', 'true');
+          logger.info('Set localStorage flag for first-time user');
+          
           const { created } = await initializeParaStructure(supabase);
           logger.info('PARA structure created for new account', { createdCount: created.length });
           
           // Refresh the router and show help dialog for newly created PARA structure
           if (created.length > 0) {
-            logger.info('Refreshing router to display new PARA structure');
+            logger.info('PARA structure creation completed, refreshing router', { 
+              createdCount: created.length 
+            });
+            
             router.refresh();
-            // Auto-open the help dialog to explain PARA method
+            logger.info('Opening PARA help dialog');
+            console.log('DashboardLayout: Setting showParaHelp to true');
             setShowParaHelp(true);
           }
         } else {
@@ -78,7 +87,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {isDashboardRoute && (
         <ParaHelpDialog 
           autoOpen={showParaHelp}
-          onAutoOpenComplete={() => setShowParaHelp(false)}
+          onAutoOpenComplete={() => {
+            console.log('DashboardLayout: onAutoOpenComplete called, setting showParaHelp to false');
+            setShowParaHelp(false);
+          }}
         />
       )}
     </>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { HelpCircle, X } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 interface ParaHelpDialogProps {
   autoOpen?: boolean
@@ -10,13 +11,18 @@ interface ParaHelpDialogProps {
 
 export default function ParaHelpDialog({ autoOpen = false, onAutoOpenComplete }: ParaHelpDialogProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [wasAutoOpened, setWasAutoOpened] = useState(false)
+  const router = useRouter()
 
   // Auto-open when autoOpen prop is true
   useEffect(() => {
     if (autoOpen) {
+      console.log('ParaHelpDialog: autoOpen prop is true, opening dialog')
       setIsOpen(true)
+      setWasAutoOpened(true)
       // Notify parent that auto-open has been handled
       if (onAutoOpenComplete) {
+        console.log('ParaHelpDialog: calling onAutoOpenComplete')
         onAutoOpenComplete()
       }
     }
@@ -27,7 +33,17 @@ export default function ParaHelpDialog({ autoOpen = false, onAutoOpenComplete }:
   }
 
   const closeDialog = () => {
+    console.log('ParaHelpDialog: closing dialog, wasAutoOpened:', wasAutoOpened)
     setIsOpen(false)
+    
+    // Check localStorage flag to see if this is a first-time user who needs a reload
+    const isFirstTimeUser = localStorage.getItem('corta-first-time-user') === 'true'
+    if (isFirstTimeUser) {
+      console.log('ParaHelpDialog: first-time user dialog closed, reloading page')
+      // Clear the flag so it doesn't reload again
+      localStorage.removeItem('corta-first-time-user')
+      window.location.reload()
+    }
   }
 
   return (

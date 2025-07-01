@@ -128,55 +128,72 @@ export async function initializeParaStructure(
   const created: string[] = []
   const alreadyExisted: string[] = []
 
-  for (const item of PARA_ITEMS) {
-    // 1. Does it already exist?
-    const { data: rows, error } = await supabase
-      .from('pages')
-      .select('uuid')
-      .eq('user_id', user.id)
-      .eq('title', item.title)
-      .eq('type', item.type)
-      .is('parent_uuid', null)
-      .eq('is_deleted', false)
-      .limit(1)
+  // Process all items in parallel
+  const results = await Promise.all(
+    PARA_ITEMS.map(async (item) => {
+      try {
+        // 1. Does it already exist?
+        const { data: rows, error } = await supabase
+          .from('pages')
+          .select('uuid')
+          .eq('user_id', user.id)
+          .eq('title', item.title)
+          .eq('type', item.type)
+          .is('parent_uuid', null)
+          .eq('is_deleted', false)
+          .limit(1)
 
-    if (error) {
-      logger.error(`Error querying for existing page "${item.title}"`, error)
-      continue
-    }
+        if (error) {
+          logger.error(`Error querying for existing page "${item.title}"`, error)
+          return { type: 'error', title: item.title }
+        }
 
-    if (rows && rows.length) {
-      alreadyExisted.push(rows[0].uuid)
-      logger.info(`✓ "${item.title}" already exists`, { uuid: rows[0].uuid.substring(0, 8) })
-      continue
-    }
+        if (rows && rows.length) {
+          logger.info(`✓ "${item.title}" already exists`, { uuid: rows[0].uuid.substring(0, 8) })
+          return { type: 'existing', uuid: rows[0].uuid, title: item.title }
+        }
 
-    // 2. Create new entry
-    const newPage: Partial<Page> = {
-      user_id: user.id,
-      title: item.title,
-      type: item.type,
-      parent_uuid: null,
-      organized: true,
-      content: item.type === 'file' ? item.content ?? { type: 'doc', content: [] } : null,
-      content_text: item.type === 'file' ? item.contentText ?? '' : null
-    }
+        // 2. Create new entry
+        const newPage: Partial<Page> = {
+          user_id: user.id,
+          title: item.title,
+          type: item.type,
+          parent_uuid: null,
+          organized: true,
+          content: item.type === 'file' ? item.content ?? { type: 'doc', content: [] } : null,
+          content_text: item.type === 'file' ? item.contentText ?? '' : null
+        }
 
-    const { data: inserted, error: insertErr } = await supabase
-      .from('pages')
-      .insert(newPage)
-      .select()
-      .single()
+        const { data: inserted, error: insertErr } = await supabase
+          .from('pages')
+          .insert(newPage)
+          .select()
+          .single()
 
-    if (insertErr) {
-      logger.error(`Failed to create "${item.title}"`, insertErr)
-      continue
-    }
+        if (insertErr) {
+          logger.error(`Failed to create "${item.title}"`, insertErr)
+          return { type: 'error', title: item.title }
+        }
 
-    created.push(inserted.uuid)
-    logger.info(`🆕 Created ${item.type} "${item.title}"`, {
-      uuid: inserted.uuid.substring(0, 8)
+        logger.info(`🆕 Created ${item.type} "${item.title}"`, {
+          uuid: inserted.uuid.substring(0, 8)
+        })
+        return { type: 'created', uuid: inserted.uuid, title: item.title }
+      } catch (error) {
+        logger.error(`Exception processing "${item.title}"`, error)
+        return { type: 'error', title: item.title }
+      }
     })
+  )
+
+  // Process results
+  for (const result of results) {
+    if (result.type === 'created') {
+      created.push(result.uuid)
+    } else if (result.type === 'existing') {
+      alreadyExisted.push(result.uuid)
+    }
+    // Errors are already logged above
   }
 
   logger.info('🏁 PARA initialisation finished', { createdCount: created.length })
