@@ -161,6 +161,14 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
       logger.info('Loaded saved model from localStorage', { model: savedModel })
     }
   }, [])
+
+  // Set default model to ChatGPT every time chat panel opens
+  useEffect(() => {
+    if (isOpen) {
+      logger.info('Chat panel opened, setting default model to ChatGPT')
+      setSelectedModel('chatgpt-4o-latest')
+    }
+  }, [isOpen])
   
   // Save model to localStorage when it changes
   useEffect(() => {

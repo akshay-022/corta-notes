@@ -69,7 +69,7 @@ export default function ParaHelpDialog({ autoOpen = false, onAutoOpenComplete }:
                     <strong>Short-term efforts</strong> with clear outcomes
                   </p>
                   <p className="text-xs text-gray-400 mt-1">
-                    Examples: Blogs, Assignments, Startup
+                    Examples: Blogs, Assignments, Startup Idea
                   </p>
                 </div>
 
