@@ -26,15 +26,16 @@ export default function SignupPage() {
       options: {
         data: {
           full_name: fullname,
-        }
+        },
+        emailRedirectTo: `${window.location.origin}/login`
       }
     })
 
     if (error) {
       setError(error.message)
     } else {
-      // For new users, always go to dashboard to let them create their first page
-      router.push('/dashboard')
+      // Redirect to email verification page with the email address
+      router.push(`/verify-email?email=${encodeURIComponent(email)}`)
     }
     setLoading(false)
   }
