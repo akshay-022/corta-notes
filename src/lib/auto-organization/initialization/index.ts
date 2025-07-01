@@ -18,7 +18,7 @@ interface ParaItemDefinition {
   contentText?: string
 }
 
-const README_TEXT = `# Welcome to PARA 📓
+const README_TEXT = `# Welcome to PARA
 
 PARA is a simple, opinionated framework for keeping **everything** in its place.
 
@@ -42,7 +42,7 @@ const README_DOC = {
     {
       type: 'heading',
       attrs: { level: 1 },
-      content: [{ type: 'text', text: 'Welcome to PARA \\u{1F4D3}' }]
+      content: [{ type: 'text', text: 'Welcome to PARA' }]
     },
     {
       type: 'paragraph',
@@ -96,7 +96,7 @@ const PARA_ITEMS: ParaItemDefinition[] = [
   { title: 'Archives', type: 'folder' },
   { title: 'Me', type: 'folder' },
   { title: 'TODOs', type: 'file', content: { type: 'doc', content: [] }, contentText: '' },
-  { title: 'README', type: 'file', content: README_DOC, contentText: README_TEXT }
+  // { title: 'README', type: 'file', content: README_DOC, contentText: README_TEXT }
 ]
 
 interface InitResult {

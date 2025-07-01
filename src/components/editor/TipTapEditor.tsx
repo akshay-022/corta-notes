@@ -9,7 +9,7 @@ import Underline from '@tiptap/extension-underline'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Page, PageUpdate } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/supabase-client'
-import { Info, Edit2, Save, X, FileText, Eye, Edit3, MessageSquare, ArrowUp } from 'lucide-react'
+import { Info, Edit2, Save, X, FileText, Eye, Edit3, MessageSquare, ArrowUp, Loader2 } from 'lucide-react'
 
 import { setupAutoOrganization, organizePage } from '@/lib/auto-organization/organized-file-updates'
 import { useNotes } from '@/components/left-sidebar/DashboardSidebarProvider'
@@ -666,7 +666,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       >
         <div className="flex items-center gap-1 bg-[#2a2a2a] rounded-lg p-1 border border-gray-700">
           {/* Summary Toggle - show for organized pages */}
-          {page.organized && (
+          {/* {page.organized && (
             <>
               <button
                 onClick={() => {
@@ -691,7 +691,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
               
               <div className="w-px h-4 bg-gray-600" />
             </>
-          )}
+          )} */}
           
 
           {/* Organization Rules Button */}
@@ -714,7 +714,11 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
             }`}
             title={isOrganizing ? "Uploading in background..." : "Upload to Organized Brain"}
           >
-            <ArrowUp size={14} />
+            {isOrganizing ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <ArrowUp size={14} />
+            )}
           </button>
 
           <div className="w-px h-4 bg-gray-600" />

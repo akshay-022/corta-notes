@@ -436,7 +436,7 @@ JSON output only:
       console.log('🔥 === ABOUT TO MAKE LLM CALL ===')
       console.log('🔥 LLM call details:', {
         promptLength: prompt.length,
-        model: 'o3-mini',
+        model: 'gpt-4o',
         hasPromptTemplates: {
           TIPTAP_FORMATTING_PROMPT: !!TIPTAP_FORMATTING_PROMPT,
           FAITHFUL_MERGE_RULES: !!FAITHFUL_MERGE_RULES,
@@ -445,7 +445,7 @@ JSON output only:
         }
       })
 
-      const response = await callLLM({ model: 'o3-mini', prompt })
+      const response = await callLLM({ model: 'gpt-4o', prompt })
       
       console.log('🔥 LLM response received:', {
         responseLength: response?.length || 0,
