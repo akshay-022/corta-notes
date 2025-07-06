@@ -1215,6 +1215,21 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
                                 h2: ({ children }) => <h2 className="text-base font-semibold mb-2 mt-4 first:mt-0 text-white">{children}</h2>,
                                 h3: ({ children }) => <h3 className="text-sm font-semibold mb-2 mt-3 first:mt-0 text-white">{children}</h3>,
                                 hr: () => <hr className="my-6 border-t border-[#404040]" />,
+                                a: ({ href, children }) => (
+                                  <a 
+                                    href={href} 
+                                    className="text-[#60a5fa] hover:text-[#4a9fff] underline transition-colors cursor-pointer"
+                                    onClick={(e) => {
+                                      if (href?.startsWith('/dashboard/page/')) {
+                                        e.preventDefault()
+                                        logger.info('Opening page from markdown link:', { href })
+                                        window.open(href, '_blank', 'noopener,noreferrer')
+                                      }
+                                    }}
+                                  >
+                                    {children}
+                                  </a>
+                                ),
                                 // Table components for proper table rendering
                                 table: ({ children }) => (
                                   <div className="overflow-x-auto mb-4">

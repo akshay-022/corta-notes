@@ -490,6 +490,12 @@ ${TRUTH_OVER_AGREEMENT_PRINCIPLE}
   | Row 2    | Data     | Data     |
   \`\`\`
 - HTML tags like <br>, <u>, etc. are acceptable when needed for formatting
+- **AUTOMATIC PAGE LINKING**: When referencing pages from the user's context, create clickable links using:
+  \`[Page Title](/dashboard/page/PAGE_UUID)\`
+  Example: \`[Project Planning](/dashboard/page/474b566d-7d2f-4c99-ba7b-f24584ad719c)\`
+  - Use page UUIDs from the context/selections provided
+  - Link naturally when discussing related content
+  - Current page URL format: /dashboard/page/[uuid]
 - This is NON-NEGOTIABLE - every response must be well-formatted and readable
 
 **CRITICAL FORMATTING RULE:** OUTPUT CLEAN, WELL-FORMATTED CONTENT - use good markdown structure and formatting for readability.`
