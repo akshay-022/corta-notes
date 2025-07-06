@@ -34,6 +34,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [isUserTyping, setIsUserTyping] = useState(false)
   const [isUserEditingTitle, setIsUserEditingTitle] = useState(false) // Track title editing specifically
+  const [isSettingContentProgrammatically, setIsSettingContentProgrammatically] = useState(false) // Track programmatic content setting
 
   const [selectedParagraphMetadata, setSelectedParagraphMetadata] = useState<{id: string, metadata: any, pos?: number, nodeType?: string} | null>(null)
   const [showSummary, setShowSummary] = useState(false) // Toggle between content and summary
@@ -107,8 +108,11 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     },
     editable: !showSummary, // Make read-only when showing summary
     onUpdate: ({ editor }) => {
-      setIsUserTyping(true)
-      debounceUpdate(editor.getJSON(), editor.getText())
+      // Only trigger update if user is actually typing (not programmatic content setting)
+      if (!isSettingContentProgrammatically) {
+        setIsUserTyping(true)
+        debounceUpdate(editor.getJSON(), editor.getText())
+      }
     },
   })
 
@@ -127,10 +131,50 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   const updatePage = async (content: any, textContent: string) => {
     setIsSaving(true)
     
+    // Check if this is the first edit after organization
+    const currentMetadata = (page.metadata as any) || {}
+    const isFirstEditAfterOrganization = currentMetadata.fullyOrganized === true
+    
     const updates: PageUpdate = {
       content,
       content_text: textContent,
       updated_at: new Date().toISOString()
+    }
+
+    // If this is the first edit after organization, check if there are unorganized paragraphs
+    if (isFirstEditAfterOrganization) {
+      // Check if any paragraphs are unorganized
+      let hasUnorganizedParagraphs = false
+      if (content?.content && Array.isArray(content.content)) {
+        content.content.forEach((node: any) => {
+          if (node.type === 'paragraph') {
+            const isOrganized = node.attrs?.metadata?.isOrganized === true
+            if (!isOrganized) {
+              hasUnorganizedParagraphs = true
+            }
+          }
+        })
+      }
+      
+      // Only set fullyOrganized = false if there are actually unorganized paragraphs
+      if (hasUnorganizedParagraphs) {
+        const updatedMetadata = {
+          ...currentMetadata,
+          fullyOrganized: false
+        }
+        updates.metadata = updatedMetadata
+        
+        logger.info('First edit after organization detected with unorganized paragraphs, setting fullyOrganized = false', {
+          pageUuid: page.uuid,
+          pageTitle: page.title,
+          unorganizedParagraphs: hasUnorganizedParagraphs
+        })
+      } else {
+        logger.info('First edit after organization detected but all paragraphs are organized, keeping fullyOrganized = true', {
+          pageUuid: page.uuid,
+          pageTitle: page.title
+        })
+      }
     }
 
     const { data, error } = await supabase
@@ -201,6 +245,8 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     setTimeout(() => titleInputRef.current?.focus(), 0)
   }
 
+
+
   // Initialize organization rules and routing instructions from page metadata
   useEffect(() => {
     const pageMetadata = page.metadata as any
@@ -219,7 +265,13 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       })
       currentPageRef.current = page.uuid
       const newContent = showSummary ? (page.page_summary || page.content) : page.content
+      
+      // Set flag to prevent onUpdate from triggering during programmatic content setting
+      setIsSettingContentProgrammatically(true)
       editor.commands.setContent(newContent as any)
+      // Reset flag after a short delay to allow the content setting to complete
+      setTimeout(() => setIsSettingContentProgrammatically(false), 100)
+      
       setTitle(page.title)
     }
   }, [page.uuid, editor, showSummary]) // Only trigger on UUID change, not all page changes
@@ -231,7 +283,13 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       if (updatedPage && updatedPage.uuid === page.uuid && editor && !isUserTyping) {
         logger.info('External page update received, refreshing editor content', { pageUuid: page.uuid })
         const newContent = showSummary ? (updatedPage.page_summary || updatedPage.content) : updatedPage.content
+        
+        // Set flag to prevent onUpdate from triggering during programmatic content setting
+        setIsSettingContentProgrammatically(true)
         editor.commands.setContent(newContent as any)
+        // Reset flag after a short delay to allow the content setting to complete
+        setTimeout(() => setIsSettingContentProgrammatically(false), 100)
+        
         setTitle(updatedPage.title)
       }
     }
@@ -327,6 +385,31 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       setIsOrganizeDialogOpen(false)
       setIsOrganizing(true)
 
+      // Mark all paragraphs as organized BEFORE sending to API
+      if (editor) {
+        const { getAllUnorganizedParagraphs, updateMetadataByParagraphId, setNewParagraphIds } = await import('@/components/editor/paragraph-metadata')
+        
+        // First, ensure all paragraphs have proper IDs
+        setNewParagraphIds(editor, page.uuid)
+        
+        const paragraphs = getAllUnorganizedParagraphs(editor)
+
+        // Mark all paragraphs as organized
+        paragraphs.forEach((p) => {
+          if (p.metadata?.id) {
+            updateMetadataByParagraphId(editor, p.metadata.id, {
+              isOrganized: true,
+              organizationStatus: 'yes',
+            })
+          }
+        })
+
+        logger.info('Marked paragraphs as organized before API call', {
+          pageUuid: page.uuid,
+          count: paragraphs.length,
+        })
+      }
+
       logger.info('📡 Sending organization request to API', { 
         pageUuid: page.uuid.substring(0, 8),
         contentLength: contentText.length 
@@ -365,6 +448,38 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
         pageUuid: page.uuid.substring(0, 8),
         status: response.status 
       })
+
+      // Update page metadata to mark as organized
+      try {
+        const currentMetadata = (page.metadata as any) || {}
+        const updatedMetadata = {
+          ...currentMetadata,
+          fullyOrganized: true
+        }
+
+        const { data: updatedPage, error } = await supabase
+          .from('pages')
+          .update({ 
+            metadata: updatedMetadata,
+            updated_at: new Date().toISOString()
+          })
+          .eq('uuid', page.uuid)
+          .select()
+          .single()
+
+        if (updatedPage) {
+          // Update parent state to refresh sidebar
+          onUpdate(updatedPage)
+          logger.info('Set fullyOrganized = true after successful organization and updated parent state', {
+            pageUuid: page.uuid,
+            pageTitle: page.title
+          })
+        } else if (error) {
+          logger.error('Failed to update fullyOrganized metadata after organization', error)
+        }
+      } catch (metadataErr) {
+        logger.error('Failed to update fullyOrganized metadata after organization', metadataErr)
+      }
 
       // Fetch updated file history from Supabase and broadcast to sidebar
       try {
@@ -690,7 +805,11 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   // Update editor content when summary toggle changes
   useEffect(() => {
     if (editor) {
+      // Set flag to prevent onUpdate from triggering during programmatic content setting
+      setIsSettingContentProgrammatically(true)
       editor.commands.setContent(currentContent as any)
+      // Reset flag after a short delay to allow the content setting to complete
+      setTimeout(() => setIsSettingContentProgrammatically(false), 100)
       editor.setEditable(!showSummary) // Update editable state
     }
   }, [showSummary, page.uuid, editor])
@@ -941,7 +1060,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
         </div>
       </div>
 
-      {/* Bubble Menu for Paragraph Metadata - COMMENTED OUT 
+      {/* Bubble Menu for Paragraph Metadata */}
       {editor && (
         <BubbleMenu 
           editor={editor} 
@@ -963,7 +1082,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                     }
                   </div>
                   
-                  Node Type
+                  {/* Node Type */}
                   {selectedParagraphMetadata.nodeType && (
                     <div className="p-2 bg-[#1a1a1a] rounded">
                       <div className="text-gray-400">
@@ -972,7 +1091,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                     </div>
                   )}
                   
-                  ID
+                  {/* ID */}
                   <div className="p-2 bg-[#1a1a1a] rounded">
                     <div className="text-gray-400">
                       ID: <span className="text-gray-200 font-mono text-xs break-all">{selectedParagraphMetadata.id || 'No ID'}</span>
@@ -981,7 +1100,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
 
                   {selectedParagraphMetadata.metadata && (
                     <>
-                      Organization Status
+                      {/* Organization Status */}
                       {selectedParagraphMetadata.metadata.isOrganized !== undefined && (
                         <div className="p-2 bg-[#1a1a1a] rounded">
                           <div className="text-gray-400 flex items-center justify-between">
@@ -1004,7 +1123,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                         </div>
                       )}
 
-                      Last Updated - Now editable for debugging boundary issues
+                      {/* Last Updated - Now editable for debugging boundary issues */}
                       {selectedParagraphMetadata.metadata.lastUpdated && (
                       <div className="p-2 bg-[#1a1a1a] rounded">
                         <div className="text-gray-400 flex items-center justify-between">
@@ -1037,7 +1156,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                       </div>
                       )}
 
-                      Where Organized - Read only for now
+                      {/* Where Organized - Read only for now */}
                       {selectedParagraphMetadata.metadata.whereOrganized && 
                        selectedParagraphMetadata.metadata.whereOrganized.length > 0 && (
                         <div className="p-2 bg-[#1a1a1a] rounded">
@@ -1058,7 +1177,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                         </div>
                       )}
 
-                      Other Metadata Fields - Inline Editable
+                      {/* Other Metadata Fields - Inline Editable */}
                       {Object.entries(selectedParagraphMetadata.metadata).filter(([key]) => 
                         !['isOrganized', 'lastUpdated', 'whereOrganized', 'organizationStatus', 'id'].includes(key)
                       ).length > 0 && (
@@ -1121,7 +1240,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                             ))}
                           </div>
                           
-                          Add new field button
+                          {/* Add new field button */}
                           <button
                             onClick={() => {
                               const newMetadata = {
@@ -1137,7 +1256,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                         </div>
                       )}
 
-                      Add Field button if no other metadata exists
+                      {/* Add Field button if no other metadata exists */}
                       {Object.entries(selectedParagraphMetadata.metadata).filter(([key]) => 
                         !['isOrganized', 'lastUpdated', 'whereOrganized', 'organizationStatus', 'id'].includes(key)
                       ).length === 0 && (
@@ -1172,7 +1291,6 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
           </div>
         </BubbleMenu>
       )}
-      */}
 
       {/* Formatting toolbar bubble menu */}
       {editor && <FormattingBubbleMenu editor={editor} />}
@@ -1249,6 +1367,14 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
               <textarea
                 value={routingInstructions}
                 onChange={(e) => setRoutingInstructions(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    if (!isOrganizing) {
+                      handleOrganizePage()
+                    }
+                  }
+                }}
                 placeholder="Enter routing instructions (optional)..."
                 className="w-full h-32 bg-[#1a1a1a] border border-gray-600 rounded p-3 text-gray-200 text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none"
                 disabled={isOrganizing}

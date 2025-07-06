@@ -1,7 +1,7 @@
 'use client'
 
 import React, { memo, useCallback, useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react'
-import { XIcon, SendIcon, Edit2, MessageSquare, ArrowUp } from 'lucide-react'
+import { XIcon, SendIcon, Edit2, MessageSquare, ArrowUp, History } from 'lucide-react'
 import { createClient } from '@/lib/supabase/supabase-client'
 import { Conversation, ChatMessage, Page } from '@/lib/supabase/types'
 import conversationsService from '@/lib/conversations/conversations'
@@ -347,15 +347,15 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
       logger.info('Conversations loaded', { count: userConversations.length })
       setConversations(userConversations)
       
-      // If there's a current page, try to find or create a conversation for it
-      if (currentPage && userConversations.length === 0) {
-        logger.info('Creating new conversation for current page', { pageTitle: currentPage.title })
-        const newConversation = await conversationsService.createConversation(
-          `Chat about ${currentPage.title}`,
-          [currentPage.uuid]
-        )
+      // Auto-create conversation if none exist (for new users)
+      if (userConversations.length === 0) {
+        const title = currentPage ? `Chat about ${currentPage.title}` : 'General Chat'
+        const relatedPages = currentPage ? [currentPage.uuid] : []
+        
+        logger.info('Auto-creating first conversation for new user', { title, hasCurrentPage: !!currentPage })
+        const newConversation = await conversationsService.createConversation(title, relatedPages)
         if (newConversation) {
-          logger.info('New conversation created', { conversationId: newConversation.id })
+          logger.info('Auto-created conversation', { conversationId: newConversation.id, title })
           setConversations([newConversation])
           setActiveConversation(newConversation)
         }
@@ -1056,11 +1056,10 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
       }}
     >
       {/* Top bar with title and close button */}
-      <div className="flex justify-between items-center p-3 border-b border-[#333333] h-12">
+      <div className="flex justify-between items-center p-2 h-10">
         <div className="flex items-center gap-2">
-          <MessageSquare size={16} className="text-[#cccccc]" />
           {showConversations ? (
-            <span className="text-base text-[#cccccc] font-medium">Past Conversations</span>
+            <span className="text-sm text-[#cccccc] font-medium">Past Conversations</span>
           ) : isEditingTitle ? (
             <input
               type="text"
@@ -1068,13 +1067,13 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
               onChange={(e) => setTitleInputValue(e.target.value)}
               onBlur={handleTitleSave}
               onKeyDown={handleTitleKeyDown}
-              className="text-[16px] md:text-base text-[#cccccc] font-medium bg-transparent border-none outline-none focus:bg-[#2a2a2a] px-1 rounded"
-              style={{ fontSize: '16px' }}
+              className="text-sm md:text-base text-[#cccccc] font-medium bg-transparent border-none outline-none focus:bg-[#2a2a2a] px-1 rounded"
+              style={{ fontSize: '14px' }}
               autoFocus
             />
           ) : (
             <span 
-              className="text-base text-[#cccccc] font-medium cursor-pointer hover:text-white transition-colors"
+              className="text-sm text-[#cccccc] font-medium cursor-pointer hover:text-white transition-colors"
               onDoubleClick={handleTitleDoubleClick}
               title="Double-click to rename"
             >
@@ -1086,9 +1085,10 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
           {!showConversations && (
             <button
               onClick={() => setShowConversations(true)}
-              className="text-sm text-[#969696] hover:text-[#cccccc] transition-colors"
+              className="p-1 rounded hover:bg-[#232323] transition-colors"
+              title="Show Past Conversations"
             >
-              Past Conversations
+              <History size={16} className="text-[#cccccc]" />
             </button>
           )}
           <button
@@ -1380,7 +1380,7 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
           </div>
           {/* Input Area */}
           <div
-            className={`${isMobile ? 'fixed bottom-4 left-0 right-0 z-40' : 'sticky bottom-0 left-0 right-0 z-10'} border-t border-[#333333] bg-[#1e1e1e] px-4 pt-4 pb-6 md:pb-4 pb-[env(safe-area-inset-bottom)]`}
+            className={`${isMobile ? 'fixed bottom-4 left-0 right-0 z-40' : 'sticky bottom-0 left-0 right-0 z-10'} bg-[#1e1e1e] px-4 pt-4 pb-4 pb-[env(safe-area-inset-bottom)]`}
             style={isMobile ? {
               boxShadow: '0 16px 0 0 #1e1e1e'
             } : undefined}
@@ -1428,14 +1428,24 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
                 )}
               </button>
             </div>
-            {/* Model Selector - Custom Dropdown */}
-            <div className="mt-2 flex items-center gap-2 text-xs">
-              <span className="text-[#969696]">Model:</span>
-              <ModelSelector
-                selectedModel={selectedModel}
-                onModelChange={setSelectedModel}
-                availableModels={availableModels}
-              />
+            {/* Model Selector - Custom Dropdown with New Chat on same row, aligned to bottom */}
+            <div className="mt-2 flex items-end gap-2 text-xs justify-between">
+              <div className="flex items-end gap-2">
+                <span className="text-[#969696]">Model:</span>
+                <ModelSelector
+                  selectedModel={selectedModel}
+                  onModelChange={setSelectedModel}
+                  availableModels={availableModels}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={createNewConversation}
+                className="text-xs text-[#a0a0a0] hover:underline transition-colors px-2 py-1 bg-transparent border-none cursor-pointer"
+                style={{ fontWeight: 400 }}
+              >
+                New Chat
+              </button>
             </div>
             <QuickOpenPalette anchorRef={textareaRef} isMobile={isMobile} />
           </div>

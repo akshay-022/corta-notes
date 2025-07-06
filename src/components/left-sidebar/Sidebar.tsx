@@ -540,6 +540,8 @@ export default function Sidebar({
               </span>
             )}
             
+
+            
             {/* Hide/Show button - appears on hover */}
             {/* <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
@@ -948,6 +950,12 @@ export default function Sidebar({
                                 {item.title}
                               </span>
                             </div>
+                            
+                            {/* Gray dot indicator for files that are not fully organized */}
+                            {(item.metadata as any)?.fullyOrganized !== true && (
+                              <div className="w-1.5 h-1.5 bg-gray-500 rounded-full flex-shrink-0 ml-2" 
+                                   title="Not fully organized - has been edited since last organization" />
+                            )}
                             
                             {/* Action buttons temporarily disabled */}
                           </div>
