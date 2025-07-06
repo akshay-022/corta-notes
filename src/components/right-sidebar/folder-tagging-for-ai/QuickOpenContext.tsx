@@ -20,6 +20,7 @@ interface QuickOpenContextValue {
   toggleFileSelection: (page: Page) => void
   finishSelection: () => void
   clearSelection: () => void
+  selectAllFiles: () => void
 }
 
 const QuickOpenContext = createContext<QuickOpenContextValue | null>(null)
@@ -157,6 +158,12 @@ export function QuickOpenProvider({ pages, onSelectFile, onSelectMultipleFiles, 
     setSelectedFiles([])
   }
 
+  const selectAllFiles = () => {
+    // Get all files (not folders) from current items
+    const allFiles = items.filter(item => item.type !== 'folder')
+    setSelectedFiles(allFiles)
+  }
+
       const value: QuickOpenContextValue = {
       isOpen,
       inputText,
@@ -169,6 +176,7 @@ export function QuickOpenProvider({ pages, onSelectFile, onSelectMultipleFiles, 
       toggleFileSelection,
       finishSelection,
       clearSelection,
+      selectAllFiles,
     }
 
   return (

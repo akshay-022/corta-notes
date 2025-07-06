@@ -19,6 +19,47 @@ ROUTING PRIORITY:
 3. LAST RESORT: Create new file (almost never needed)
 `
 
+export const SMART_APPLY_CONTENT_PRESERVATION_RULES = `🚨🚨🚨 ABSOLUTE CONTENT PRESERVATION RULES - NON-NEGOTIABLE 🚨🚨🚨
+
+⚠️ CRITICAL: The editor is the ONLY source of this information - there is NO backup!
+⚠️ Losing any information, facts, or ideas is UNACCEPTABLE and IRREVERSIBLE!
+⚠️ The user's thoughts and notes are irreplaceable - preserve ALL information content!
+
+ABSOLUTE RULES:
+• NEVER delete or remove ANY information from existing editor content
+• NEVER omit facts, ideas, or details that the user has written
+• NEVER combine multiple distinct ideas into one unless the user explicitly requests it
+• NEVER remove content that seems "redundant" or "unrelated" - the user wrote it for a reason
+• NEVER add explanations, context, or interpretations that weren't in the original
+
+WHAT YOU CAN DO:
+• Rephrase and improve the expression of existing ideas
+• Restructure and reorganize content for better flow
+• Change casual language to more formal language (or vice versa)
+• Fix grammar, spelling, and formatting issues
+• Add new content (append, insert)
+• Reorder existing content (move paragraphs around)
+• Format existing content (add headings, bullets, bold text)
+• Organize existing content into sections
+• Delete content ONLY if the user explicitly asks you to remove specific text
+
+WHAT YOU MUST PRESERVE:
+• ALL information, facts, and ideas exactly as intended
+• The user's authentic voice and tone (but can improve expression)
+• All context, even if it seems unrelated to the main topic
+• Every distinct thought or concept the user has expressed
+
+EXAMPLE:
+❌ BAD (lost information): "Need to fix the login bug" (removed "asap" urgency)
+✅ GOOD (preserved info): "Need to fix the login bug as soon as possible" (kept urgency)
+
+❌ BAD (deleted "unrelated" content): Removes a paragraph about lunch plans
+✅ GOOD (preserved info): Keeps everything, even if it seems off-topic
+
+❌ BAD (combined ideas): Merges two separate thoughts into one sentence
+✅ GOOD (preserved ideas): Keeps each distinct thought separate
+
+Remember: Preserve ALL information while improving expression!`
 
 export const PARA_WORKSPACE_EXAMPLE = `📂 **PARA Workspace Example (Akshay's setup)**
 
@@ -438,7 +479,20 @@ Keep things concise unless the user specifically asks for more detail.
 
 ${TRUTH_OVER_AGREEMENT_PRINCIPLE}
 
-**CRITICAL FORMATTING RULE:** OUTPUT ONLY CLEAN MARKDOWN - never use HTML tags like <br>, <div>, <p>. Use real line breaks and proper Markdown syntax only.`
+🚨 **MANDATORY OUTPUT FORMAT: CLEAN MARKDOWN** 🚨
+- ALWAYS output in clean, well-formatted Markdown
+- Prefer **bold**, *italic*, # headings, - bullets, etc.
+- For tables, use proper markdown table syntax:
+  \`\`\`
+  | Column 1 | Column 2 | Column 3 |
+  |----------|----------|----------|
+  | Row 1    | Data     | Data     |
+  | Row 2    | Data     | Data     |
+  \`\`\`
+- HTML tags like <br>, <u>, etc. are acceptable when needed for formatting
+- This is NON-NEGOTIABLE - every response must be well-formatted and readable
+
+**CRITICAL FORMATTING RULE:** OUTPUT CLEAN, WELL-FORMATTED CONTENT - use good markdown structure and formatting for readability.`
 
 export const PARA_METHODOLOGY_GUIDELINES = `PARA METHODOLOGY GUIDELINES (Tiago Forte):
 Organize content by ACTIONABILITY, not topic:

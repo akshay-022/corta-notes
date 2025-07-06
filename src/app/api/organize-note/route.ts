@@ -59,8 +59,10 @@ async function getFileTreeContext(userId: string, supabase: any) {
 
 /* ------------------------------------------------------------------ */
 export async function POST(request: NextRequest) {
+  let body: RequestBody | null = null
+  
   try {
-    const body = (await request.json()) as RequestBody
+    body = (await request.json()) as RequestBody
     const { pageUuid, pageTitle, contentText, routingInstructions, organizationRules } = body
     if (!pageUuid || !contentText) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -175,6 +177,11 @@ export async function POST(request: NextRequest) {
     }, { status: 202 })
   } catch (err: any) {
     logger.error('organize-note API error', err)
-    return NextResponse.json({ error: err.message || 'Server error' }, { status: 500 })
+    
+    return NextResponse.json({ 
+      error: err.message || 'Server error',
+      details: err.message || 'Unknown server error',
+      timestamp: new Date().toISOString()
+    }, { status: 500 })
   }
 } 

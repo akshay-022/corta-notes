@@ -47,7 +47,8 @@ export const EDITOR_FUNCTIONS: EditorFunction[] = [
  */
 export async function executeEditorFunction(
   functionCall: EditorFunctionCall,
-  editor: Editor | null
+  editor: Editor | null,
+  pageUuid?: string
 ): Promise<EditorFunctionResult> {
   if (!editor) {
     return {
@@ -64,7 +65,7 @@ export async function executeEditorFunction(
   try {
     switch (functionCall.name) {
       case 'rewrite_editor':
-        return await rewriteEditor(editor, functionCall.arguments)
+        return await rewriteEditor(editor, functionCall.arguments, pageUuid)
       
       default:
         return {
@@ -121,7 +122,7 @@ export async function executeEditorFunctionServerSide(
   }
 }
 
-async function rewriteEditor(editor: Editor, args: any): Promise<EditorFunctionResult> {
+async function rewriteEditor(editor: Editor, args: any, pageUuid?: string): Promise<EditorFunctionResult> {
   const { content } = args
   
   if (!content || typeof content !== 'string') {
@@ -135,11 +136,128 @@ async function rewriteEditor(editor: Editor, args: any): Promise<EditorFunctionR
   // Convert markdown to TipTap JSON format
   const tiptapJson = contentProcessor.createTipTapContent(content)
   
+  // Save version history if pageUuid is provided
+  if (pageUuid) {
+    try {
+      logger.info('Saving version history for client-side rewrite', { pageUuid })
+      
+      // Import Supabase client
+      const { createClient } = await import('@/lib/supabase/supabase-client')
+      const supabase = createClient()
+      
+      // Get current page content and metadata
+      const { data: existingPage, error: fetchError } = await supabase
+        .from('pages')
+        .select('content, metadata')
+        .eq('uuid', pageUuid)
+        .single()
+      
+      if (!fetchError && existingPage) {
+        // Create version history entries - both before and after
+        const currentMetadata = (existingPage.metadata as any) || {}
+        const existingVersionHistory = currentMetadata.versionHistory || []
+        
+        const oldContentText = contentProcessor.extractTextFromTipTap(existingPage.content)
+        const newContentText = contentProcessor.extractTextFromTipTap(tiptapJson)
+        
+        // Check if we need to save the before snapshot (avoid duplicates)
+        // Don't save "before" if it matches the "after" of the previous entry
+        const shouldSaveBeforeSnapshot = existingVersionHistory.length === 0 || 
+          (existingVersionHistory[0].action === 'after_change' && existingVersionHistory[0].oldContentText !== oldContentText) ||
+          (existingVersionHistory[0].action !== 'after_change')
+        
+        const newVersionItems = []
+        
+        if (shouldSaveBeforeSnapshot) {
+          // Save "before" snapshot
+          const beforeVersionItem = {
+            timestamp: Date.now(),
+            trigger: 'smart_apply_client',
+            oldContent: existingPage.content,
+            oldContentText: oldContentText,
+            action: 'before_change',
+            reason: 'Content before AI smart apply (client-side)'
+          }
+          newVersionItems.push(beforeVersionItem)
+          
+          logger.info('Saving before snapshot for client-side rewrite', { 
+            pageUuid, 
+            oldContentLength: oldContentText.length 
+          })
+        } else {
+          logger.info('Skipping before snapshot - duplicate content', { 
+            pageUuid, 
+            oldContentLength: oldContentText.length 
+          })
+        }
+        
+        // Save "after" snapshot (always save this to show the result)
+        const afterVersionItem = {
+          timestamp: Date.now() + 1, // Ensure after comes after before
+          trigger: 'smart_apply_client',
+          oldContent: tiptapJson,
+          oldContentText: newContentText,
+          action: 'after_change',
+          reason: 'Content after AI smart apply (client-side)'
+        }
+        newVersionItems.push(afterVersionItem)
+        
+        // Add to version history (keep last 3 versions)
+        const updatedVersionHistory = [...newVersionItems, ...existingVersionHistory].slice(0, 3)
+        
+        // Update metadata with new version history
+        const updatedMetadata = {
+          ...currentMetadata,
+          versionHistory: updatedVersionHistory
+        }
+        
+        // Update page content and metadata in database
+        const { error: updateError } = await supabase
+          .from('pages')
+          .update({ 
+            content: tiptapJson,
+            metadata: updatedMetadata,
+            updated_at: new Date().toISOString()
+          })
+          .eq('uuid', pageUuid)
+        
+        if (updateError) {
+          logger.error('Failed to save version history for client-side rewrite', { 
+            pageUuid, 
+            error: updateError 
+          })
+          // Continue with editor update even if version history fails
+        } else {
+          logger.info('Version history saved for client-side rewrite', { 
+            pageUuid, 
+            versionHistoryCount: updatedVersionHistory.length,
+            savedBeforeSnapshot: shouldSaveBeforeSnapshot,
+            savedAfterSnapshot: true
+          })
+        }
+      } else {
+        logger.error('Failed to fetch existing page for version history', { 
+          pageUuid, 
+          error: fetchError 
+        })
+      }
+    } catch (error) {
+      logger.error('Error saving version history for client-side rewrite', { 
+        pageUuid, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      })
+      // Continue with editor update even if version history fails
+    }
+  }
+  
   // Clear editor and set new content using TipTap JSON
   editor.commands.clearContent()
   editor.commands.setContent(tiptapJson)
   
-  logger.info('Editor content rewritten', { contentLength: content.length })
+  logger.info('Editor content rewritten', { 
+    contentLength: content.length, 
+    hasVersionHistory: !!pageUuid 
+  })
   
   return {
     success: true,
@@ -197,7 +315,7 @@ async function rewritePageContent(pageUuid: string, args: any): Promise<EditorFu
     logger.info('Checking if page exists', { pageUuid });
     const { data: existingPage, error: fetchError } = await supabase
       .from('pages')
-      .select('uuid, title, content')
+      .select('uuid, title, content, metadata')
       .eq('uuid', pageUuid)
       .single()
 
@@ -231,6 +349,64 @@ async function rewritePageContent(pageUuid: string, args: any): Promise<EditorFu
     });
     
     // Log the exact data we're about to save
+    // Create version history entries - both before and after
+    const currentMetadata = (existingPage.metadata as any) || {}
+    const existingVersionHistory = currentMetadata.versionHistory || []
+    
+    const oldContentText = contentProcessor.extractTextFromTipTap(existingPage.content)
+    const newContentText = contentProcessor.extractTextFromTipTap(tiptapJson)
+    
+    // Check if we need to save the before snapshot (avoid duplicates)
+    // Don't save "before" if it matches the "after" of the previous entry
+    const shouldSaveBeforeSnapshot = existingVersionHistory.length === 0 || 
+      (existingVersionHistory[0].action === 'after_change' && existingVersionHistory[0].oldContentText !== oldContentText) ||
+      (existingVersionHistory[0].action !== 'after_change')
+    
+    const newVersionItems = []
+    
+    if (shouldSaveBeforeSnapshot) {
+      // Save "before" snapshot
+      const beforeVersionItem = {
+        timestamp: Date.now(),
+        trigger: 'smart_apply',
+        oldContent: existingPage.content,
+        oldContentText: oldContentText,
+        action: 'before_change',
+        reason: 'Content before AI smart apply'
+      }
+      newVersionItems.push(beforeVersionItem)
+      
+      logger.info('Saving before snapshot for server-side rewrite', { 
+        pageUuid, 
+        oldContentLength: oldContentText.length 
+      })
+    } else {
+      logger.info('Skipping before snapshot - matches previous after content', { 
+        pageUuid, 
+        oldContentLength: oldContentText.length 
+      })
+    }
+    
+    // Save "after" snapshot (always save this to show the result)
+    const afterVersionItem = {
+      timestamp: Date.now() + 1, // Ensure after comes after before
+      trigger: 'smart_apply',
+      oldContent: tiptapJson,
+      oldContentText: newContentText,
+      action: 'after_change',
+      reason: 'Content after AI smart apply'
+    }
+    newVersionItems.push(afterVersionItem)
+    
+    // Add to version history (keep last 3 versions)
+    const updatedVersionHistory = [...newVersionItems, ...existingVersionHistory].slice(0, 3)
+    
+    // Update metadata with new version history
+    const updatedMetadata = {
+      ...currentMetadata,
+      versionHistory: updatedVersionHistory
+    }
+    
     logger.info('=== ABOUT TO UPDATE DATABASE ===', {
       pageUuid,
       newContentType: typeof tiptapJson,
@@ -242,13 +418,14 @@ async function rewritePageContent(pageUuid: string, args: any): Promise<EditorFu
         hasBulletLists: tiptapJson?.content?.some((node: any) => node.type === 'bulletList'),
         hasParagraphs: tiptapJson?.content?.some((node: any) => node.type === 'paragraph')
       },
-      newContentPreview: JSON.stringify(tiptapJson).substring(0, 500) + '...'
+      newContentPreview: JSON.stringify(tiptapJson).substring(0, 500) + '...',
+      versionHistoryCount: updatedVersionHistory.length
     });
     
-    // Update the page content in database
+    // Update the page content and metadata in database
     logger.info('Executing Supabase update query', { 
       pageUuid,
-      updateFields: ['content', 'updated_at'],
+      updateFields: ['content', 'metadata', 'updated_at'],
       timestamp: new Date().toISOString()
     });
     
@@ -256,6 +433,7 @@ async function rewritePageContent(pageUuid: string, args: any): Promise<EditorFu
       .from('pages')
       .update({ 
         content: tiptapJson,
+        metadata: updatedMetadata,
         updated_at: new Date().toISOString()
       })
       .eq('uuid', pageUuid)
@@ -285,7 +463,10 @@ async function rewritePageContent(pageUuid: string, args: any): Promise<EditorFu
         type: updateData[0].content.type,
         contentLength: updateData[0].content.content?.length || 0,
         preview: JSON.stringify(updateData[0].content).substring(0, 300) + '...'
-      } : 'No content returned'
+      } : 'No content returned',
+      versionHistoryCount: updatedVersionHistory.length,
+      savedBeforeSnapshot: shouldSaveBeforeSnapshot,
+      savedAfterSnapshot: true
     });
     
     

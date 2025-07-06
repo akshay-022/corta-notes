@@ -2,22 +2,29 @@ import { Editor } from '@tiptap/react'
 import logger from '@/lib/logger'
 import { executeEditorFunction, EditorFunctionCall, EditorFunctionResult, EDITOR_FUNCTIONS } from './editorFunctions'
 import { chatCompletionWithTools, ChatMessage, ToolDefinition } from '@/lib/openaiClient'
-import { BRAINSTORMING_SYSTEM_PROMPT } from '@/lib/promptTemplates'
+import { BRAINSTORMING_SYSTEM_PROMPT, SMART_APPLY_CONTENT_PRESERVATION_RULES } from '@/lib/promptTemplates'
 
 /**
  * Proper function-calling editor agent that uses OpenAI's native function calling
  */
 export class StreamingEditorAgent {
   private editor: Editor | null = null
+  private pageUuid: string | null = null
 
-  constructor(editor?: Editor | null) {
+  constructor(editor?: Editor | null, pageUuid?: string) {
     this.editor = editor || null
-    logger.info('StreamingEditorAgent initialized', { hasEditor: !!this.editor })
+    this.pageUuid = pageUuid || null
+    logger.info('StreamingEditorAgent initialized', { hasEditor: !!this.editor, hasPageUuid: !!this.pageUuid })
   }
 
   setEditor(editor: Editor | null) {
     this.editor = editor
     logger.info('Editor updated in streaming agent', { hasEditor: !!this.editor })
+  }
+
+  setPageUuid(pageUuid: string | null) {
+    this.pageUuid = pageUuid
+    logger.info('Page UUID updated in streaming agent', { hasPageUuid: !!this.pageUuid })
   }
 
   /**
@@ -85,7 +92,7 @@ export class StreamingEditorAgent {
         const shouldApply = await this.showConfirmationDialog(functionCall, result.message)
         
         if (shouldApply) {
-          const executeResult = await executeEditorFunction(functionCall, this.editor)
+          const executeResult = await executeEditorFunction(functionCall, this.editor, this.pageUuid || undefined)
           functionCalls.push(executeResult)
           
           logger.info('Function executed after user approval', { 
@@ -139,11 +146,11 @@ You are an AI assistant that helps users with their notes and documents.
 
 You have access to a rewrite_editor function that can replace the user's editor content with new markdown content.
 
+${SMART_APPLY_CONTENT_PRESERVATION_RULES}
+
 CRITICAL RULES:
 - ONLY call rewrite_editor if the user explicitly asks you to modify/rewrite/organize their editor content
 - DO NOT call functions for casual conversation or questions
-- When you do rewrite content, preserve the user's authentic voice, tone, and style
-- Keep all important information - only remove content if clearly redundant
 - Use clean markdown formatting in the content parameter
 
 CURRENT EDITOR CONTENT:

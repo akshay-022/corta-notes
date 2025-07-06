@@ -9,7 +9,8 @@ import Underline from '@tiptap/extension-underline'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Page, PageUpdate } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/supabase-client'
-import { Info, Edit2, Save, X, FileText, Eye, Edit3, MessageSquare, ArrowUp, Loader2 } from 'lucide-react'
+import { Info, Edit2, Save, X, FileText, Eye, Edit3, MessageSquare, ArrowUp, Loader2, History } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
 
 import { setupAutoOrganization, organizePage } from '@/lib/auto-organization/organized-file-updates'
 import { useNotes } from '@/components/left-sidebar/DashboardSidebarProvider'
@@ -44,6 +45,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false)
   const [isUpdatingSuggestions, setIsUpdatingSuggestions] = useState(false)
+  const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false)
 
   
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -289,6 +291,12 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     setRoutingInstructions(pageMetadata.routingInstructions || '')
   }
 
+  // Open version history dialog
+  const openVersionHistory = () => {
+    setIsVersionHistoryOpen(true)
+    logger.info('Opening version history for page', { pageUuid: page.uuid, pageTitle: page.title })
+  }
+
   // Handle organize page with instructions
   const handleOrganizePage = async () => {
     if (isOrganizing || !editor) return
@@ -298,6 +306,9 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       pageTitle: page.title,
       hasInstructions: !!routingInstructions.trim() 
     })
+
+    // Gather plain text of entire editor as contentText (declare outside try block for error logging)
+    const contentText = editor.getText()
 
     try {
       // Save routing instructions to metadata first (same as before)
@@ -315,9 +326,6 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
 
       setIsOrganizeDialogOpen(false)
       setIsOrganizing(true)
-
-      // Gather plain text of entire editor as contentText
-      const contentText = editor.getText()
 
       logger.info('📡 Sending organization request to API', { 
         pageUuid: page.uuid.substring(0, 8),
@@ -337,7 +345,20 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       })
 
       if (!response.ok) {
-        throw new Error(`Organization failed: ${response.status}`)
+        // Try to get error details from server response
+        let serverError = `Organization failed: ${response.status}`
+        try {
+          const errorData = await response.json()
+          if (errorData.error) {
+            serverError = errorData.error
+          }
+          if (errorData.details) {
+            serverError += ` - ${errorData.details}`
+          }
+        } catch {
+          // If can't parse response, use status code
+        }
+        throw new Error(serverError)
       }
 
       logger.info('✅ Organization API completed successfully', { 
@@ -367,7 +388,57 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
 
     } catch (err) {
       logger.error('Organization request failed', err)
-      alert('Failed to organize note. Please try again.')
+      
+      // Save comprehensive error details to localStorage for debugging
+      const errorDetails = {
+        timestamp: new Date().toISOString(),
+        pageUuid: page.uuid,
+        pageTitle: page.title,
+        contentLength: contentText?.length || 0,
+        hasRoutingInstructions: !!routingInstructions.trim(),
+        hasOrganizationRules: !!organizationRules.trim(),
+        error: {
+          message: err instanceof Error ? err.message : 'Unknown error',
+          stack: err instanceof Error ? err.stack : undefined,
+          name: err instanceof Error ? err.name : 'UnknownError'
+        },
+        userAgent: navigator.userAgent,
+        url: window.location.href
+      }
+      
+      try {
+        const existingErrors = JSON.parse(localStorage.getItem('corta-organization-errors') || '[]')
+        existingErrors.push(errorDetails)
+        // Keep only last 10 errors to prevent localStorage bloat
+        const recentErrors = existingErrors.slice(-10)
+        localStorage.setItem('corta-organization-errors', JSON.stringify(recentErrors))
+        
+        logger.info('Organization error saved to localStorage', { 
+          errorId: errorDetails.timestamp,
+          totalErrors: recentErrors.length
+        })
+      } catch (storageErr) {
+        logger.error('Failed to save organization error to localStorage', storageErr)
+      }
+      
+      // Create a more helpful error message
+      let errorMessage = 'Failed to organize note. '
+      if (err instanceof Error) {
+        if (err.message.includes('Organization failed: 500')) {
+          errorMessage += 'Server error occurred. This might be due to LLM API issues or database problems. '
+        } else if (err.message.includes('Organization failed: 400')) {
+          errorMessage += 'Invalid request. Check that the page content is valid. '
+        } else if (err.message.includes('Organization failed: 401')) {
+          errorMessage += 'Authentication error. Please refresh the page and try again. '
+        } else if (err.message.includes('fetch')) {
+          errorMessage += 'Network error. Check your internet connection. '
+        } else {
+          errorMessage += `Error: ${err.message}. `
+        }
+      }
+      errorMessage += 'Error details have been saved. Open browser console and run viewOrganizationErrors() to see details.'
+      
+      alert(errorMessage)
     } finally {
       setIsOrganizing(false)
     }
@@ -397,9 +468,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     if (selectedText.trim()) {
       const newSelection = {
         id: page.uuid,
-        text: selectedText.trim(),
-        startLine: 1, // TipTap doesn't have line numbers, so we use 1
-        endLine: 1
+        text: selectedText.trim()
       }
       console.log('✅ Adding selection to context:', newSelection)
       const currentSelections = notesCtx.selections || []
@@ -489,6 +558,31 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
     }
   }, [editor]) // Removed getSelectedNodeMetadata dependency to prevent loop
 
+  // Add debug function to window for viewing error logs
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).viewOrganizationErrors = () => {
+        const organizationErrors = JSON.parse(localStorage.getItem('corta-organization-errors') || '[]')
+        
+        console.group('🐛 Organization Error Logs')
+        console.log('Organization Errors:', organizationErrors)
+        console.groupEnd()
+        
+        return {
+          organizationErrors,
+          totalErrors: organizationErrors.length
+        }
+      }
+      
+      (window as any).clearOrganizationErrors = () => {
+        localStorage.removeItem('corta-organization-errors')
+        console.log('🧹 Organization error logs cleared')
+      }
+      
+      logger.info('Debug functions added to window: viewOrganizationErrors() and clearOrganizationErrors()')
+    }
+  }, [])
+
   // Command+K keyboard shortcut to toggle chat
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -523,7 +617,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
 
 
   // Apply AI response to editor
-  const handleApplyAiResponse = async (responseText: string, targetSelections?: Array<{id: string, text: string, startLine: number, endLine: number}>) => {
+  const handleApplyAiResponse = async (responseText: string, targetSelections?: Array<{id: string, text: string}>) => {
     if (!editor) return
 
     try {
@@ -701,6 +795,15 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
             title="Edit Organization Rules"
           >
             <Edit3 size={14} />
+          </button>
+          
+          {/* Version History Button */}
+          <button
+            onClick={openVersionHistory}
+            className="p-1.5 text-gray-400 hover:text-white hover:bg-[#3a3a3a] rounded transition-colors"
+            title="View Version History"
+          >
+            <History size={14} />
           </button>
           
           {/* Organize Button */}
@@ -1198,6 +1301,157 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                     Upload
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Version History Dialog */}
+      {isVersionHistoryOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-[#2a2a2a] border border-gray-600 rounded-lg p-6 max-w-3xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Version History</h3>
+              <button
+                onClick={() => setIsVersionHistoryOpen(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-300 mb-4">
+                View and restore previous versions of "{page.title}".
+              </p>
+              
+              {(() => {
+                const pageMetadata = page.metadata as any || {}
+                const versionHistory = pageMetadata.versionHistory || []
+                
+                if (versionHistory.length === 0) {
+                  return (
+                    <div className="bg-[#1a1a1a] border border-gray-600 rounded p-4">
+                      <p className="text-gray-400 text-sm">
+                        No version history available. Version history will be created when AI smart apply makes changes to this page.
+                      </p>
+                    </div>
+                  )
+                }
+                
+                return (
+                  <div className="space-y-3">
+                    {versionHistory.map((version: any, index: number) => {
+                      const date = new Date(version.timestamp)
+                      const timeAgo = (() => {
+                        const now = Date.now()
+                        const diff = now - version.timestamp
+                        const minutes = Math.floor(diff / (1000 * 60))
+                        const hours = Math.floor(diff / (1000 * 60 * 60))
+                        const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+                        
+                        if (minutes < 1) return 'just now'
+                        if (minutes < 60) return `${minutes}m ago`
+                        if (hours < 24) return `${hours}h ago`
+                        return `${days}d ago`
+                      })()
+                      
+                      return (
+                        <div key={index} className="bg-[#1a1a1a] border border-gray-600 rounded p-4 hover:bg-[#222] transition-colors">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-3">
+                              <span className="text-blue-400 text-xs px-2 py-1 bg-blue-500/20 rounded">
+                                {version.trigger === 'smart_apply' ? 'Smart Apply' : 
+                                 version.trigger === 'smart_apply_client' ? 'Smart Apply' :
+                                 version.trigger === 'organization' ? 'Organization' : version.trigger}
+                              </span>
+                              <span className={`text-xs px-2 py-1 rounded ${
+                                version.action === 'before_change' ? 'bg-orange-500/20 text-orange-400' :
+                                version.action === 'after_change' ? 'bg-green-500/20 text-green-400' :
+                                'bg-gray-500/20 text-gray-400'
+                              }`}>
+                                {version.action === 'before_change' ? 'Before' :
+                                 version.action === 'after_change' ? 'After' : version.action}
+                              </span>
+                              <span className="text-gray-300 text-sm font-medium">
+                                {date.toLocaleDateString()} {date.toLocaleTimeString()}
+                              </span>
+                              <span className="text-gray-500 text-xs">
+                                {timeAgo}
+                              </span>
+                            </div>
+                            <button
+                              onClick={async () => {
+                                if (confirm(`Are you sure you want to restore this version? This will replace the current content.`)) {
+                                  try {
+                                    // Simply restore the selected version without saving current content
+                                    // (since we now save before/after snapshots during smart apply)
+                                    const { data, error } = await supabase
+                                      .from('pages')
+                                      .update({ 
+                                        content: version.oldContent,
+                                        updated_at: new Date().toISOString()
+                                      })
+                                      .eq('uuid', page.uuid)
+                                      .select()
+                                      .single()
+
+                                    if (data) {
+                                      // Update the TipTap editor content immediately
+                                      if (editor) {
+                                        editor.commands.setContent(version.oldContent)
+                                        logger.info('TipTap editor content updated after restore', { 
+                                          pageUuid: page.uuid 
+                                        })
+                                      }
+                                      
+                                      onUpdate(data)
+                                      setIsVersionHistoryOpen(false)
+                                      logger.info('Version restored successfully', { 
+                                        pageUuid: page.uuid, 
+                                        restoredVersion: version.timestamp
+                                      })
+                                    } else if (error) {
+                                      logger.error('Error restoring version:', error)
+                                      alert('Failed to restore version. Please try again.')
+                                    }
+                                  } catch (error) {
+                                    logger.error('Error restoring version:', error)
+                                    alert('Failed to restore version. Please try again.')
+                                  }
+                                }
+                              }}
+                              className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                            >
+                              Restore
+                            </button>
+                          </div>
+                          <p className="text-gray-400 text-xs mb-2">{version.reason}</p>
+                          <div className="text-gray-300 text-sm">
+                            <div className="max-h-20 overflow-y-auto">
+                              <p className="text-xs text-gray-500 mb-1">Content preview:</p>
+                              <div className="text-gray-300 text-sm prose prose-invert prose-sm max-w-none">
+                                <ReactMarkdown>
+                                  {version.oldContentText || 'No content preview available'}
+                                </ReactMarkdown>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
+            </div>
+            
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setIsVersionHistoryOpen(false)}
+                className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
+              >
+                Close
               </button>
             </div>
           </div>

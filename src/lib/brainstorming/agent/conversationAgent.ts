@@ -30,10 +30,12 @@ export interface AgentResponse {
 export class ConversationAgent {
   private editor: Editor | null = null
   private conversationHistory: AgentMessage[] = []
+  private pageUuid: string | null = null
 
-  constructor(editor?: Editor | null) {
+  constructor(editor?: Editor | null, pageUuid?: string) {
     this.editor = editor || null
-    logger.info('ConversationAgent initialized', { hasEditor: !!this.editor })
+    this.pageUuid = pageUuid || null
+    logger.info('ConversationAgent initialized', { hasEditor: !!this.editor, hasPageUuid: !!this.pageUuid })
   }
 
   /**
@@ -42,6 +44,14 @@ export class ConversationAgent {
   setEditor(editor: Editor | null) {
     this.editor = editor
     logger.info('Editor updated in conversation agent', { hasEditor: !!this.editor })
+  }
+
+  /**
+   * Set the page UUID
+   */
+  setPageUuid(pageUuid: string | null) {
+    this.pageUuid = pageUuid
+    logger.info('Page UUID updated in conversation agent', { hasPageUuid: !!this.pageUuid })
   }
 
   /**
@@ -134,7 +144,7 @@ export class ConversationAgent {
         arguments: JSON.parse(aiMessage.function_call.arguments || '{}')
       }
 
-      const result = await executeEditorFunction(functionCall, this.editor)
+      const result = await executeEditorFunction(functionCall, this.editor, this.pageUuid || undefined)
       functionResults.push(result)
 
       // Add function call and result to conversation history

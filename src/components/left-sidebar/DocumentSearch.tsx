@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Search, X, FileText } from 'lucide-react'
-import { superMemoryService, SuperMemoryDocument } from '@/lib/memory/memory-client'
+import { SuperMemoryDocument } from '@/lib/memory/memory-client'
 import { Page } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/supabase-client'
 
@@ -65,32 +65,16 @@ export default function DocumentSearch({ onSelectDocument, onSearchResults, clas
 
     setIsSearching(true)
     setHasSearched(true)
-    console.log('🔍 Performing prioritized search for:', query)
+    console.log('🔍 Performing local search for:', query)
 
     try {
-      // ⚡ PARALLEL SEARCH - Run both searches simultaneously for better performance
-      console.log('📝🧠 Running parallel search: local titles + SuperMemory...')
-      const [localTitleMatches, superMemoryResult] = await Promise.all([
-        searchLocalTitles(query),
-        superMemoryService.searchDocuments(query, 6)
-      ])
+      // Only search local titles (no SuperMemory)
+      console.log('📝 Running local title search only...')
+      const localTitleMatches = await searchLocalTitles(query)
       
-      // 3. Combine results with prioritization
-      const prioritizedResults = [
-        ...localTitleMatches, // Local title matches first
-        ...superMemoryResult.results // SuperMemory results after
-      ]
-
-      // Remove duplicates (prefer local title matches)
-      const uniqueResults = prioritizedResults.filter((result, index, arr) => {
-        return arr.findIndex(r => r.metadata?.pageUuid === result.metadata?.pageUuid) === index
-      })
-
-      setSearchResults(uniqueResults)
-      console.log('✅ Final prioritized results:', {
-        localTitleMatches: localTitleMatches.length,
-        superMemoryResults: superMemoryResult.results.length,
-        totalUnique: uniqueResults.length
+      setSearchResults(localTitleMatches)
+      console.log('✅ Local search results:', {
+        localTitleMatches: localTitleMatches.length
       })
     } catch (error) {
       console.error('Search error:', error)

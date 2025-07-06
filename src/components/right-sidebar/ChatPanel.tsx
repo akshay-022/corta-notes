@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/supabase-client'
 import { Conversation, ChatMessage, Page } from '@/lib/supabase/types'
 import conversationsService from '@/lib/conversations/conversations'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
 import { Editor } from '@tiptap/react'
 import { 
   createThoughtContext 
@@ -22,8 +24,7 @@ import ModelSelector from './ModelSelector'
 type SelectionObject = {
   id: string
   text: string
-  startLine: number
-  endLine: number
+  title: string
 }
 
 type Props = {
@@ -518,8 +519,7 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
         const fileSelection: SelectionObject = {
           id: targetFile.uuid,
           text: targetFile.content_text,
-          startLine: 1,
-          endLine: targetFile.content_text.split('\n').length
+          title: targetFile.title
         }
         
         newSelections.push(fileSelection)
@@ -579,14 +579,19 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
     // Add both messages at once to prevent scroll jumping
     setMessages(prev => [...prev, userMessage, assistantMessage])
     
-    // Clear selections after sending
+    // Clear selections after sending (context is preserved in conversation history)
     setSelections([])
+    logger.info('Selections cleared after message sent', { 
+      previousSelectionsCount: selections.length,
+      note: 'Context preserved in conversation history for LLM'
+    })
     
     // Scroll to bottom immediately after adding both messages, BEFORE streaming starts
     scrollToBottomImmediate()
     logger.info('Scrolled to bottom before streaming starts', { 
       userMessageLength: userMessageContent.length,
-      hasSelections: selections.length > 0,
+      selectionsCount: selections.length,
+      selectionsPersisted: true, // Now persisted instead of cleared
       isMobile 
     })
 
@@ -605,10 +610,20 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
       }
 
       // Get recent conversation messages (last 6 messages to keep context manageable)
-      const conversationHistory = messages.slice(-6).map(msg => ({
-        role: msg.role === 'user' ? 'user' as const : 'assistant' as const,
-        content: msg.content
-      }))
+      const conversationHistory = messages.slice(-6).map(msg => {
+        let messageContent = msg.content
+        
+        // If this message had selections, append them as JSON metadata to the content
+        if (msg.selections && msg.selections.length > 0) {
+          const selectionsMetadata = JSON.stringify(msg.selections, null, 2)
+          messageContent += `\n\n[CONTEXT/SELECTIONS]:\n${selectionsMetadata}`
+        }
+        
+        return {
+          role: msg.role === 'user' ? 'user' as const : 'assistant' as const,
+          content: messageContent
+        }
+      })
 
       // Find the timestamps of the last messages for context awareness
       const lastAiMessage = messages
@@ -634,9 +649,10 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
       const thoughtContext = createThoughtContext(allPages, currentPage, editor, lastAiMessageTimestamp, lastUserMessageTimestamp)
 
       logger.info('Brainstorming context analysis', {
-        hasSelections: selections.length > 0,
+        selectionsCount: selections.length,
         hasPageContent: !!currentPage,
         conversationHistoryCount: conversationHistory.length,
+        conversationHistoryWithSelections: conversationHistory.filter(msg => msg.content.includes('[CONTEXT/SELECTIONS]')).length,
         thoughtContextLength: thoughtContext.length,
         lastAiMessageTimestamp,
         lastUserMessageTimestamp,
@@ -645,10 +661,20 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
       })
 
       console.log('Sending messages to LLM API', { 
-        hasSelections: selections.length > 0,
+        selectionsCount: selections.length,
         hasPageContent: !!currentPage,
         conversationHistoryCount: conversationHistory.length,
+        conversationHistoryWithSelections: conversationHistory.filter(msg => msg.content.includes('[CONTEXT/SELECTIONS]')).length,
         thoughtContextLength: thoughtContext.length,
+      })
+
+      logger.info('Full conversation history being sent to LLM', {
+        conversationHistory: conversationHistory.map(msg => ({
+          role: msg.role,
+          contentLength: msg.content.length,
+          hasSelections: msg.content.includes('[CONTEXT/SELECTIONS]'),
+          contentPreview: msg.content.substring(0, 100) + (msg.content.length > 100 ? '...' : '')
+        }))
       })
 
       // Call the unified streaming API (with function calling capabilities)
@@ -927,9 +953,8 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
       // We already have the file object, so add it directly as a selection
       const fileSelection: SelectionObject = {
         id: page.uuid,
-        text: page.title || '',
-        startLine: 1,
-        endLine: (page.content_text || '').split('\n').length
+        text: page.content_text || page.title || '',
+        title: page.title
       }
       
       const updatedSelections = [...selections, fileSelection]
@@ -968,9 +993,8 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
     // Add all files as selections
     const fileSelections: SelectionObject[] = pages.map(page => ({
       id: page.uuid,
-      text: page.title || '',
-      startLine: 1,
-      endLine: (page.content_text || '').split('\n').length
+      text: page.content_text || page.title || '',
+      title: page.title
     }))
     
     const updatedSelections = [...selections, ...fileSelections]
@@ -1165,12 +1189,7 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
                                 key={sel.id}
                                 className="inline-flex items-center rounded bg-[#2a2a2a] px-1.5 py-0.5"
                               >
-                                {(() => {
-                                  const words = sel.text.split(/[\s\n]+/).filter(w => w.trim())
-                                  if (words.length === 0) return ""
-                                  if (words.length === 1) return words[0]
-                                  return `${words[0]}...${words[words.length - 1]}`
-                                })()}
+                                {sel.title}
                               </span>
                             ))}
                           </div>
@@ -1180,6 +1199,8 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
                           <div className="text-sm text-[#cccccc] leading-relaxed">
                             <div className="prose prose-invert prose-sm max-w-none">
                               <ReactMarkdown 
+                                remarkPlugins={[remarkGfm]}
+                                rehypePlugins={[rehypeRaw]}
                                 components={{
                                 p: ({ children }) => <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>,
                                 strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
@@ -1194,6 +1215,27 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
                                 h2: ({ children }) => <h2 className="text-base font-semibold mb-2 mt-4 first:mt-0 text-white">{children}</h2>,
                                 h3: ({ children }) => <h3 className="text-sm font-semibold mb-2 mt-3 first:mt-0 text-white">{children}</h3>,
                                 hr: () => <hr className="my-6 border-t border-[#404040]" />,
+                                // Table components for proper table rendering
+                                table: ({ children }) => (
+                                  <div className="overflow-x-auto mb-4">
+                                    <table className="min-w-full border-collapse border border-[#404040] text-sm">
+                                      {children}
+                                    </table>
+                                  </div>
+                                ),
+                                thead: ({ children }) => <thead className="bg-[#2a2a2a]">{children}</thead>,
+                                tbody: ({ children }) => <tbody>{children}</tbody>,
+                                tr: ({ children }) => <tr className="border-b border-[#404040]">{children}</tr>,
+                                th: ({ children }) => (
+                                  <th className="border border-[#404040] px-3 py-2 text-left font-semibold text-white bg-[#2a2a2a]">
+                                    {children}
+                                  </th>
+                                ),
+                                td: ({ children }) => (
+                                  <td className="border border-[#404040] px-3 py-2 text-[#cccccc]">
+                                    {children}
+                                  </td>
+                                )
                               }}
                                                         >
                                   {message.content}
@@ -1333,12 +1375,7 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
               <div className="mb-2 flex flex-wrap gap-1 justify-start">
                 {selections.map((sel) => (
                   <span key={sel.id} className="inline-flex items-center rounded bg-[#2a2a2a] px-1.5 py-0.5 text-xs text-[#969696]">
-                    {(() => {
-                      const words = sel.text.split(/[\s\n]+/).filter(word => word.trim())
-                      if (words.length === 0) return ''
-                      if (words.length === 1) return words[0]
-                      return `${words[0]}...${words[words.length - 1]}`
-                    })()}
+                    {sel.title}
                     <button 
                       type="button"
                       onClick={() => removeSelection(sel.id)}

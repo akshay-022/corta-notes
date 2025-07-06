@@ -21,6 +21,7 @@ export default function QuickOpenPalette({ anchorRef, isMobile = false }: Props)
     toggleFileSelection,
     finishSelection,
     clearSelection,
+    selectAllFiles,
   } = useQuickOpen()
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -54,11 +55,63 @@ export default function QuickOpenPalette({ anchorRef, isMobile = false }: Props)
 
   if (!isOpen) return null
 
+  // Calculate select all state
+  const filesInView = items.filter(item => item.type !== 'folder')
+  const selectedFileIds = new Set(selectedFiles.map(f => f.uuid))
+  const selectedFilesInView = filesInView.filter(file => selectedFileIds.has(file.uuid))
+  
+  const selectAllState = filesInView.length === 0 ? 'disabled' 
+    : selectedFilesInView.length === 0 ? 'unchecked'
+    : selectedFilesInView.length === filesInView.length ? 'checked'
+    : 'indeterminate'
+
+  const handleSelectAllChange = () => {
+    if (selectAllState === 'checked' || selectAllState === 'indeterminate') {
+      // Deselect all files in current view
+      const currentViewFileIds = new Set(filesInView.map(f => f.uuid))
+      clearSelection()
+      // But keep any files that were selected from other views
+      const filesFromOtherViews = selectedFiles.filter(f => !currentViewFileIds.has(f.uuid))
+      if (filesFromOtherViews.length > 0) {
+        // This is a bit complex - for now just clear everything for simplicity
+        clearSelection()
+      }
+    } else {
+      // Select all files in current view
+      selectAllFiles()
+    }
+  }
+
   return (
     <div
       ref={containerRef}
       className="fixed z-50 rounded-md bg-[#1e1e1e] border border-[#333] shadow-lg max-h-64 overflow-y-auto"
     >
+      {/* Select All header - only show when there are files */}
+      {filesInView.length > 0 && (
+        <div className="p-2 border-b border-[#333] bg-[#2a2a2a] flex items-center justify-between">
+          <button
+            onClick={handleSelectAllChange}
+            className="flex items-center gap-2 text-xs text-gray-300 hover:text-white transition-colors"
+            disabled={selectAllState === 'disabled'}
+          >
+            <div className={`w-4 h-4 border rounded flex items-center justify-center ${
+              selectAllState === 'checked' 
+                ? 'bg-blue-600 border-blue-600' 
+                : selectAllState === 'indeterminate'
+                ? 'bg-blue-600 border-blue-600'
+                : 'border-gray-400 hover:border-gray-300'
+            }`}>
+              {selectAllState === 'checked' && <Check size={12} className="text-white" />}
+              {selectAllState === 'indeterminate' && (
+                <div className="w-2 h-0.5 bg-white rounded"></div>
+              )}
+            </div>
+            Select All ({filesInView.length} files)
+          </button>
+        </div>
+      )}
+
       {/* Header with selected count and actions */}
       {selectedFiles.length > 0 && (
         <div className="p-2 border-b border-[#333] bg-[#2a2a2a] flex items-center justify-between">

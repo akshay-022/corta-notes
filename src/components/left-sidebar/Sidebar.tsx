@@ -88,6 +88,7 @@ export default function Sidebar({
   const [viewMode, setViewMode] = useState<'normal' | 'chronological' | 'recent-changes' | 'recent-notes'>('normal')
   const [showHiddenItems, setShowHiddenItems] = useState(false)
   const [fileHistory, setFileHistory] = useState<FileHistoryItem[]>([])
+  const [isRecentNotesExpanded, setIsRecentNotesExpanded] = useState(false)
 
   // Add state for global organization instructions
   const [globalOrganizationRules, setGlobalOrganizationRules] = useState('')
@@ -389,10 +390,11 @@ export default function Sidebar({
 
   // Helper function to get recent unorganized notes (for the recent section)
   const getRecentUnorganizedNotes = () => {
-    return getUnorganizedPages()
+    const allUnorganized = getUnorganizedPages()
       .filter(page => page.type === 'file')
       .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime())
-      .slice(0, 3) // Show latest 3 notes
+    
+    return isRecentNotesExpanded ? allUnorganized : allUnorganized.slice(0, 3) // Show all notes when expanded, 3 when collapsed
   }
 
   const buildTree = (items: Page[], parentId?: string | null) => {
@@ -777,7 +779,7 @@ export default function Sidebar({
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Recent unorganized notes OR Search Results */}
             {(isSearchActive || getRecentUnorganizedNotes().length > 0) && (
-              <div className="flex-shrink-0">
+              <div className={`flex-shrink-0 ${isRecentNotesExpanded ? 'mb-4' : ''}`}>
                 <div className="px-4 pb-2">
                   <div className="flex items-center justify-between">
                     <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">
@@ -785,21 +787,34 @@ export default function Sidebar({
                     </h3>
                     {!isSearchActive && (
                       <button
-                        onClick={() => setViewMode('recent-notes')}
+                        onClick={() => {
+                          const allUnorganized = getUnorganizedPages().filter(page => page.type === 'file')
+                          logger.info('Recent notes expansion toggled', { 
+                            wasExpanded: isRecentNotesExpanded,
+                            willBeExpanded: !isRecentNotesExpanded,
+                            currentNotesCount: getRecentUnorganizedNotes().length,
+                            totalUnorganizedNotes: allUnorganized.length
+                          })
+                          setIsRecentNotesExpanded(!isRecentNotesExpanded)
+                        }}
                         className="text-[#969696] hover:text-[#cccccc] text-[10px] tracking-wide"
                       >
-                        See All
+                        {isRecentNotesExpanded ? 'Show Less' : 'See All'}
                       </button>
                     )}
                   </div>
                 </div>
                 <div 
-                  className="pb-6 relative max-h-64 overflow-y-auto"
-                  {...dragAndDrop.getDropHandlers({
-                    id: null,
-                    type: 'section',
-                    section: 'unorganized'
-                  })}
+                  {...(() => {
+                    const handlers = dragAndDrop.getDropHandlers({
+                      id: null,
+                      type: 'section',
+                      section: 'unorganized'
+                    })
+                    const { className: _, ...rest } = handlers
+                    return rest
+                  })()}
+                  className={`pb-6 relative ${isRecentNotesExpanded ? 'max-h-48' : 'max-h-64'} overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800`}
                 >
                 <DropZoneIndicator 
                   isActive={false}

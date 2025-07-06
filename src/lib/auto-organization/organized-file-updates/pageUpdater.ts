@@ -294,11 +294,70 @@ export async function applyOrganizationChunks(
           })
         }
 
+        // Create version history entries - both before and after
+        const currentMetadata = (page.metadata as any) || {}
+        const existingVersionHistory = currentMetadata.versionHistory || []
+        
+        const beforeContentText = contentProcessor.extractTextFromTipTap(page.content)
+        const afterContentText = contentProcessor.extractTextFromTipTap(newContentJSON)
+        
+        // Check if we need to save the before snapshot (avoid duplicates)
+        // Don't save "before" if it matches the "after" of the previous entry
+        const shouldSaveBeforeSnapshot = existingVersionHistory.length === 0 || 
+          (existingVersionHistory[0].action === 'after_change' && existingVersionHistory[0].oldContentText !== beforeContentText) ||
+          (existingVersionHistory[0].action !== 'after_change')
+        
+        const newVersionItems = []
+        
+        if (shouldSaveBeforeSnapshot && !isNewFile) {
+          // Save "before" snapshot (only for updates, not new files)
+          const beforeVersionItem = {
+            timestamp: Date.now(),
+            trigger: 'organization',
+            oldContent: page.content,
+            oldContentText: beforeContentText,
+            action: 'before_change',
+            reason: `Content before AI organization to "${chunk.targetFilePath}"`
+          }
+          newVersionItems.push(beforeVersionItem)
+          
+          logger.info('Saving before snapshot for organization', { 
+            pageUuid: page.uuid, 
+            oldContentLength: beforeContentText.length 
+          })
+        } else if (!isNewFile) {
+          logger.info('Skipping before snapshot - matches previous after content', { 
+            pageUuid: page.uuid, 
+            oldContentLength: beforeContentText.length 
+          })
+        }
+        
+        // Save "after" snapshot (always save this to show the result)
+        const afterVersionItem = {
+          timestamp: Date.now() + 1, // Ensure after comes after before
+          trigger: 'organization',
+          oldContent: newContentJSON,
+          oldContentText: afterContentText,
+          action: 'after_change',
+          reason: `Content after AI organization to "${chunk.targetFilePath}"`
+        }
+        newVersionItems.push(afterVersionItem)
+        
+        // Add to version history (keep last 3 versions)
+        const updatedVersionHistory = [...newVersionItems, ...existingVersionHistory].slice(0, 3)
+        
+        // Update metadata with new version history
+        const updatedMetadata = {
+          ...currentMetadata,
+          versionHistory: updatedVersionHistory
+        }
+
         const { error: upErr } = await supabase
           .from('pages')
           .update({
             content: newContentJSON,
             content_text: newContentText,
+            metadata: updatedMetadata,
             updated_at: new Date().toISOString(),
           })
           .eq('uuid', page.uuid)

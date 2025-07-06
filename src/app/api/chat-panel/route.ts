@@ -71,6 +71,8 @@ async function handleUnifiedStreamingRequest(params: {
     hasPageUuid: !!currentPageUuid,
     pageUuid: currentPageUuid,
     conversationHistoryLength: conversationHistory?.length || 0,
+    conversationHistoryWithSelections: conversationHistory?.filter((msg: any) => 
+      msg.content && msg.content.includes('[CONTEXT/SELECTIONS]')).length || 0,
     hasThoughtContext: !!thoughtContext,
     hasSelections: !!selections && selections.length > 0
   });
@@ -110,7 +112,9 @@ async function handleUnifiedStreamingRequest(params: {
     }
 
     // Build enhanced current message with all contexts
-      let enhancedCurrentMessage = 'User Instruction (This is literally what you must answer, SUPER IMPORTANT):\n\n' + currentMessage + '\n\n\n\n\n\n\n\n';
+      let enhancedCurrentMessage = 'User Instruction (This is literally what you must answer, SUPER IMPORTANT):\n\n' + currentMessage + '\n\n\n\n\n\n\n\n' + `Also
+      Also very important : The user is almost always brainstorming. Unless they really want you to rewrite something don't ask to rewrite wording concisely etc. They don't case about the draft. They care about the thinking. So help them brainstorm!!!!
+      `;
     
       // Add thought context if available (highest priority)
       if (thoughtContext) {
@@ -119,7 +123,8 @@ async function handleUnifiedStreamingRequest(params: {
     
           // Add user selections if available
     if (selections && selections.length > 0) {
-      enhancedCurrentMessage += `\n\nUSER SELECTIONS (This is VERY IMPORTANT. The user's query is probably about this idea/text. Use this as primary context if relevant):\n${JSON.stringify(selections, null, 2)}\n\n`;
+      enhancedCurrentMessage += `\n\nUSER SELECTIONS (This is VERY IMPORTANT. The user's query is probably about this idea/text. Use this as primary context if relevant, THIS TAKES PRECEDENCE OVER EVERYTHING if the user's question is about this). 
+      If the user every says what do you think of this, or this etc, this refers to the selections below:\n${JSON.stringify(selections, null, 2)}\n\n`;
     }
 
 
