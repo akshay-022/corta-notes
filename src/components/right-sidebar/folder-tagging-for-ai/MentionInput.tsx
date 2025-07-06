@@ -15,33 +15,60 @@ interface MentionInputProps {
 export function MentionInput({ input, setInput, textareaRef, allPages }: MentionInputProps) {
   const quickOpen = useQuickOpen()
 
-  // Simple: just find the last @ and use everything after it
+  // Find the last @ and use everything after it until cursor position
   useEffect(() => {
-    const lastAtIndex = input.lastIndexOf('@')
-    
-    console.log('🔍 MentionInput useEffect:', {
-      input,
-      lastAtIndex
-    })
-    
-    // If we found an @ and there's no space/newline after it, we're in a mention
-    if (lastAtIndex >= 0) {
-      const textAfterAt = input.slice(lastAtIndex + 1)
-      console.log('📝 Found @ mention, textAfterAt:', textAfterAt)
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    const checkMentionState = () => {
+      const lastAtIndex = input.lastIndexOf('@')
+      const cursorPosition = textarea.selectionStart
       
-      if (!textAfterAt.includes(' ') && !textAfterAt.includes('\n')) {
-        // We're typing a mention - open popup and set the text
-        console.log('✅ Setting QuickOpen input text to:', textAfterAt)
-        if (!quickOpen.isOpen) quickOpen.open()
-        quickOpen.setInputText(textAfterAt)
-        return
+      console.log('🔍 MentionInput checkMentionState:', {
+        input,
+        lastAtIndex,
+        cursorPosition
+      })
+      
+      // If we found an @ and the cursor is after it, we're in a mention
+      if (lastAtIndex >= 0 && cursorPosition > lastAtIndex) {
+        // Get text from @ to cursor position
+        const textFromAtToCursor = input.slice(lastAtIndex + 1, cursorPosition)
+        console.log('📝 Found @ mention, textFromAtToCursor:', textFromAtToCursor)
+        
+        // Only close if we hit a newline (allow spaces in file/folder names)
+        if (!textFromAtToCursor.includes('\n')) {
+          // We're typing a mention - open popup and set the text
+          console.log('✅ Setting QuickOpen input text to:', textFromAtToCursor)
+          if (!quickOpen.isOpen) quickOpen.open()
+          quickOpen.setInputText(textFromAtToCursor)
+          return
+        }
       }
+      
+      // Not in a mention - close popup
+      console.log('❌ Not in mention, closing popup')
+      if (quickOpen.isOpen) quickOpen.close()
     }
-    
-    // Not in a mention - close popup
-    console.log('❌ Not in mention, closing popup')
-    if (quickOpen.isOpen) quickOpen.close()
-  }, [input, quickOpen])
+
+    // Check mention state immediately
+    checkMentionState()
+
+    // Also check when cursor position changes
+    const handleSelectionChange = () => {
+      checkMentionState()
+    }
+
+    textarea.addEventListener('selectionchange', handleSelectionChange)
+    textarea.addEventListener('keyup', handleSelectionChange)
+    textarea.addEventListener('mouseup', handleSelectionChange)
+
+    return () => {
+      textarea.removeEventListener('selectionchange', handleSelectionChange)
+      textarea.removeEventListener('keyup', handleSelectionChange)
+      textarea.removeEventListener('mouseup', handleSelectionChange)
+    }
+  }, [input, quickOpen, textareaRef])
 
   // Build full path by traversing parent relationships
   const buildFullPath = (page: Page): string => {
