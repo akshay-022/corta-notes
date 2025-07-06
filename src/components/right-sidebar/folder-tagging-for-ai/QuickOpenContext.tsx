@@ -59,7 +59,7 @@ export function QuickOpenProvider({ pages, onSelectFile, onSelectMultipleFiles, 
           const folder = pages.find(p => 
             p.title.toLowerCase() === segment.toLowerCase() && 
             p.parent_uuid === currentParentUuid && 
-            !p.is_deleted
+            p.is_deleted === false
           )
           console.log('Found folder for segment:', segment, folder ? { title: folder.title, uuid: folder.uuid.slice(0, 8) } : 'NOT FOUND')
           if (!folder) return [] // Path doesn't exist
@@ -69,7 +69,7 @@ export function QuickOpenProvider({ pages, onSelectFile, onSelectMultipleFiles, 
         // Get children of this folder and filter by search term
         const children = pages.filter(p => 
           p.parent_uuid === currentParentUuid && 
-          !p.is_deleted &&
+          p.is_deleted === false &&
           (searchTerm === '' || p.title.toLowerCase().startsWith(searchTerm.toLowerCase()))
         )
         console.log('Filtered children:', children.map(p => ({ title: p.title, type: p.type })))
@@ -79,7 +79,7 @@ export function QuickOpenProvider({ pages, onSelectFile, onSelectMultipleFiles, 
         const searchTerm = inputAfterAt.toLowerCase()
         const matches = pages.filter(p => 
           p.organized && 
-          !p.is_deleted && 
+          p.is_deleted === false && 
           p.title.toLowerCase().includes(searchTerm)
         )
         console.log('Search matches:', matches.map(p => ({ title: p.title, type: p.type })))
