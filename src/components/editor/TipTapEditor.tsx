@@ -429,6 +429,11 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
         })
       })
 
+      if (response.status === 202) {
+        logger.info('Received 202 response from organize API, refreshing sidebar/file tree')
+        notesCtx?.refreshOrganizedNotes?.()
+      }
+
       if (!response.ok) {
         // Try to get error details from server response
         let serverError = `Organization failed: ${response.status}`
@@ -1500,7 +1505,6 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                                       })
                                       .eq('uuid', page.uuid)
                                       .select()
-                                      .single()
 
                                     if (data) {
                                       // Update the TipTap editor content immediately
