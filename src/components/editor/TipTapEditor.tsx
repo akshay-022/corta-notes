@@ -9,7 +9,7 @@ import Underline from '@tiptap/extension-underline'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Page, PageUpdate } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/supabase-client'
-import { Info, Edit2, Save, X, FileText, Eye, Edit3, MessageSquare, ArrowUp, Loader2, History } from 'lucide-react'
+import { Info, Edit2, Save, X, FileText, Eye, Edit3, MessageSquare, ArrowUp, History } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 
 import { setupAutoOrganization, organizePage } from '@/lib/auto-organization/organized-file-updates'
@@ -42,7 +42,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
   const [organizationRules, setOrganizationRules] = useState('')
   const [isOrganizeDialogOpen, setIsOrganizeDialogOpen] = useState(false)
   const [routingInstructions, setRoutingInstructions] = useState('')
-  const [isOrganizing, setIsOrganizing] = useState(false)
+  const [showToast, setShowToast] = useState(false)
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false)
   const [isUpdatingSuggestions, setIsUpdatingSuggestions] = useState(false)
@@ -357,7 +357,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
 
   // Handle organize page with instructions
   const handleOrganizePage = async () => {
-    if (isOrganizing || !editor) return
+    if (!editor) return
     
     logger.info('🗂️ Starting manual organization with routing instructions', { 
       pageUuid: page.uuid, 
@@ -383,7 +383,9 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       }
 
       setIsOrganizeDialogOpen(false)
-      setIsOrganizing(true)
+      setShowToast(true)
+      // Auto-hide toast after 3 seconds
+      setTimeout(() => setShowToast(false), 3000)
 
       // Mark all paragraphs as organized BEFORE sending to API
       if (editor) {
@@ -554,8 +556,6 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       errorMessage += 'Error details have been saved. Open browser console and run viewOrganizationErrors() to see details.'
       
       alert(errorMessage)
-    } finally {
-      setIsOrganizing(false)
     }
   }
 
@@ -928,19 +928,10 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
           {/* Organize Button */}
           <button
             onClick={openOrganizeDialog}
-            disabled={isOrganizing}
-            className={`p-1.5 rounded transition-colors ${
-              isOrganizing 
-                ? 'text-gray-500 cursor-not-allowed' 
-                : 'text-blue-400 hover:text-blue-300 hover:bg-[#3a3a3a]'
-            }`}
-            title={isOrganizing ? "Uploading in background..." : "Upload to Organized Brain"}
+            className="p-1.5 rounded transition-colors text-blue-400 hover:text-blue-300 hover:bg-[#3a3a3a]"
+            title="Upload to Organized Brain"
           >
-            {isOrganizing ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <ArrowUp size={14} />
-            )}
+            <ArrowUp size={14} />
           </button>
 
           <div className="w-px h-4 bg-gray-600" />
@@ -973,6 +964,13 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
       {isSaving && (
         <div className="absolute top-4 left-4 md:left-6 z-10">
           <span className="text-gray-500 text-xs">Saving...</span>
+        </div>
+      )}
+
+      {/* Organization toast */}
+      {showToast && (
+        <div className="fixed bottom-4 right-4 z-50 bg-[#232323] text-[#b3b3b3] text-base font-normal font-sans px-5 py-3 rounded-xl shadow-lg">
+          Will organize in the background
         </div>
       )}
 
@@ -1349,7 +1347,6 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
               <button
                 onClick={() => setIsOrganizeDialogOpen(false)}
                 className="text-gray-400 hover:text-white transition-colors"
-                disabled={isOrganizing}
               >
                 <X size={20} />
               </button>
@@ -1370,14 +1367,11 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
-                    if (!isOrganizing) {
-                      handleOrganizePage()
-                    }
+                    handleOrganizePage()
                   }
                 }}
                 placeholder="Enter routing instructions (optional)..."
                 className="w-full h-32 bg-[#1a1a1a] border border-gray-600 rounded p-3 text-gray-200 text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none"
-                disabled={isOrganizing}
                 autoFocus
               />
 
@@ -1403,30 +1397,15 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
               <button
                 onClick={() => setIsOrganizeDialogOpen(false)}
                 className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
-                disabled={isOrganizing}
               >
                 Cancel
               </button>
               <button
                 onClick={handleOrganizePage}
-                disabled={isOrganizing}
-                className={`px-4 py-2 rounded transition-colors flex items-center gap-2 ${
-                  isOrganizing 
-                    ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-                    : 'bg-blue-600 hover:bg-blue-700 text-white'
-                }`}
+                className="px-4 py-2 rounded transition-colors flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
               >
-                {isOrganizing ? (
-                  <>
-                    <ArrowUp size={16} className="animate-pulse" />
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <ArrowUp size={16} />
-                    Upload
-                  </>
-                )}
+                <ArrowUp size={16} />
+                Upload
               </button>
             </div>
           </div>
