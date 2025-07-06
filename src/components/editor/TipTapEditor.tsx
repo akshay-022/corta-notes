@@ -1505,6 +1505,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
                                       })
                                       .eq('uuid', page.uuid)
                                       .select()
+                                      .single()
 
                                     if (data) {
                                       // Update the TipTap editor content immediately
