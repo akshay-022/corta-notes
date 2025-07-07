@@ -1,17 +1,27 @@
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
-import { getRelevantMemories, formatMemoryContext, type RelevantMemory } from '@/lib/brainstorming';
+import { formatMemoryContext, type RelevantMemory } from '@/lib/brainstorming';
 import { EDITOR_FUNCTIONS, executeEditorFunctionServerSide, EditorFunctionCall } from '@/lib/brainstorming/apply-to-editor/editorFunctions';
 import logger from '@/lib/logger';
-import { createClient } from '@/lib/supabase/supabase-client';
+import { createClient } from '@/lib/supabase/supabase-server';
 import { BRAINSTORMING_SYSTEM_PROMPT, BRAINSTORMING_FUNCTION_CALLING_RULES } from '@/lib/promptTemplates';
+import { createSupermemoryClient, isSupermemoryConfigured, injectRelevantMemories, getConversationSummary } from '@/lib/memory/infinite-chat';
+import { updateConversationSummary } from '@/lib/memory/chat-summaries/utils';
 
 export const runtime = 'edge';
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+// Initialize OpenAI client - use supermemory if configured, otherwise fallback to regular OpenAI
+function getOpenAIClient(userId?: string): OpenAI {
+  if (isSupermemoryConfigured()) {
+    logger.info('Using supermemory infinite chat client');
+    return createSupermemoryClient(userId);
+  } else {
+    logger.info('Using regular OpenAI client (supermemory not configured)');
+    return new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+}
 
 // Initialize memory service
 // const superMemoryClient = new supermemory({
@@ -27,7 +37,7 @@ export async function POST(req: Request) {
   logger.info('Chat panel API called', { hasKey: !!process.env.OPENAI_API_KEY });
   
   try {
-    const { conversationHistory, currentMessage, thoughtContext, selections, currentPageUuid, model } = await req.json();
+    const { conversationHistory, currentMessage, thoughtContext, selections, currentPageUuid, conversationId, model } = await req.json();
 
     if (!currentMessage) {
       return NextResponse.json({ error: 'currentMessage is required' }, { status: 400 });
@@ -44,6 +54,7 @@ export async function POST(req: Request) {
       thoughtContext,
       selections,
       currentPageUuid,
+      conversationId,
       model: model || 'gpt-4o' // Default to gpt-4o if no model specified
     });
   } catch (error) {
@@ -62,9 +73,10 @@ async function handleUnifiedStreamingRequest(params: {
   thoughtContext?: string,
   selections?: any[],
   currentPageUuid?: string,
+  conversationId?: string,
   model?: string
 }) {
-  const { conversationHistory, currentMessage, thoughtContext, selections, currentPageUuid, model } = params;
+  const { conversationHistory, currentMessage, thoughtContext, selections, currentPageUuid, conversationId, model } = params;
   
   logger.info('=== UNIFIED STREAMING REQUEST START ===', { 
     currentMessage: currentMessage.substring(0, 100) + '...',
@@ -78,6 +90,19 @@ async function handleUnifiedStreamingRequest(params: {
   });
 
   try {
+    // Create Supabase client once and reuse
+    const supabase = await createClient();
+
+    // Get authenticated user for supermemory user ID (do this early)
+    let userId: string | undefined;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      userId = user?.id;
+      logger.info('Retrieved user ID for supermemory', { userId: !!userId });
+    } catch (error) {
+      logger.warn('Could not get user ID for supermemory', { error });
+    }
+
     // Get relevant memories - COMMENTED OUT
     // const relevantDocuments = await getRelevantMemories(currentMessage, 5, currentPageUuid);
     // logger.info('Retrieved relevant memories', { 
@@ -90,7 +115,6 @@ async function handleUnifiedStreamingRequest(params: {
     let organizationInstructions = '';
     if (currentPageUuid) {
       try {
-        const supabase = createClient();
         const { data: page } = await supabase
           .from('pages')
           .select('metadata')
@@ -135,6 +159,20 @@ async function handleUnifiedStreamingRequest(params: {
       enhancedCurrentMessage += `\n\nADDITIONAL KNOWLEDGE BASE CONTEXT:\n${memoryContext}`;
     }
 
+    // Inject relevant memories from previous conversations before sending to supermemory
+    try {
+      const conversationSummary = await getConversationSummary(conversationId);
+      const relevantChatMemories = await injectRelevantMemories(
+        currentMessage,
+        conversationSummary,
+        conversationId
+      );
+      enhancedCurrentMessage = enhancedCurrentMessage + relevantChatMemories;
+    } catch (error) {
+      logger.error('Failed to inject cross-conversation memories', { error });
+      // Continue with original message if memory injection fails
+    }
+
     // Enhanced system message that includes function calling instructions
     let systemMessage = `${BRAINSTORMING_SYSTEM_PROMPT}
 
@@ -166,6 +204,9 @@ Use these guidelines when suggesting content organization, structure, or when us
     // Call OpenAI with streaming and function calling
     const selectedModel = model || 'gpt-4o'; // Default to gpt-4o if no model specified
     
+    // Get OpenAI client (with supermemory if configured)
+    const openai = getOpenAIClient(userId);
+    
     // Only add tools for models that support function calling
     const supportsTools = selectedModel !== 'chatgpt-4o-latest';
     const tools = supportsTools ? EDITOR_FUNCTIONS.map(func => ({
@@ -182,7 +223,9 @@ Use these guidelines when suggesting content organization, structure, or when us
       toolCount: tools?.length || 0,
       model: selectedModel,
       supportsTools,
-      hasPageUuid: !!currentPageUuid
+      hasPageUuid: !!currentPageUuid,
+      hasUserId: !!userId,
+      usingSupermemory: isSupermemoryConfigured()
     });
 
     // Create the API call with conditional tools
@@ -314,6 +357,25 @@ Use these guidelines when suggesting content organization, structure, or when us
             documentsFound: relevantDocuments.length,
             pageUuid: currentPageUuid
           });
+          
+          // Update conversation summary asynchronously (don't block the response)
+          if (conversationId && userId) {
+            try {
+              const updatedMessages = [
+                ...(conversationHistory || []),
+                { role: 'user' as const, content: currentMessage },
+                { role: 'assistant' as const, content: responseText }
+              ];
+              
+              // Fire and forget - don't await
+              updateConversationSummary(conversationId, userId, updatedMessages)
+                .catch(error => logger.error('Failed to update conversation summary', { error }));
+              
+              logger.info('Started async conversation summary update', { conversationId, userId });
+            } catch (error) {
+              logger.error('Failed to start conversation summary update', { error });
+            }
+          }
           
           controller.close();
         } catch (error) {

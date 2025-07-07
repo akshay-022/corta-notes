@@ -5,7 +5,7 @@
         "name": "Next.js Dev (with Debugger)",
         "type": "node-terminal",
         "request": "launch",
-        "command": "npm run dev:turbo",  // changed from pnpm to npm
+        "command": "npm run dev",  // changed from pnpm to npm
         "cwd": "${workspaceFolder}",
         "skipFiles": [
           "<node_internals>/**",

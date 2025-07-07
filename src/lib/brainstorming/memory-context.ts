@@ -1,5 +1,5 @@
-import { memoryService } from '@/lib/memory/memory-service-supermemory'
-import { MemoryDocument } from '@/lib/memory/types'
+import { memoryService } from '@/lib/memory-providers/memory-service-supermemory'
+import { MemoryDocument } from '@/lib/memory-providers/types'
 import { createClient } from '@/lib/supabase/supabase-server'
 
 export interface RelevantMemory {
@@ -90,42 +90,37 @@ async function buildEnhancedSearchQuery(userQuestion: string, currentPageUuid?: 
 }
 
 /**
- * Retrieves relevant documents from SuperMemory based on current thought/question
- * Enhanced with current page context for better relevance
+ * Retrieves relevant memories from previous conversations
+ * Used for cross-conversation memory search without page context
  * Filters out low-confidence results (below 30%)
  */
-export async function getRelevantMemories(
-  userQuestion: string,
-  maxResults: number = 5,
-  currentPageUuid?: string
+export async function getRelevantChatMemories(
+  userQuestionAndSummary: string,
+  maxResults: number = 5
 ): Promise<RelevantMemory[]> {
   try {
     // Check if memory service is configured
     if (!memoryService.isConfigured()) {
-      console.log('Memory service not configured, skipping memory search')
+      console.log('Memory service not configured, skipping chat memory search')
       return []
     }
 
-    console.log('Searching memory service for relevant context...')
+    console.log('Searching memory service for relevant chat memories...')
     
     // Get authenticated user for user-scoped search
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     
     if (authError || !user) {
-      console.log('No authenticated user found, skipping memory search')
+      console.log('No authenticated user found, skipping chat memory search')
       return []
     }
 
-    // Enhanced search query with current page context
-    const enhancedQuery = await buildEnhancedSearchQuery(userQuestion, currentPageUuid)
-    console.log('Enhanced search query with current page context')
-
-    // Search SuperMemory for relevant documents
-    const searchResults = await memoryService.search(enhancedQuery, user.id, maxResults)
+    // Direct search without page context enhancement
+    const searchResults = await memoryService.search(userQuestionAndSummary, user.id, maxResults, ['chat'])
 
     if (!searchResults || searchResults.length === 0) {
-      console.log('No memory search results found')
+      console.log('No chat memory search results found')
       return []
     }
 
@@ -135,7 +130,7 @@ export async function getRelevantMemories(
       return confidence >= 0.3 // Only include results with 30%+ confidence
     })
     
-    console.log(`Found ${searchResults.length} documents, ${highConfidenceResults.length} with confidence >= 30%`)
+    console.log(`Found ${searchResults.length} chat memories, ${highConfidenceResults.length} with confidence >= 30%`)
 
     // Convert to our interface format
     return highConfidenceResults.map(doc => ({
@@ -148,7 +143,71 @@ export async function getRelevantMemories(
     }))
 
   } catch (error) {
-    console.error('Memory service search failed:', error)
+    console.error('Chat memory service search failed:', error)
+    return [] // Return empty array if search fails
+  }
+}
+
+/**
+ * Retrieves relevant documents from SuperMemory based on current thought/question
+ * Enhanced with current page context for better relevance
+ * Filters out low-confidence results (below 30%)
+ */
+export async function getRelevantDocMemories(
+  userQuestion: string,
+  maxResults: number = 5,
+  currentPageUuid?: string
+): Promise<RelevantMemory[]> {
+  try {
+    // Check if memory service is configured
+    if (!memoryService.isConfigured()) {
+      console.log('Memory service not configured, skipping document memory search')
+      return []
+    }
+
+    console.log('Searching memory service for relevant document memories...')
+    
+    // Get authenticated user for user-scoped search
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      console.log('No authenticated user found, skipping document memory search')
+      return []
+    }
+
+    // Enhanced search query with current page context
+    const enhancedQuery = await buildEnhancedSearchQuery(userQuestion, currentPageUuid)
+    console.log('Enhanced search query with current page context')
+
+    // Search SuperMemory for relevant documents
+    const searchResults = await memoryService.search(enhancedQuery, user.id, maxResults)
+
+    if (!searchResults || searchResults.length === 0) {
+      console.log('No document memory search results found')
+      return []
+    }
+
+    // Filter out low-confidence results (below 30%)
+    const highConfidenceResults = searchResults.filter(doc => {
+      const confidence = doc.score || 0
+      return confidence >= 0.3 // Only include results with 30%+ confidence
+    })
+    
+    console.log(`Found ${searchResults.length} document memories, ${highConfidenceResults.length} with confidence >= 30%`)
+
+    // Convert to our interface format
+    return highConfidenceResults.map(doc => ({
+      id: doc.id || '',
+      title: doc.title || 'Untitled Document',
+      content: doc.content || '',
+      score: doc.score,
+      pageUuid: doc.metadata?.pageUuid || null,
+      metadata: doc.metadata || {}
+    }))
+
+  } catch (error) {
+    console.error('Document memory service search failed:', error)
     return [] // Return empty array if search fails
   }
 }
@@ -167,12 +226,26 @@ export function formatMemoryContext(memories: RelevantMemory[]): string {
 /**
  * Gets memory context as formatted text ready for AI prompt
  * Combines search and formatting in one convenient function
+ * Uses document memory search with page context
  */  
 export async function createMemoryContext(
   userQuestion: string,
   maxResults: number = 5,
   currentPageUuid?: string
 ): Promise<string> {
-  const memories = await getRelevantMemories(userQuestion, maxResults, currentPageUuid)
+  const memories = await getRelevantDocMemories(userQuestion, maxResults, currentPageUuid)
+  return formatMemoryContext(memories)
+}
+
+/**
+ * Gets chat memory context as formatted text ready for AI prompt
+ * Combines search and formatting in one convenient function
+ * Uses chat memory search without page context
+ */  
+export async function createChatMemoryContext(
+  userQuestion: string,
+  maxResults: number = 5
+): Promise<string> {
+  const memories = await getRelevantChatMemories(userQuestion, maxResults)
   return formatMemoryContext(memories)
 } 

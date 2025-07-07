@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { memoryService } from '@/lib/memory/memory-service-supermemory'
+import { memoryService } from '@/lib/memory-providers/memory-service-supermemory'
 import { createClient } from '@/lib/supabase/supabase-server'
 
 export const runtime = 'edge';

@@ -689,6 +689,7 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
           thoughtContext, // Separate thought context
           selections: selections.length > 0 ? selections : undefined,
           currentPageUuid: currentPage?.uuid,
+          conversationId: activeConversation.id, // Add conversation ID for summary updates
           model: selectedModel, // Add selected model
 
           // No useFunction flag - let AI decide always

@@ -18,24 +18,32 @@ class SuperMemoryProvider implements MemoryProvider {
     return this.configured
   }
 
-  async add(content: string, title: string, userId: string, metadata: any = {}): Promise<MemoryAddResponse> {
+  async add(content: string, title: string, userId: string, metadata: any = {}, containerTags?: string[]): Promise<MemoryAddResponse> {
     if (!this.configured) {
       return { success: false, error: 'SuperMemory not configured' }
     }
 
     try {
-      console.log('Adding document to SuperMemory:', { title, userId })
+      console.log('Adding document to SuperMemory:', { title, userId, containerTags })
 
-      // Add to SuperMemory - don't include userId in metadata for privacy
-      const response = await this.client.memories.add({
+      // Add to SuperMemory with user ID and optional container tags
+      const addParams: any = {
         content: content,
+        userId: userId,  // Correct parameter name per SuperMemory API
         metadata: {
           title: title,
           source: 'corta-notes',
           document_type: 'note',
           ...metadata
         }
-      })
+      }
+
+      // Add container tags if provided
+      if (containerTags && containerTags.length > 0) {
+        addParams.containerTags = containerTags
+      }
+
+      const response = await this.client.memories.add(addParams)
 
       console.log('SuperMemory add response:', response)
 
@@ -50,19 +58,28 @@ class SuperMemoryProvider implements MemoryProvider {
     }
   }
 
-  async search(query: string, userId: string, limit: number = 10): Promise<MemoryDocument[]> {
+  async search(query: string, userId: string, limit: number = 10, containerTags?: string[]): Promise<MemoryDocument[]> {
     if (!this.configured) {
       return []
     }
 
     try {
-      console.log('Searching SuperMemory for:', query, 'userId:', userId)
+      console.log('Searching SuperMemory for:', query, 'userId:', userId, 'containerTags:', containerTags)
 
-      // Perform the search
-      const response = await this.client.search.execute({ 
+      // Build search parameters
+      const searchParams: any = {
         q: query,
-        limit: limit
-      })
+        limit: limit,
+        userId: userId  // Correct parameter name per SuperMemory API
+      }
+
+      // Add container tags filter if provided
+      if (containerTags && containerTags.length > 0) {
+        searchParams.containerTags = containerTags
+      }
+
+      // Perform the search with user ID and optional container tags
+      const response = await this.client.search.execute(searchParams)
 
       console.log('SuperMemory search response:', response)
 

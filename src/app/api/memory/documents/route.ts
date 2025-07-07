@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 // import supermemory from 'supermemory' // SuperMemory - commented out for mem0 migration
 // import MemoryClient from 'mem0ai' // New mem0 client - moved to service
-import { memoryService } from '@/lib/memory/memory-service-supermemory'
+import { memoryService } from '@/lib/memory-providers/memory-service-supermemory'
 import { createClient } from '@/lib/supabase/supabase-server'
 
 export const runtime = 'edge';
@@ -58,11 +58,11 @@ async function addDocument(pageUuid: string, content: string, title: string, use
   console.log('Adding document via memory service:', { pageUuid, title })
 
   try {
-    // Add to memory service with metadata
+    // Add to memory service with metadata and 'docs' container tag
     const response = await memoryService.add(content, title, userId, {
       pageUuid: pageUuid,
       source: 'corta-notes'
-    })
+    }, ['docs']) // Add 'docs' container tag for document filtering
 
     if (response.success && response.memoryId) {
       // Store the mapping in Supabase (reusing existing supermemory table)
