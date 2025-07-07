@@ -54,7 +54,7 @@ class SuperMemoryService {
   /**
    * Add a document to SuperMemory and store the mapping
    */
-  async addDocument(pageUuid: string, content: string, title: string): Promise<string | null> {
+  async addDocument(pageUuid: string, content: string, title: string, tags?: string[]): Promise<string | null> {
     try {
       console.log('Adding document to SuperMemory:', { pageUuid, title })
 
@@ -67,7 +67,8 @@ class SuperMemoryService {
           action: 'add',
           pageUuid, 
           content, 
-          title
+          title,
+          tags
         })
       })
 
@@ -88,7 +89,7 @@ class SuperMemoryService {
   /**
    * Update a document in SuperMemory
    */
-  async updateDocument(pageUuid: string, content: string, title: string): Promise<boolean> {
+  async updateDocument(pageUuid: string, content: string, title: string, tags?: string[]): Promise<boolean> {
     try {
       const response = await fetch('/api/memory/documents', {
         method: 'POST',
@@ -99,7 +100,8 @@ class SuperMemoryService {
           action: 'update',
           pageUuid, 
           content, 
-          title
+          title,
+          tags
         })
       })
 

@@ -3,6 +3,7 @@
 import { Page } from '@/lib/supabase/types'
 import { superMemoryService } from '@/lib/memory-providers/memory-client'
 import { createClient } from '@/lib/supabase/supabase-client'
+import { tipTapToMarkdown } from '@/lib/tiptap/markdown-converter'
 
 export type SyncStatus = 'never' | 'no' | 'yes'
 
@@ -14,6 +15,72 @@ export interface PageSyncMetadata {
 class SuperMemorySyncService {
   private logger = console
   private supabase = createClient()
+
+  /**
+   * Build hierarchical path tags for a page based on its UUID
+   * e.g., "Corta/Ideas/Strategy vs Sam" -> ["Corta", "Corta/Ideas", "Corta/Ideas/Strategy"]
+   */
+  private async buildPathTags(pageUuid: string): Promise<string[]> {
+    try {
+      // Get the full path by traversing up the parent chain
+      const path = await this.getFullPath(pageUuid)
+      if (!path) return []
+
+      // Split the path and build hierarchical tags
+      const pathSegments = path.split('/').filter(segment => segment.trim())
+      const tags: string[] = []
+
+      // Build cumulative path tags
+      for (let i = 0; i < pathSegments.length; i++) {
+        const cumulativePath = pathSegments.slice(0, i + 1).join('/')
+        tags.push(cumulativePath)
+      }
+
+      this.logger.log(`Built path tags for ${pageUuid}:`, tags)
+      return tags
+    } catch (error) {
+      this.logger.error(`Error building path tags for ${pageUuid}:`, error)
+      return []
+    }
+  }
+
+  /**
+   * Get the full path of a page by traversing up the parent chain
+   */
+  private async getFullPath(pageUuid: string): Promise<string | null> {
+    try {
+      const pathSegments: string[] = []
+      let currentUuid = pageUuid
+
+      // Traverse up the parent chain to build the full path
+      while (currentUuid) {
+        const { data: page, error } = await this.supabase
+          .from('pages')
+          .select('title, parent_uuid')
+          .eq('uuid', currentUuid)
+          .single()
+
+        if (error || !page) {
+          this.logger.error(`Error fetching page ${currentUuid}:`, error)
+          break
+        }
+
+        // Add the current page's title to the beginning of the path
+        pathSegments.unshift(page.title)
+
+        // Move to the parent
+        currentUuid = page.parent_uuid
+      }
+
+      // Remove the last segment (the page itself) to get the folder path
+      pathSegments.pop()
+
+      return pathSegments.length > 0 ? pathSegments.join('/') : null
+    } catch (error) {
+      this.logger.error(`Error getting full path for ${pageUuid}:`, error)
+      return null
+    }
+  }
 
   /**
    * Check if a page should be synced to SuperMemory
@@ -96,32 +163,37 @@ class SuperMemorySyncService {
     this.logger.log(`Syncing page: ${page.title} (status: ${syncStatus})`)
 
     try {
-      // Extract text content for embedding
-      const originalTextContent = page.content_text || ''
+      // Convert TipTap JSON content to Markdown for better formatting preservation
+      const markdownContent = tipTapToMarkdown(page.content)
       
-      if (!originalTextContent.trim()) {
+      if (!markdownContent.trim()) {
         this.logger.log(`Skipping empty page: ${page.title}`)
         return false
       }
 
       // CRITICAL: Append title to content for better search relevance
-      const enhancedTextContent = `The title of this file is ${page.title} and this is EXTREMELY IMPORTANT \n\n Here is the content of the file: ${originalTextContent}`
+      const enhancedContent = `# ${page.title}\n\n${markdownContent}`
 
+      // Build hierarchical path tags for better organization
+      const pathTags = await this.buildPathTags(page.uuid)
+      
       if (syncStatus === 'never') {
         // First time sync - add to SuperMemory
         this.logger.log(`Adding new document to SuperMemory: ${page.title}`)
         await superMemoryService.addDocument(
           page.uuid,
-          enhancedTextContent,
-          page.title
+          enhancedContent,
+          page.title,
+          pathTags
         )
       } else if (syncStatus === 'no') {
         // Update existing document in SuperMemory
         this.logger.log(`Updating document in SuperMemory: ${page.title}`)
         await superMemoryService.updateDocument(
           page.uuid,
-          enhancedTextContent,
-          page.title
+          enhancedContent,
+          page.title,
+          pathTags
         )
       }
 

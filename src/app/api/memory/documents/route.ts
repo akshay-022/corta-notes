@@ -17,7 +17,7 @@ export const runtime = 'edge';
 
 export async function POST(request: NextRequest) {
   try {
-    const { action, pageUuid, content, title } = await request.json()
+    const { action, pageUuid, content, title, tags } = await request.json()
 
     // Updated to check memory service configuration
     if (!memoryService.isConfigured()) {
@@ -34,9 +34,9 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case 'add':
-        return await addDocument(pageUuid, content, title, user.id, supabase)
+        return await addDocument(pageUuid, content, title, user.id, supabase, tags)
       case 'update':
-        return await updateDocument(pageUuid, content, title, user.id, supabase)
+        return await updateDocument(pageUuid, content, title, user.id, supabase, tags)
       case 'delete':
         return await deleteDocument(pageUuid, user.id, supabase)
       case 'findSimilar':
@@ -54,15 +54,18 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function addDocument(pageUuid: string, content: string, title: string, userId: string, supabase: any) {
-  console.log('Adding document via memory service:', { pageUuid, title })
+async function addDocument(pageUuid: string, content: string, title: string, userId: string, supabase: any, tags?: string[]) {
+  console.log('Adding document via memory service:', { pageUuid, title, tags })
 
   try {
-    // Add to memory service with metadata and 'docs' container tag
+    // Combine 'docs' tag with hierarchical path tags
+    const containerTags = ['docs', ...(tags || [])]
+    
+    // Add to memory service with metadata and container tags
     const response = await memoryService.add(content, title, userId, {
       pageUuid: pageUuid,
       source: 'corta-notes'
-    }, ['docs']) // Add 'docs' container tag for document filtering
+    }, containerTags)
 
     if (response.success && response.memoryId) {
       // Store the mapping in Supabase (reusing existing supermemory table)
@@ -89,8 +92,8 @@ async function addDocument(pageUuid: string, content: string, title: string, use
   }
 }
 
-async function updateDocument(pageUuid: string, content: string, title: string, userId: string, supabase: any) {
-  console.log('Updating document via memory service:', { pageUuid, title })
+async function updateDocument(pageUuid: string, content: string, title: string, userId: string, supabase: any, tags?: string[]) {
+  console.log('Updating document via memory service:', { pageUuid, title, tags })
 
   try {
     // Get the memory ID from our mapping
@@ -104,7 +107,7 @@ async function updateDocument(pageUuid: string, content: string, title: string, 
     if (mappingError || !mapping) {
       // If no mapping exists, add as new document
       console.log('No existing mapping found, adding as new document')
-      return await addDocument(pageUuid, content, title, userId, supabase)
+      return await addDocument(pageUuid, content, title, userId, supabase, tags)
     }
 
     // Update the existing memory
@@ -115,14 +118,14 @@ async function updateDocument(pageUuid: string, content: string, title: string, 
     } else {
       // Fallback: delete and re-add
       await deleteDocument(pageUuid, userId, supabase)
-      return await addDocument(pageUuid, content, title, userId, supabase)
+      return await addDocument(pageUuid, content, title, userId, supabase, tags)
     }
 
   } catch (error) {
     console.error('Error updating document:', error)
     // Fallback: delete and re-add
     await deleteDocument(pageUuid, userId, supabase)
-    return await addDocument(pageUuid, content, title, userId, supabase)
+    return await addDocument(pageUuid, content, title, userId, supabase, tags)
   }
 }
 

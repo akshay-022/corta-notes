@@ -7,11 +7,13 @@ import logger from '@/lib/logger';
  * @param conversationId - Conversation ID
  * @param userId - User ID for authentication
  * @param messageHistory - Array of conversation messages
+ * @param currentPageContent - Optional current page content for context
  */
 export async function updateConversationSummary(
   conversationId: string,
   userId: string,
-  messageHistory: any[]
+  messageHistory: any[],
+  currentPageContent?: string
 ): Promise<void> {
   try {
     // Get the last 5 messages for context
@@ -48,6 +50,11 @@ export async function updateConversationSummary(
     summaryContext += `Last 5 messages:\n${lastMessages.map(msg => 
       `${msg.role}: ${msg.content}`
     ).join('\n')}`;
+
+    // Add current page content if provided
+    if (currentPageContent) {
+      summaryContext += `\n\nCurrent page context:\n${currentPageContent}`;
+    }
 
     // Use AI to generate a proper summary
     const summaryPrompt = `You are a helpful assistant that creates concise, informative summaries of conversations.
@@ -86,7 +93,8 @@ Summary:`;
         conversationId, 
         userId,
         summaryLength: cleanedSummary.length,
-        summary: cleanedSummary
+        summary: cleanedSummary,
+        hasPageContent: !!currentPageContent
       });
     }
 

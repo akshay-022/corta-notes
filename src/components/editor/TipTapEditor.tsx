@@ -18,7 +18,7 @@ import logger from '@/lib/logger'
 import { DateDividerPlugin } from '@/lib/organized-notes-formatting/dateDividerPlugin'
 import { NodeMetadata } from '@/lib/tiptap/NodeMetadata'
 import { FormattingBubbleMenu } from '@/lib/tiptap/FormattingBubbleMenu'
-import { suggestDestinationsForPage, Suggestion, readCache } from '@/lib/auto-organization/organize-current-page/suggestionHelper'
+import { suggestDestinationsForPage, Suggestion, readCache } from '@/lib/relevant-path-recommender/suggestionHelper'
 
 interface TipTapEditorProps {
   page: Page

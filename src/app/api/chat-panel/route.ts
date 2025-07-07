@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/supabase-server';
 import { BRAINSTORMING_SYSTEM_PROMPT, BRAINSTORMING_FUNCTION_CALLING_RULES } from '@/lib/promptTemplates';
 import { createSupermemoryClient, isSupermemoryConfigured, injectRelevantMemories, getConversationSummary } from '@/lib/memory/infinite-chat';
 import { updateConversationSummary } from '@/lib/memory/chat-summaries/utils';
+import { getRelevantDocMemories, getRelevantChatMemories } from '@/lib/brainstorming/memory-context';
 
 export const runtime = 'edge';
 
@@ -111,18 +112,20 @@ async function handleUnifiedStreamingRequest(params: {
     // });
     const relevantDocuments: any[] = []; // Empty array to replace the memory retrieval
 
-    // Get organization instructions from current page if available
+    // Get organization instructions and content from current page if available
     let organizationInstructions = '';
+    let currentPageContent = '';
     if (currentPageUuid) {
       try {
         const { data: page } = await supabase
           .from('pages')
-          .select('metadata')
+          .select('metadata, content_text, title')
           .eq('uuid', currentPageUuid)
           .single();
         
         const pageMetadata = page?.metadata as any;
         organizationInstructions = pageMetadata?.organizationRules || '';
+        currentPageContent = page?.content_text || '';
         
         if (organizationInstructions) {
           logger.info('Loaded organization instructions for brainstorming', { 
@@ -130,12 +133,27 @@ async function handleUnifiedStreamingRequest(params: {
             instructionsLength: organizationInstructions.length 
           });
         }
+        
+        if (currentPageContent) {
+          logger.info('Loaded current page content for context', { 
+            pageUuid: currentPageUuid, 
+            contentLength: currentPageContent.length,
+            title: page?.title
+          });
+        }
       } catch (error) {
-        logger.warn('Failed to load organization instructions', { error, pageUuid: currentPageUuid });
+        logger.warn('Failed to load current page data', { error, pageUuid: currentPageUuid });
       }
     }
 
+
+
+
     // Build enhanced current message with all contexts
+    // LIVING BREATHING MEMORY RETRIEVAL!!!!!!
+
+
+
       let enhancedCurrentMessage = 'User Instruction (This is literally what you must answer, SUPER IMPORTANT):\n\n' + currentMessage + '\n\n\n\n\n\n\n\n' + `Also
       Also very important : The user is almost always brainstorming. Unless they really want you to rewrite something don't ask to rewrite wording concisely etc. They don't case about the draft. They care about the thinking. So help them brainstorm!!!!
       `;
@@ -151,23 +169,18 @@ async function handleUnifiedStreamingRequest(params: {
       If the user every says what do you think of this, or this etc, this refers to the selections below:\n${JSON.stringify(selections, null, 2)}\n\n`;
     }
 
-
-
-    // Add memory context from SuperMemory if available  
-    if (relevantDocuments.length > 0) {
-      const memoryContext = formatMemoryContext(relevantDocuments);
-      enhancedCurrentMessage += `\n\nADDITIONAL KNOWLEDGE BASE CONTEXT:\n${memoryContext}`;
-    }
-
     // Inject relevant memories from previous conversations before sending to supermemory
     try {
       const conversationSummary = await getConversationSummary(conversationId);
-      const relevantChatMemories = await injectRelevantMemories(
-        currentMessage,
-        conversationSummary,
-        conversationId
-      );
-      enhancedCurrentMessage = enhancedCurrentMessage + relevantChatMemories;
+      // await both responses
+      const [relevantChatMemories, relevantDocMemories] = await Promise.all([
+        getRelevantChatMemories(currentMessage, conversationSummary, 5),
+        getRelevantDocMemories(currentMessage, conversationSummary, 5)
+      ]);
+      // Format the memories into strings
+      const chatMemoriesString = relevantChatMemories.map((memory: any) => `- ${memory.title}: ${memory.content}`).join('\n');
+      const docMemoriesString = relevantDocMemories.map((memory: any) => `- ${memory.title}: ${memory.content}`).join('\n');  
+      enhancedCurrentMessage = enhancedCurrentMessage + 'CHAT MEMORIES:\n' + chatMemoriesString + 'DOCUMENT MEMORIES:\n' + docMemoriesString;
     } catch (error) {
       logger.error('Failed to inject cross-conversation memories', { error });
       // Continue with original message if memory injection fails
@@ -368,7 +381,7 @@ Use these guidelines when suggesting content organization, structure, or when us
               ];
               
               // Fire and forget - don't await
-              updateConversationSummary(conversationId, userId, updatedMessages)
+              updateConversationSummary(conversationId, userId, updatedMessages, currentPageContent)
                 .catch(error => logger.error('Failed to update conversation summary', { error }));
               
               logger.info('Started async conversation summary update', { conversationId, userId });

@@ -6,7 +6,5 @@ export {
   getRelevantChatMemories,
   getRelevantDocMemories,
   formatMemoryContext, 
-  createMemoryContext,
-  createChatMemoryContext,
   type RelevantMemory 
 } from './memory-context' 

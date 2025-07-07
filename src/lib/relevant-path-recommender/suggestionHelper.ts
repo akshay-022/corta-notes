@@ -8,7 +8,7 @@ import {
   ROUTING_CONTEXT_INSTRUCTIONS,
   ULTRA_HIGH_PRIORITY_ROUTING_COMPLIANCE,
 } from '@/lib/promptTemplates'
-import { buildFileTree, serializeFileTree, OrganizedPageSlim } from '../organized-file-updates/helpers/fileTree'
+import { buildFileTree, serializeFileTree, OrganizedPageSlim } from '../auto-organization/organized-file-updates/helpers/fileTree'
 
 interface Suggestion {
   targetFilePath: string
@@ -217,4 +217,60 @@ export async function suggestDestinationsForPage(
 }
 
 export { readCache }
-export type { Suggestion } 
+export type { Suggestion }
+
+/**
+ * Suggests the most relevant paths for a given summary text
+ * Takes a string input and finds the paths most relevant to that content
+ */
+export async function suggestPathsRelevantToSummary(
+  summaryText: string,
+  maxResults: number = 5
+): Promise<Suggestion[]> {
+  try {
+    console.log('Finding paths relevant to summary:', { summaryLength: summaryText.length })
+    
+    // Get file tree context
+    const fileTreeContext = await getFileTreeContext()
+    
+    // Build a simplified prompt for summary-based path finding
+    const prompt = `You are an expert at organizing notes using the PARA method.
+
+FILE TREE CONTEXT (for reference – don't modify):\n${fileTreeContext}
+
+SUMMARY TEXT TO ANALYZE:
+"${summaryText}"
+
+TASK: Suggest the TOP ${maxResults} MOST RELEVANT *EXISTING* LOCATIONS where content like this summary should live.
+• Do NOT invent a new file by appending random titles.
+• If a *folder* is the right destination, output the folder path and append " (folder)".
+• If an actual *file* is best, output the file path and append " (file)".
+• Under NO circumstances should you propose creating a brand-new file; choose from the existing tree only.
+• Rank by relevance (1 = best). If fewer than ${maxResults} valid options exist, return fewer.
+
+OUTPUT: A JSON array ONLY in this shape (no markdown fences):
+[
+  { "targetFilePath": "/Projects/Corta (folder)", "relevance": 0.97 },
+  { "targetFilePath": "/Resources/Books (folder)", "relevance": 0.85 }
+]`
+
+    // Call LLM to get suggestions
+    const suggestions = await callLLM(prompt)
+    
+    if (!suggestions || suggestions.length === 0) {
+      console.log('No relevant path suggestions found for summary')
+      return []
+    }
+
+    // Limit to maxResults
+    const limitedSuggestions = suggestions.slice(0, maxResults)
+    
+    console.log(`Found ${limitedSuggestions.length} relevant path suggestions for summary`)
+    
+    return limitedSuggestions
+
+  } catch (error) {
+    console.error('Summary-based path suggestion failed:', error)
+    return [] // Return empty array if suggestion fails
+  }
+} 
