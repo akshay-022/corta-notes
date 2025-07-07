@@ -220,7 +220,7 @@ export async function getRelevantPathMemories(
     }
 
     // Import the suggestion helper function
-    const { suggestPathsRelevantToSummary } = await import('@/lib/relevant-path-recommender/suggestionHelper')
+    const { suggestPathsRelevantToSummary } = await import('@/lib/utils/pathSuggestionHelper')
     
     // Combine user question and conversation summary as the input text
     const combinedContent = `${userQuestion}\n\n${conversationSummary}`
@@ -291,7 +291,7 @@ async function enrichDocMemoriesWithFullContent(superMemoryResults: RelevantMemo
 
     // Create a map for quick lookup
     const fullContentMap = new Map(
-      fullDocuments.map(doc => [doc.uuid, { title: doc.title, content: doc.content_text }])
+      fullDocuments.map(doc => [doc.uuid, { title: doc.title, content: doc.content_text, uuid: doc.uuid }])
     );
 
     // Replace chunk content with full content
@@ -304,6 +304,7 @@ async function enrichDocMemoriesWithFullContent(superMemoryResults: RelevantMemo
           ...doc,
           title: fullDoc.title,
           content: fullDoc.content,
+          uuid: fullDoc.uuid
         };
       }
       

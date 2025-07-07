@@ -175,25 +175,29 @@ class SuperMemorySyncService {
       const enhancedContent = `# ${page.title}\n\n${markdownContent}`
 
       // Build hierarchical path tags for better organization
-      const pathTags = await this.buildPathTags(page.uuid)
+      const hierarchicalTags = await this.buildPathTags(page.uuid)
+      
+      // Combine 'docs' tag with hierarchical path tags, removing duplicates
+      const combinedTags = ['docs', ...hierarchicalTags]
+      const allTags = [...new Set(combinedTags)] // Remove duplicates
       
       if (syncStatus === 'never') {
         // First time sync - add to SuperMemory
-        this.logger.log(`Adding new document to SuperMemory: ${page.title}`)
+        this.logger.log(`Adding new document to SuperMemory: ${page.title}`, { tags: allTags })
         await superMemoryService.addDocument(
           page.uuid,
           enhancedContent,
           page.title,
-          pathTags
+          allTags
         )
       } else if (syncStatus === 'no') {
         // Update existing document in SuperMemory
-        this.logger.log(`Updating document in SuperMemory: ${page.title}`)
+        this.logger.log(`Updating document in SuperMemory: ${page.title}`, { tags: allTags })
         await superMemoryService.updateDocument(
           page.uuid,
           enhancedContent,
           page.title,
-          pathTags
+          allTags
         )
       }
 

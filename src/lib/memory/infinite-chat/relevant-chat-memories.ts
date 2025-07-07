@@ -1,7 +1,7 @@
 import { formatMemoryContext } from '@/lib/brainstorming';
 import { getRelevantChatMemories } from '@/lib/brainstorming/memory-context';
 import logger from '@/lib/logger';
-import { createClient } from '@/lib/supabase/supabase-client';
+import { createClient } from '@/lib/supabase/supabase-server';
 
 /**
  * Get conversation summary from metadata if available
@@ -14,7 +14,7 @@ export async function getConversationSummary(conversationId?: string): Promise<s
   }
 
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: conversation } = await supabase
       .from('conversations')
       .select('metadata')

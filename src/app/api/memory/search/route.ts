@@ -6,7 +6,7 @@ export const runtime = 'edge';
 
 export async function POST(request: NextRequest) {
   try {
-    const { query, limit = 10 } = await request.json()
+    const { query, limit = 5, tags } = await request.json()
 
     if (!query || !query.trim()) {
       return NextResponse.json({ error: 'Query is required' }, { status: 400 })
@@ -24,10 +24,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    console.log('Server-side memory service search for:', query)
+    console.log('Server-side memory service search for:', query, 'with tags:', tags)
 
-    // Perform the search using memory service abstraction
-    const results = await memoryService.search(query, user.id, limit)
+    // Perform the search using memory service abstraction with container tags
+    const results = await memoryService.search(query, user.id, limit, tags)
 
     return NextResponse.json({
       results: results,

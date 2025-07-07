@@ -54,6 +54,33 @@ export default function DocumentSearch({ onSelectDocument, onSearchResults, clas
     }
   }, [supabase])
 
+  // Search SuperMemory for semantic document matches
+  const searchSuperMemory = useCallback(async (query: string): Promise<SuperMemoryDocument[]> => {
+    try {
+      const response = await fetch('/api/memory/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query, limit: 5, tags: ['docs'] })
+      })
+
+      if (!response.ok) {
+        if (response.status === 503) {
+          console.log('SuperMemory not configured, skipping semantic search')
+          return []
+        }
+        throw new Error(`SuperMemory search failed: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      return data.results || []
+    } catch (error) {
+      console.error('Error searching SuperMemory:', error)
+      return []
+    }
+  }, [])
+
   // Combined search function with prioritization
   const performSearch = useCallback(async (query: string) => {
     if (!query.trim()) {
@@ -65,16 +92,42 @@ export default function DocumentSearch({ onSelectDocument, onSearchResults, clas
 
     setIsSearching(true)
     setHasSearched(true)
-    console.log('🔍 Performing local search for:', query)
+    console.log('🔍 Performing combined search for:', query)
 
     try {
-      // Only search local titles (no SuperMemory)
-      console.log('📝 Running local title search only...')
-      const localTitleMatches = await searchLocalTitles(query)
+      // Run both searches in parallel
+      console.log('📝 Running local title search and SuperMemory search...')
+      const [localTitleMatches, superMemoryResults] = await Promise.all([
+        searchLocalTitles(query),
+        searchSuperMemory(query)
+      ])
+
+      // Combine and deduplicate results
+      const allResults = [...localTitleMatches]
       
-      setSearchResults(localTitleMatches)
-      console.log('✅ Local search results:', {
-        localTitleMatches: localTitleMatches.length
+      // Add SuperMemory results that don't already exist in local title matches
+      superMemoryResults.forEach(smResult => {
+        const existsInLocal = localTitleMatches.some(local => 
+          local.metadata?.pageUuid === smResult.metadata?.pageUuid ||
+          local.id === smResult.id
+        )
+        if (!existsInLocal) {
+          allResults.push(smResult)
+        }
+      })
+
+      // Sort by relevance (local title matches first, then by score)
+      allResults.sort((a, b) => {
+        if (a.metadata?.isLocalTitleMatch && !b.metadata?.isLocalTitleMatch) return -1
+        if (!a.metadata?.isLocalTitleMatch && b.metadata?.isLocalTitleMatch) return 1
+        return (b.score || 0) - (a.score || 0)
+      })
+      
+      setSearchResults(allResults.slice(0, 10)) // Limit to 10 results
+      console.log('✅ Combined search results:', {
+        localTitleMatches: localTitleMatches.length,
+        superMemoryResults: superMemoryResults.length,
+        totalResults: allResults.length
       })
     } catch (error) {
       console.error('Search error:', error)
@@ -82,7 +135,7 @@ export default function DocumentSearch({ onSelectDocument, onSearchResults, clas
     } finally {
       setIsSearching(false)
     }
-  }, [searchLocalTitles])
+  }, [searchLocalTitles, searchSuperMemory])
 
   // Debounce search
   useEffect(() => {

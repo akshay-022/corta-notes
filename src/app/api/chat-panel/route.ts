@@ -4,7 +4,7 @@ import { formatMemoryContext, type RelevantMemory } from '@/lib/brainstorming';
 import { EDITOR_FUNCTIONS, executeEditorFunctionServerSide, EditorFunctionCall } from '@/lib/brainstorming/apply-to-editor/editorFunctions';
 import logger from '@/lib/logger';
 import { createClient } from '@/lib/supabase/supabase-server';
-import { BRAINSTORMING_SYSTEM_PROMPT, BRAINSTORMING_FUNCTION_CALLING_RULES } from '@/lib/promptTemplates';
+import { BRAINSTORMING_SYSTEM_PROMPT, BRAINSTORMING_FUNCTION_CALLING_RULES, AGGRESSIVE_PAGE_LINKING_PROMPT } from '@/lib/promptTemplates';
 import { createSupermemoryClient, isSupermemoryConfigured, injectRelevantMemories, getConversationSummary } from '@/lib/memory/infinite-chat';
 import { updateConversationSummary } from '@/lib/memory/chat-summaries/utils';
 import { getRelevantDocMemories, getRelevantChatMemories } from '@/lib/brainstorming/memory-context';
@@ -179,7 +179,7 @@ async function handleUnifiedStreamingRequest(params: {
       ]);
       // Format the memories into strings
       const chatMemoriesString = relevantChatMemories.map((memory: any) => `- ${memory.title}: ${memory.content}`).join('\n');
-      const docMemoriesString = relevantDocMemories.map((memory: any) => `- ${memory.title}: ${memory.content}`).join('\n');  
+      const docMemoriesString = relevantDocMemories.map((memory: any) => `- ${memory.title} - UUID : ${memory.uuid}: \n${memory.content}`).join('\n');  
       enhancedCurrentMessage = enhancedCurrentMessage + 'CHAT MEMORIES:\n' + chatMemoriesString + 'DOCUMENT MEMORIES:\n' + docMemoriesString;
     } catch (error) {
       logger.error('Failed to inject cross-conversation memories', { error });
@@ -190,6 +190,8 @@ async function handleUnifiedStreamingRequest(params: {
     let systemMessage = `${BRAINSTORMING_SYSTEM_PROMPT}
 
 You are a helpful AI assistant specialising in brainstorming and structured thinking. Turn scattered sparks into clear, connected insights **without overwhelming the user**.
+
+${AGGRESSIVE_PAGE_LINKING_PROMPT}
 
 ${currentPageUuid ? `CURRENT PAGE UUID: ${currentPageUuid}` : 'No page context available'}`;
 

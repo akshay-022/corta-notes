@@ -55,17 +55,29 @@ async function callLLM(prompt: string): Promise<Suggestion[]> {
   const models = ['gpt-4o']
   for (const model of models) {
     try {
-      const res = await fetch('/api/llm', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, model }),
-      })
-      if (!res.ok) {
-        const text = await res.text()
-        logger.warn(`LLM (${model}) HTTP ${res.status}`, { text })
-        continue
+      let response: string
+      
+      // Check if we're server-side or client-side
+      if (typeof window === 'undefined') {
+        // Server-side: use direct OpenAI client
+        const { callLLM: callLLMService } = await import('@/lib/llm/callLLM')
+        response = await callLLMService({ model, prompt })
+      } else {
+        // Client-side: use fetch to API route
+        const res = await fetch('/api/llm', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt, model }),
+        })
+        if (!res.ok) {
+          const text = await res.text()
+          logger.warn(`LLM (${model}) HTTP ${res.status}`, { text })
+          continue
+        }
+        const data = await res.json()
+        response = data.response
       }
-      const { response } = await res.json()
+      
       const cleaned = (response as string)
         .replace(/^```json\s*/i, '')
         .replace(/^```\s*/i, '')
@@ -80,9 +92,9 @@ async function callLLM(prompt: string): Promise<Suggestion[]> {
   return []
 }
 
-async function getFileTreeContext() {
+async function getFileTreeContext(supabaseClient?: any) {
   try {
-    const supabase = createClient()
+    const supabase = supabaseClient || createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user?.id) return ''
 
@@ -102,7 +114,7 @@ async function getFileTreeContext() {
 
     // Build map for quick lookup
     const byId: Record<string, OrganizedPageSlim> = {}
-    all.forEach((p) => {
+    all.forEach((p: any) => {
       byId[p.uuid] = p
     })
 
@@ -225,13 +237,14 @@ export type { Suggestion }
  */
 export async function suggestPathsRelevantToSummary(
   summaryText: string,
-  maxResults: number = 5
+  maxResults: number = 5,
+  supabaseClient?: any
 ): Promise<Suggestion[]> {
   try {
     console.log('Finding paths relevant to summary:', { summaryLength: summaryText.length })
     
     // Get file tree context
-    const fileTreeContext = await getFileTreeContext()
+    const fileTreeContext = await getFileTreeContext(supabaseClient)
     
     // Build a simplified prompt for summary-based path finding
     const prompt = `You are an expert at organizing notes using the PARA method.
@@ -250,8 +263,8 @@ TASK: Suggest the TOP ${maxResults} MOST RELEVANT *EXISTING* LOCATIONS where con
 
 OUTPUT: A JSON array ONLY in this shape (no markdown fences):
 [
-  { "targetFilePath": "/Projects/Corta (folder)", "relevance": 0.97 },
-  { "targetFilePath": "/Resources/Books (folder)", "relevance": 0.85 }
+  { "targetFilePath": "/Projects/Corta", "relevance": 0.97 },
+  { "targetFilePath": "/Resources/Books", "relevance": 0.85 }
 ]`
 
     // Call LLM to get suggestions

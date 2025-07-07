@@ -1,6 +1,7 @@
-import { createClient } from '@/lib/supabase/supabase-client';
+import { createClient } from '@/lib/supabase/supabase-server';
 import { callLLM } from '@/lib/llm/callLLM';
 import logger from '@/lib/logger';
+import { suggestPathsRelevantToSummary } from '@/lib/utils/pathSuggestionHelper';
 
 /**
  * Update conversation summary in metadata asynchronously
@@ -25,7 +26,7 @@ export async function updateConversationSummary(
     }
 
     // Get current summary from conversations table
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: conversation, error: fetchError } = await supabase
       .from('conversations')
       .select('metadata')
@@ -73,6 +74,28 @@ Summary:`;
     // Clean up the summary (remove any extra formatting)
     const cleanedSummary = newSummary.trim().replace(/^Summary:\s*/i, '');
 
+    // Get relevant folders for the summary
+    logger.info('Getting relevant folders for conversation summary', { conversationId, summaryLength: cleanedSummary.length });
+
+    // Get relevant folders for the summary
+    const prompt_for_folder_suggestions = `
+    You are a helpful assistant that suggests relevant folders for a conversation summary.
+    The summary is: ${cleanedSummary}
+
+    Be liberal with the folders you suggest. Try to cover most places where relevant stuff will be there. But don't suggest unnecessary folders.
+    You must ONLY return FOLDERS. NOT FILES. Also, you must make it so that if you're recommending Projects/Corta/Features, Projects/Corta/Ideas, Projects/Corta/Your MVP etc many times for example
+    , you just return Projects/Corta.
+
+    Return less, and not overlapping as much as possible. 
+    `
+    const relevantFolders = await suggestPathsRelevantToSummary(prompt_for_folder_suggestions, 5, supabase);
+    
+    logger.info('Found relevant folders for conversation', { 
+      conversationId, 
+      folderCount: relevantFolders.length,
+      folders: relevantFolders.map(f => f.targetFilePath)
+    });
+
     // Update metadata in conversations table
     const { error: updateError } = await supabase
       .from('conversations')
@@ -80,6 +103,7 @@ Summary:`;
         metadata: {
           ...conversationMetadata,
           summary: cleanedSummary,
+          relevantFolders: relevantFolders,
           lastUpdated: new Date().toISOString()
         }
       })
@@ -94,7 +118,9 @@ Summary:`;
         userId,
         summaryLength: cleanedSummary.length,
         summary: cleanedSummary,
-        hasPageContent: !!currentPageContent
+        hasPageContent: !!currentPageContent,
+        relevantFoldersCount: relevantFolders.length,
+        relevantFolders: relevantFolders.map(f => f.targetFilePath)
       });
     }
 

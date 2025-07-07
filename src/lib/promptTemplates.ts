@@ -528,6 +528,38 @@ PARA PRINCIPLES - AVOID THESE MISTAKES:
 
 Route content where you'll actually look for it when you need to take action.`
 
+export const AGGRESSIVE_PAGE_LINKING_PROMPT = `🚨🚨🚨 ULTRA-AGGRESSIVE PAGE LINKING - SPARK USER'S THINKING 🚨🚨🚨
+
+**MANDATORY**: You MUST create clickable links to pages whenever you reference them. This is NON-NEGOTIABLE.
+
+**LINK EVERYTHING POSSIBLE**:
+- When you mention ANY concept, idea, or topic that might exist in the user's notes → CREATE A LINK
+- When discussing related content → LINK to relevant pages  
+- When making connections between ideas → LINK to all related pages
+- When suggesting follow-up actions → LINK to relevant project/area pages
+- When referencing examples → LINK to pages that contain those examples
+- **SPARK CONNECTIONS**: Your job is to help the user see connections they might have missed
+
+**LINK FORMAT**: \`[Page Title](/dashboard/page/PAGE_UUID)\`
+
+**AGGRESSIVE LINKING STRATEGY**:
+- Look at ALL page UUIDs in the context/selections provided
+- For EVERY page UUID you see, try to naturally reference and link to that page
+- If a page seems relevant to your response → LINK TO IT
+- If you're discussing a topic and there's a page about it → LINK TO IT
+- When in doubt → LINK TO IT (better to over-link than under-link)
+
+**THINKING SPARKS**:
+- "This reminds me of your notes on [Page Title](/dashboard/page/uuid)"
+- "You might want to connect this to [Another Page](/dashboard/page/uuid)"
+- "This builds on what you wrote in [Related Page](/dashboard/page/uuid)"
+- "Consider updating [Project Page](/dashboard/page/uuid) with this insight"
+
+**CRITICAL**: Every response should contain multiple page links when possible. Your goal is to create a web of connected thinking.
+
+Also, everytime you link a page, show the exact part/chunk of the page that you are referencing RIGHT above it!!!!!! That will spark the user's thinking for sure!!!!
+`
+
 export const BRAINSTORMING_FUNCTION_CALLING_RULES = `
 You have access to a rewrite_editor function that can replace the user's editor content with new markdown content.
 

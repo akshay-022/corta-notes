@@ -58,8 +58,9 @@ async function addDocument(pageUuid: string, content: string, title: string, use
   console.log('Adding document via memory service:', { pageUuid, title, tags })
 
   try {
-    // Combine 'docs' tag with hierarchical path tags
-    const containerTags = ['docs', ...(tags || [])]
+    // Combine 'docs' tag with hierarchical path tags, removing duplicates
+    const allTags = ['docs', ...(tags || [])]
+    const containerTags = [...new Set(allTags)] // Remove duplicates
     
     // Add to memory service with metadata and container tags
     const response = await memoryService.add(content, title, userId, {
