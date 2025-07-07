@@ -5,7 +5,7 @@ import { EDITOR_FUNCTIONS, executeEditorFunctionServerSide, EditorFunctionCall }
 import logger from '@/lib/logger';
 import { createClient } from '@/lib/supabase/supabase-server';
 import { BRAINSTORMING_SYSTEM_PROMPT, BRAINSTORMING_FUNCTION_CALLING_RULES, AGGRESSIVE_PAGE_LINKING_PROMPT } from '@/lib/promptTemplates';
-import { createSupermemoryClient, isSupermemoryConfigured, injectRelevantMemories, getConversationSummary } from '@/lib/memory/infinite-chat';
+import { createSupermemoryClient, isSupermemoryConfigured } from '@/lib/memory/infinite-chat';
 import { updateConversationSummary } from '@/lib/memory/chat-summaries/utils';
 import { getRelevantDocMemories, getRelevantChatMemories } from '@/lib/brainstorming/memory-context';
 import { getConversationMetadata } from '@/lib/memory/infinite-chat/relevant-chat-memories';
