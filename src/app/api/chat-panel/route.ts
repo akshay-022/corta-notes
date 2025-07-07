@@ -8,6 +8,7 @@ import { BRAINSTORMING_SYSTEM_PROMPT, BRAINSTORMING_FUNCTION_CALLING_RULES, AGGR
 import { createSupermemoryClient, isSupermemoryConfigured, injectRelevantMemories, getConversationSummary } from '@/lib/memory/infinite-chat';
 import { updateConversationSummary } from '@/lib/memory/chat-summaries/utils';
 import { getRelevantDocMemories, getRelevantChatMemories } from '@/lib/brainstorming/memory-context';
+import { getConversationMetadata } from '@/lib/memory/infinite-chat/relevant-chat-memories';
 
 export const runtime = 'edge';
 
@@ -171,16 +172,35 @@ async function handleUnifiedStreamingRequest(params: {
 
     // Inject relevant memories from previous conversations before sending to supermemory
     try {
-      const conversationSummary = await getConversationSummary(conversationId);
+      const {summary, relevantFolders} = await getConversationMetadata(conversationId);
+
+      // Convert relevantFolders to just paths - clean up slashes and file suffixes
+      const relevantPaths = relevantFolders?.map((folder: any) => {
+        let path = folder.targetFilePath;
+        // Remove leading slash
+        // Remove "(file)" suffix
+        path = path.replace(/\s*\(file\)$/, '');
+        path = path.replace(/\s*\(folder\)$/, '');
+
+        if (path.startsWith('/')) {
+          path = path.slice(1);
+        }
+        // Remove trailing slash
+        if (path.endsWith('/')) {
+          path = path.slice(0, -1);
+        }
+        return path;
+      }) || [];
+
       // await both responses
       const [relevantChatMemories, relevantDocMemories] = await Promise.all([
-        getRelevantChatMemories(currentMessage, conversationSummary, 5),
-        getRelevantDocMemories(currentMessage, conversationSummary, 5)
+        getRelevantChatMemories(currentMessage, summary, 5),
+        getRelevantDocMemories(currentMessage, summary, 5, relevantPaths)
       ]);
       // Format the memories into strings
       const chatMemoriesString = relevantChatMemories.map((memory: any) => `- ${memory.title}: ${memory.content}`).join('\n');
       const docMemoriesString = relevantDocMemories.map((memory: any) => `- ${memory.title} - UUID : ${memory.uuid}: \n${memory.content}`).join('\n');  
-      enhancedCurrentMessage = enhancedCurrentMessage + 'CHAT MEMORIES:\n' + chatMemoriesString + 'DOCUMENT MEMORIES:\n' + docMemoriesString;
+       enhancedCurrentMessage = enhancedCurrentMessage + 'CHAT MEMORIES:\n' + chatMemoriesString + 'DOCUMENT MEMORIES:\n' + docMemoriesString;
     } catch (error) {
       logger.error('Failed to inject cross-conversation memories', { error });
       // Continue with original message if memory injection fails

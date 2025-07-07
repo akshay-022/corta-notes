@@ -86,7 +86,8 @@ Summary:`;
     You must ONLY return FOLDERS. NOT FILES. Also, you must make it so that if you're recommending Projects/Corta/Features, Projects/Corta/Ideas, Projects/Corta/Your MVP etc many times for example
     , you just return Projects/Corta.
 
-    Return less, and not overlapping as much as possible. 
+    Return less, and not overlapping as much as possible. Also try to be more liberal with the folders you suggest. Like suggest Projects/Corta not Projects/Corta/Your MVP/Things to do/Todays date. You MUST NOT be hyperspecific. 
+    Just return the overall folder vibes.
     `
     const relevantFolders = await suggestPathsRelevantToSummary(prompt_for_folder_suggestions, 5, supabase);
     

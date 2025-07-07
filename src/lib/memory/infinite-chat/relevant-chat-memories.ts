@@ -8,9 +8,9 @@ import { createClient } from '@/lib/supabase/supabase-server';
  * @param conversationId - Conversation ID
  * @returns Conversation summary or empty string if not found
  */
-export async function getConversationSummary(conversationId?: string): Promise<string> {
+export async function getConversationMetadata(conversationId?: string): Promise<{summary: string, relevantFolders: any}> {
   if (!conversationId) {
-    return '';
+    return {summary: '', relevantFolders: []};
   }
 
   try {
@@ -23,6 +23,7 @@ export async function getConversationSummary(conversationId?: string): Promise<s
     
     const conversationMetadata = conversation?.metadata as any;
     const summary = conversationMetadata?.summary;
+    const relevantFolders = conversationMetadata?.relevantFolders;
     
     if (summary) {
       logger.info('Retrieved conversation summary', { 
@@ -31,9 +32,9 @@ export async function getConversationSummary(conversationId?: string): Promise<s
       });
     }
     
-    return summary || '';
+    return {summary, relevantFolders};
   } catch (error) {
     logger.error('Failed to get conversation summary', { error, conversationId });
-    return '';
+    return {summary: '', relevantFolders: []};
   }
 }

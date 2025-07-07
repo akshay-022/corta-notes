@@ -708,8 +708,8 @@ export default function Sidebar({
               </button>
             </div>
 
-            {/* Sync Button */}
-            <div className="pb-2">
+            {/* Sync Button - Commented out since auto-sync is now enabled */}
+            {/* <div className="pb-2">
               <button
                 onClick={onManualSync}
                 className="w-full bg-transparent hover:bg-[#2a2a2a] text-[#cccccc] rounded-lg py-1 text-sm flex items-center gap-1 transition-all duration-200"
@@ -721,7 +721,7 @@ export default function Sidebar({
                 </div>
                 <span className="ml-1 text-[#969696]">Sync to Memory</span>
               </button>
-            </div>
+            </div> */}
 
             {/* Export Button */}
             <div className="pb-4">

@@ -151,6 +151,15 @@ export default function DashboardSidebarProvider({ children }: { children: React
         if (pagesData) {
           logger.info('Pages loaded successfully', { count: pagesData.length })
           setPages(pagesData)
+          
+          // 4. Auto-sync to SuperMemory in the background
+          logger.info('Starting auto-sync to SuperMemory...')
+          try {
+            await superMemorySyncService.syncAllPending(pagesData)
+            logger.info('✅ Auto-sync to SuperMemory completed')
+          } catch (error) {
+            logger.error('❌ Auto-sync to SuperMemory failed:', error)
+          }
         }
 
         setLoading(false)

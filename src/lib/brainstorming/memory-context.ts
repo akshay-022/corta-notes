@@ -138,7 +138,8 @@ export async function getRelevantChatMemories(
 export async function getRelevantDocMemories(
   userQuestion: string,
   conversationSummary: string,
-  maxResults: number = 5
+  maxResults: number = 5,
+  relevantPaths: any[] = []
 ): Promise<RelevantMemory[]> {
   try {
     // Check if memory service is configured
@@ -159,7 +160,7 @@ export async function getRelevantDocMemories(
     }
 
     // Search SuperMemory for relevant documents
-    const searchResults = await memoryService.search(userQuestion + ' ' + conversationSummary, user.id, maxResults, ['docs'])
+    const searchResults = await memoryService.search(userQuestion + ' ' + conversationSummary, user.id, maxResults, ['docs', ...relevantPaths])
 
     if (!searchResults || searchResults.length === 0) {
       console.log('No document memory search results found')
