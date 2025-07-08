@@ -19,6 +19,7 @@ import { QuickOpenProvider } from './folder-tagging-for-ai/QuickOpenContext'
 import QuickOpenPalette from './folder-tagging-for-ai/QuickOpenPalette'
 import { ChatInputWrapper } from './folder-tagging-for-ai/ChatInputWrapper'
 import ModelSelector from './ModelSelector'
+import { storeContextPreferenceInDB, storeContextPreferenceInSupermemory } from '@/lib/self-improvements/deciding-relevant-context'
 
 // Simple selection object type
 type SelectionObject = {
@@ -856,6 +857,61 @@ const ChatPanelInner = memo(forwardRef<ChatPanelHandle, Props>(function ChatPane
         false,
         assistantMetadata
       )
+
+      // Store context preference for self-improvement (in background)
+      if (relevantDocuments.length > 0) {
+        logger.info('Storing context preference for self-improvement', {
+          queryLength: userMessageContent.length,
+          relevantDocsCount: relevantDocuments.length,
+          hasCurrentPage: !!currentPage,
+          hasActiveConversation: !!activeConversation
+        })
+        
+        // Extract data for context preference storage
+        const pageUuids = relevantDocuments.map(doc => doc.pageUuid).filter((uuid): uuid is string => Boolean(uuid))
+        const paths = relevantDocuments.map(doc => doc.title).filter(Boolean)
+        const editorText = currentPage?.content_text || ''
+        
+        // Get conversation summary from metadata
+        const conversationMetadata = activeConversation?.metadata as any
+        const conversationSummary = conversationMetadata?.summary || ''
+        
+        logger.info('Context preference data extracted', {
+          queryLength: userMessageContent.length,
+          conversationSummaryLength: conversationSummary.length,
+          editorTextLength: editorText.length,
+          pageUuidsCount: pageUuids.length,
+          pathsCount: paths.length
+        })
+        
+        // Store in database (client-side) - runs in background
+        storeContextPreferenceInDB(
+          userMessageContent,
+          conversationSummary,
+          editorText,
+          pageUuids,
+          paths
+        ).catch((err: any) => {
+          logger.error('Failed to store context preference in database', { 
+            error: err,
+            queryLength: userMessageContent.length
+          })
+        })
+        
+        // Store in SuperMemory (via API) - runs in background
+        storeContextPreferenceInSupermemory(
+          userMessageContent,
+          conversationSummary,
+          editorText,
+          pageUuids,
+          paths
+        ).catch((err: any) => {
+          logger.error('Failed to store context preference in SuperMemory', { 
+            error: err,
+            queryLength: userMessageContent.length
+          })
+        })
+      }
 
     } catch (error) {
       console.error("Error calling LLM API:", error)

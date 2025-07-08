@@ -19,6 +19,7 @@ import { DateDividerPlugin } from '@/lib/organized-notes-formatting/dateDividerP
 import { NodeMetadata } from '@/lib/tiptap/NodeMetadata'
 import { FormattingBubbleMenu } from '@/lib/tiptap/FormattingBubbleMenu'
 import { suggestDestinationsForPage, Suggestion, readCache } from '@/lib/utils/pathSuggestionHelper'
+import { storeRoutingPreferenceInDB } from '@/lib/self-improvements/routing'
 
 interface TipTapEditorProps {
   page: Page
@@ -428,6 +429,32 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
           organizationRules: organizationRules.trim()
         })
       })
+
+      // Store routing preference for self-improvement (right after API call is initiated)
+      if (routingInstructions.trim()) {
+        logger.info('📚 Storing routing preference for self-improvement', {
+          pageUuid: page.uuid.substring(0, 8),
+          hasInstructions: true
+        })
+        
+        // Store the routing preference in background (don't await to avoid blocking)
+        const routingData = {
+          editorText: contentText,
+          title: page.title,
+          instruction: routingInstructions.trim(),
+          summary: typeof page.page_summary === 'string' ? page.page_summary : undefined,
+          pageUuid: page.uuid
+          // organizedPageUuid will be set later when we know the result
+        }
+        
+        // Store in database (client-side)
+        storeRoutingPreferenceInDB(routingData).catch((err: any) => {
+          logger.error('Failed to store routing preference in database', { 
+            error: err,
+            pageUuid: page.uuid.substring(0, 8)
+          })
+        })
+      }
 
       if (response.status === 202) {
         logger.info('Received 202 response from organize API, refreshing sidebar/file tree')

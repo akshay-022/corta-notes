@@ -1,6 +1,6 @@
 import { BubbleMenu } from '@tiptap/react'
 import { Editor } from '@tiptap/core'
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough } from 'lucide-react'
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Heading1, Heading2, Heading3 } from 'lucide-react'
 import clsx from 'clsx'
 
 interface Props {
@@ -62,6 +62,29 @@ export const FormattingBubbleMenu = ({ editor }: Props) => {
         active={editor.isActive('strike')}
         icon={Strikethrough}
         tooltip="Strikethrough (⌘/Ctrl+Shift+S)"
+      />
+      
+      {/* Separator */}
+      <div className="w-px h-4 bg-gray-600 mx-1" />
+      
+      {/* Heading buttons */}
+      <Button
+        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+        active={editor.isActive('heading', { level: 1 })}
+        icon={Heading1}
+        tooltip="Heading 1 (⌘/Ctrl+Alt+1)"
+      />
+      <Button
+        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+        active={editor.isActive('heading', { level: 2 })}
+        icon={Heading2}
+        tooltip="Heading 2 (⌘/Ctrl+Alt+2)"
+      />
+      <Button
+        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+        active={editor.isActive('heading', { level: 3 })}
+        icon={Heading3}
+        tooltip="Heading 3 (⌘/Ctrl+Alt+3)"
       />
     </BubbleMenu>
   )

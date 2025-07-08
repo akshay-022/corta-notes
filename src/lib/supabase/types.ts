@@ -219,6 +219,96 @@ export type Database = {
         }
         Relationships: []
       }
+      routingPreferences: {
+        Row: {
+          id: string
+          user_id: string
+          editor_text: string | null
+          title: string | null
+          instruction: string | null
+          summary: string | null
+          page_uuid: string | null
+          organized_page_uuid: string | null
+          lastUpdated: string
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          editor_text?: string | null
+          title?: string | null
+          instruction?: string | null
+          summary?: string | null
+          page_uuid?: string | null
+          organized_page_uuid?: string | null
+          lastUpdated?: string
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          editor_text?: string | null
+          title?: string | null
+          instruction?: string | null
+          summary?: string | null
+          page_uuid?: string | null
+          organized_page_uuid?: string | null
+          lastUpdated?: string
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "routingPreferences_page_uuid_fkey"
+            columns: ["page_uuid"]
+            isOneToOne: false
+            referencedRelation: "pages"
+            referencedColumns: ["uuid"]
+          },
+          {
+            foreignKeyName: "routingPreferences_organized_page_uuid_fkey"
+            columns: ["organized_page_uuid"]
+            isOneToOne: false
+            referencedRelation: "pages"
+            referencedColumns: ["uuid"]
+          },
+        ]
+      }
+      contextPreferences: {
+        Row: {
+          id: string
+          user_id: string
+          query: string | null
+          editor_text: string | null
+          summary: string | null
+          page_uuids: string[] | null
+          paths: string[] | null
+          lastUpdated: string
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          query?: string | null
+          editor_text?: string | null
+          summary?: string | null
+          page_uuids?: string[] | null
+          paths?: string[] | null
+          lastUpdated?: string
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          query?: string | null
+          editor_text?: string | null
+          summary?: string | null
+          page_uuids?: string[] | null
+          paths?: string[] | null
+          lastUpdated?: string
+          created_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -440,3 +530,11 @@ export type ChatMessageUpdate = TablesUpdate<'chat_messages'>
 export type Profile = Tables<'profiles'>
 export type ProfileInsert = TablesInsert<'profiles'>
 export type ProfileUpdate = TablesUpdate<'profiles'>
+
+export type RoutingPreference = Tables<'routingPreferences'>
+export type RoutingPreferenceInsert = TablesInsert<'routingPreferences'>
+export type RoutingPreferenceUpdate = TablesUpdate<'routingPreferences'>
+
+export type ContextPreference = Tables<'contextPreferences'>
+export type ContextPreferenceInsert = TablesInsert<'contextPreferences'>
+export type ContextPreferenceUpdate = TablesUpdate<'contextPreferences'>
