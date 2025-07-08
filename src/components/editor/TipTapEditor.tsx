@@ -1320,7 +1320,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
               <textarea
                 value={organizationRules}
                 onChange={(e) => setOrganizationRules(e.target.value)}
-                placeholder="e.g., 'Group similar ideas together', 'Keep urgent items at the top', 'Separate technical notes from personal thoughts'..."
+                placeholder="e.g., 'Group similar ideas together', 'Do not repeat anything', 'Very concise list of tasks, no fluff'..."
                 className="w-full h-40 bg-[#1a1a1a] border border-gray-600 rounded p-3 text-gray-200 text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none"
               />
             </div>
