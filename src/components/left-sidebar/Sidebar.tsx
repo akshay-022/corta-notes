@@ -970,13 +970,14 @@ export default function Sidebar({
               <div className="px-4 pb-2 flex-shrink-0">
                 <div className="flex items-center justify-between">
                   <h3 className="text-[#969696] text-xs font-medium uppercase tracking-wider">Auto-organized notes</h3>
-                  <button
+                  {/* Global organization instructions button - commented out, keeping user instructions in upload dialog */}
+                  {/* <button
                     onClick={openGlobalOrganizationRules}
                     className="text-[#969696] hover:text-[#cccccc] transition-colors p-1 rounded hover:bg-[#2a2d2e]"
                     title="Edit global organization instructions"
                   >
                     <Edit size={12} />
-                  </button>
+                  </button> */}
                 </div>
               </div>
 
