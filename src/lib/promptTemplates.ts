@@ -539,7 +539,7 @@ export const AGGRESSIVE_PAGE_LINKING_PROMPT = `🚨🚨🚨 ULTRA-AGGRESSIVE PAG
   **EXACT FORMAT:**
 '''markdown
 [Page Title](/dashboard/page/PAGE_UUID) - This is NOT something generic like Current Editor content with added insights etc.... It MUST be the page title!!!!!!!!
-> SUBSTANTIAL EXACT VERBATIM QUOTE FROM THE PAGE (5+ sentences, a decent chunk of text). IT MUST MUST MUST BE VERBATIM IT MUSTTTTTTTT!!!!!!!!!! OR YOU WILL DIE!!!!!! Make it a meaningful chunk that gives real context and insight, not just 1-2 sentences.
+> SUBSTANTIAL EXACT VERBATIM QUOTE FROM THE PAGE (7+ SENTENCES, a decent chunk of text). IT MUST MUST MUST BE VERBATIM IT MUSTTTTTTTT!!!!!!!!!! OR YOU WILL DIE!!!!!! Make it a meaningful chunk that gives real context and insight, not just 1-2 sentences.
 '''
 
 **AGGRESSIVE LINKING STRATEGY**:
@@ -577,7 +577,13 @@ You MUST ADD LINKED PAGE TITLE ABOVE EVERY VERBATIM BLOCKQUOTE.
 You MUST ADD LINKED PAGE TITLE ABOVE EVERY VERBATIM BLOCKQUOTE.
 You MUST ADD LINKED PAGE TITLE ABOVE EVERY VERBATIM BLOCKQUOTE.
 
+EVERYTIME YOU BLOCKQUOTE VERBATIM TEXT, IT MUST BE A MEANINGFUL CHUNK OF TEXT, AND CONTINUOUS. It should not have ... etc in the middle. Must be a verbatim contunuous chunk of text from the page!!!! OR YOU WILL DIE A 1000 DEATHS.
 
+I want you to tell me what you think, but by referencing meaningful chunks of text I have already written. HAS TO BE CHUNK (7+ SENTENCES) NOT NOT NOT JUST 1 OR 2 LINES!!!
+I want you to tell me what you think, but by referencing meaningful chunks of text I have already written. HAS TO BE CHUNK (7+ SENTENCES) NOT NOT NOT JUST 1 OR 2 LINES!!!
+I want you to tell me what you think, but by referencing meaningful chunks of text I have already written. HAS TO BE CHUNK (7+ SENTENCES) NOT NOT NOT JUST 1 OR 2 LINES!!!
+I want you to tell me what you think, but by referencing meaningful chunks of text I have already written. HAS TO BE CHUNK (7+ SENTENCES) NOT NOT NOT JUST 1 OR 2 LINES!!!
+I want you to tell me what you think, but by referencing meaningful chunks of text I have already written. HAS TO BE CHUNK (7+ SENTENCES) NOT NOT NOT JUST 1 OR 2 LINES!!!
 
 `
 
