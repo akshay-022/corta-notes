@@ -1314,7 +1314,7 @@ export default function TipTapEditor({ page, onUpdate, allPages = [], pageRefres
             
             <div className="mb-4">
               <p className="text-sm text-gray-300 mb-3">
-                Define how this page should be organized. These rules will guide the AI when organizing content from this page.
+                Tell how you want this page to look, what kind of writing (straightforward bullets, explanations, toggles etc).
               </p>
               
               <textarea
