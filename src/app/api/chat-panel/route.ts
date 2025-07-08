@@ -199,7 +199,32 @@ async function handleUnifiedStreamingRequest(params: {
       ]);
       // Format the memories into strings
       const chatMemoriesString = relevantChatMemories.map((memory: any) => `- ${memory.title}: ${memory.content}`).join('\n');
-      const docMemoriesString = relevantDocMemories.map((memory: any) => `- ${memory.title} - UUID : ${memory.uuid}: \n${memory.content}`).join('\n');  
+      // Flatten chunks - each chunk becomes its own memory entry
+      const flattenedDocMemories = relevantDocMemories.flatMap((memory: any) => {
+        if (memory.chunks && memory.chunks.length > 0) {
+          // Create separate entries for each chunk
+          return memory.chunks
+            .filter((chunk: any) => chunk.isRelevant)
+            .map((chunk: any) => ({
+              title: memory.title,
+              uuid: memory.uuid,
+              content: chunk.content,
+              score: chunk.score,
+              position: chunk.position
+            }));
+        } else if (memory.chunk_content) {
+          // Fallback to chunk_content if chunks array not available
+          return [{
+            title: memory.title,
+            uuid: memory.uuid,
+            content: memory.chunk_content,
+            score: memory.score
+          }];
+        }
+        return []; // Skip if no chunk content
+      });
+
+      const docMemoriesString = flattenedDocMemories.map((memory: any) => `- ${memory.title} - UUID : ${memory.uuid}: \n${memory.content}`).join('\n');  
        enhancedCurrentMessage = enhancedCurrentMessage + 'CHAT MEMORIES:\n' + chatMemoriesString + 'DOCUMENT MEMORIES:\n' + docMemoriesString;
     } catch (error) {
       logger.error('Failed to inject cross-conversation memories', { error });

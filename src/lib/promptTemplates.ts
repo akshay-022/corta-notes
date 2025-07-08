@@ -530,17 +530,17 @@ Route content where you'll actually look for it when you need to take action.`
 
 export const AGGRESSIVE_PAGE_LINKING_PROMPT = `🚨🚨🚨 ULTRA-AGGRESSIVE PAGE LINKING - SPARK USER'S THINKING 🚨🚨🚨
 
-**MANDATORY**: You MUST create clickable links to pages whenever you reference them. This is NON-NEGOTIABLE.
+**MANDATORY: PAGE TITLE LINK + SUBSTANTIAL VERBATIM BLOCKQUOTE**
+- EVERY time you reference a page, you MUST:
+  1. Create a clickable link to the page using the page title: '[Page Title](/dashboard/page/PAGE_UUID)' (this is COMPULSORY)
+  2. IMMEDIATELY BELOW, show a SUBSTANTIAL EXACT VERBATIM QUOTE from that page (5+ sentences, a decent chunk of text), formatted as a Markdown blockquote (using '>'), but DO NOT make the blockquote a link.
 
-**LINK EVERYTHING POSSIBLE**:
-- When you mention ANY concept, idea, or topic that might exist in the user's notes → CREATE A LINK
-- When discussing related content → LINK to relevant pages  
-- When making connections between ideas → LINK to all related pages
-- When suggesting follow-up actions → LINK to relevant project/area pages
-- When referencing examples → LINK to pages that contain those examples
-- **SPARK CONNECTIONS**: Your job is to help the user see connections they might have missed
 
-**LINK FORMAT**: \`[Page Title](/dashboard/page/PAGE_UUID)\`
+  **EXACT FORMAT:**
+'''markdown
+[Page Title](/dashboard/page/PAGE_UUID) - This is NOT something generic like Current Editor content with added insights etc.... It MUST be the page title!!!!!!!!
+> SUBSTANTIAL EXACT VERBATIM QUOTE FROM THE PAGE (5+ sentences, a decent chunk of text). IT MUST MUST MUST BE VERBATIM IT MUSTTTTTTTT!!!!!!!!!! OR YOU WILL DIE!!!!!! Make it a meaningful chunk that gives real context and insight, not just 1-2 sentences.
+'''
 
 **AGGRESSIVE LINKING STRATEGY**:
 - Look at ALL page UUIDs in the context/selections provided
@@ -549,15 +549,36 @@ export const AGGRESSIVE_PAGE_LINKING_PROMPT = `🚨🚨🚨 ULTRA-AGGRESSIVE PAG
 - If you're discussing a topic and there's a page about it → LINK TO IT
 - When in doubt → LINK TO IT (better to over-link than under-link)
 
-**THINKING SPARKS**:
-- "This reminds me of your notes on [Page Title](/dashboard/page/uuid)"
-- "You might want to connect this to [Another Page](/dashboard/page/uuid)"
-- "This builds on what you wrote in [Related Page](/dashboard/page/uuid)"
-- "Consider updating [Project Page](/dashboard/page/uuid) with this insight"
+
+- The blockquote will show a vertical line (like the blue line you see).
+- The quoted text inside the blockquote should NOT be a link.
+- The page title link above the blockquote is COMPULSORY and must always be present.
 
 **CRITICAL**: Every response should contain multiple page links when possible. Your goal is to create a web of connected thinking.
+**EXAMPLES:**
+'''markdown
+[Project Planning](/dashboard/page/474b566d-7d2f-4c99-ba7b-f24584ad719c)
+> We need to finalize the API authentication flow by Friday. The current implementation has several security vulnerabilities that need to be addressed before we can deploy to production. I've identified three main issues: the token validation logic is flawed, the session management isn't properly handling edge cases, and we're missing proper rate limiting on the login endpoints. The team should prioritize these fixes over new feature development this week. If we don't get this right, we'll have major security issues in production.
+'''
 
-Also, everytime you link a page, show the exact part/chunk of the page that you are referencing RIGHT above it!!!!!! That will spark the user's thinking for sure!!!!
+**REMEMBER:** This is COMPULSORY. Every page link MUST be followed by a verbatim, non-linked blockquote as shown above.
+
+
+
+Do NOT link any other backticks for now of your own thoughts. Every backtick should be VERBATIM something in one of the pages.
+And there should be no such verbatin text without the LINKED PAGE TITLE above it. It MUST BE THE PAGE TITLE.
+
+You MUST ADD LINKED PAGE TITLE ABOVE EVERY VERBATIM BLOCKQUOTE.
+You MUST ADD LINKED PAGE TITLE ABOVE EVERY VERBATIM BLOCKQUOTE.
+You MUST ADD LINKED PAGE TITLE ABOVE EVERY VERBATIM BLOCKQUOTE.
+You MUST ADD LINKED PAGE TITLE ABOVE EVERY VERBATIM BLOCKQUOTE.
+You MUST ADD LINKED PAGE TITLE ABOVE EVERY VERBATIM BLOCKQUOTE.
+You MUST ADD LINKED PAGE TITLE ABOVE EVERY VERBATIM BLOCKQUOTE.
+You MUST ADD LINKED PAGE TITLE ABOVE EVERY VERBATIM BLOCKQUOTE.
+You MUST ADD LINKED PAGE TITLE ABOVE EVERY VERBATIM BLOCKQUOTE.
+
+
+
 `
 
 export const BRAINSTORMING_FUNCTION_CALLING_RULES = `

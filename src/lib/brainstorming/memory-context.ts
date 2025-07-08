@@ -106,16 +106,10 @@ export async function getRelevantChatMemories(
       return []
     }
 
-    // Filter out low-confidence results (below 30%)
-    const highConfidenceResults = searchResults.filter(doc => {
-      const confidence = doc.score || 0
-      return confidence >= 0.3 // Only include results with 30%+ confidence
-    })
-    
-    console.log(`Found ${searchResults.length} chat memories, ${highConfidenceResults.length} with confidence >= 30%`)
+    console.log(`Found ${searchResults.length} chat memories`)
 
     // Convert to our interface format
-    return highConfidenceResults.map(doc => ({
+    return searchResults.map(doc => ({
       id: doc.id || '',
       title: doc.title || 'Untitled Document',
       content: doc.content || '',
@@ -160,34 +154,71 @@ export async function getRelevantDocMemories(
     }
 
     // Search SuperMemory for relevant documents
-    const searchResults = await memoryService.search(userQuestion + ' ' + conversationSummary, user.id, maxResults, ['docs', ...relevantPaths])
+    // Send separate requests for each path to get union (not intersection) of results
+    const searchPromises = relevantPaths.map(path => 
+      memoryService.search(userQuestion + ' ' + conversationSummary, user.id, maxResults, ['docs', path])
+    );
+
+    console.log(`🔍 Running ${searchPromises.length} parallel searches for specific paths: ${relevantPaths.join(', ')}`);
+    
+    const allSearchResults = await Promise.all(searchPromises);
+    
+    // Flatten all results without deduplication
+    const allResults: any[] = [];
+    allSearchResults.forEach((results, index) => {
+      const searchType = `docs + ${relevantPaths[index]}`;
+      console.log(`📊 Search "${searchType}" returned ${results.length} results`);
+      allResults.push(...results);
+    });
+
+    console.log(`📊 Total combined results: ${allResults.length}`);
+
+    const searchResults = allResults
+      .sort((a, b) => (b.score || 0) - (a.score || 0))
+      .slice(0, maxResults);
 
     if (!searchResults || searchResults.length === 0) {
       console.log('No document memory search results found')
       return []
     }
 
-    // Filter out low-confidence results (below 30%)
-    const highConfidenceResults = searchResults.filter(doc => {
-      const confidence = doc.score || 0
-      return confidence >= 0.3 // Only include results with 30%+ confidence
-    })
-    
-    console.log(`Found ${searchResults.length} document memories, ${highConfidenceResults.length} with confidence >= 30%`)
+    console.log('Search results:', searchResults)
+    console.log(`Found ${searchResults.length} document memories`)
 
-    // Convert to our interface format
-    const docMemories = highConfidenceResults.map(doc => ({
-      id: doc.id || '',
-      title: doc.title || 'Untitled Document',
-      content: doc.content || '',
-      score: doc.score,
-      pageUuid: doc.metadata?.pageUuid || null,
-      metadata: doc.metadata || {}
-    }));
+
+    // Convert to our interface format and extract content from chunks
+    const docMemories = searchResults.map(doc => {
+      // Extract content from SuperMemory chunks
+      let extractedContent = '';
+      if (doc.chunks && doc.chunks.length > 0) {
+        // Combine all relevant chunks, sorted by score
+        const sortedChunks = doc.chunks
+          .filter((chunk: any) => chunk.isRelevant)
+          .sort((a: any, b: any) => (b.score || 0) - (a.score || 0));
+        
+        extractedContent = sortedChunks
+          .map((chunk: any) => chunk.content)
+          .join('\n\n--- CHUNK BREAK ---\n\n');
+        
+        console.log(`📄 Extracted ${sortedChunks.length} chunks for "${doc.title}"`);
+      }
+      
+      return {
+        id: doc.id || '',
+        title: doc.title || 'Untitled Document',
+        content: extractedContent,
+        score: doc.score,
+        uuid: doc.metadata?.pageUuid || null,
+        metadata: doc.metadata || {},
+        // Preserve raw chunks for potential future use
+        chunks: doc.chunks || []
+      };
+    });
 
     // Enrich with full document content from Supabase
     const enrichedMemories = await enrichDocMemoriesWithFullContent(docMemories);
-    
+    console.log('Enriched memories:', enrichedMemories)
+
     return enrichedMemories;
 
   } catch (error) {
@@ -271,24 +302,39 @@ async function enrichDocMemoriesWithFullContent(superMemoryResults: RelevantMemo
   try {
     if (superMemoryResults.length === 0) return [];
 
-    // Extract unique pageUuids from SuperMemory results
+    // Extract unique pageUuids from SuperMemory results metadata
     const pageUuids = [...new Set(
       superMemoryResults
         .map(doc => doc.metadata?.pageUuid)
         .filter(Boolean) as string[]
     )];
 
-    if (pageUuids.length === 0) return superMemoryResults;
+    console.log('📋 Extracted pageUuids from metadata:', pageUuids);
+
+    if (pageUuids.length === 0) {
+      console.log('⚠️ No pageUuids found in metadata, returning original results');
+      return superMemoryResults;
+    }
 
     // Get full document content from Supabase
     const supabase = await createClient();
-    const { data: fullDocuments } = await supabase
+    const { data: fullDocuments, error } = await supabase
       .from('pages')
       .select('uuid, title, content_text')
       .in('uuid', pageUuids)
       .eq('is_deleted', false);
 
-    if (!fullDocuments || fullDocuments.length === 0) return superMemoryResults;
+    if (error) {
+      console.error('❌ Error querying pages:', error);
+      return superMemoryResults;
+    }
+
+    console.log('📄 Pages found:', fullDocuments?.map(p => ({ uuid: p.uuid, title: p.title, contentLength: p.content_text?.length })));
+
+    if (!fullDocuments || fullDocuments.length === 0) {
+      console.log('⚠️ No pages found for pageUuids');
+      return superMemoryResults;
+    }
 
     // Create a map for quick lookup
     const fullContentMap = new Map(
@@ -296,21 +342,27 @@ async function enrichDocMemoriesWithFullContent(superMemoryResults: RelevantMemo
     );
 
     // Replace chunk content with full content
-    return superMemoryResults.map(doc => {
+    const enrichedResults = superMemoryResults.map(doc => {
       const pageUuid = doc.metadata?.pageUuid;
       const fullDoc = fullContentMap.get(pageUuid);
       
       if (fullDoc) {
+        console.log(`✅ Enriching doc ${doc.id} with full content from "${fullDoc.title}"`);
         return {
           ...doc,
           title: fullDoc.title,
           content: fullDoc.content,
+          chunk_content: doc.content, // Preserve original SuperMemory chunk content
           uuid: fullDoc.uuid
         };
       }
       
+      console.log(`⚠️ No full content found for pageUuid ${pageUuid}, keeping original`);
       return doc; // Keep original if no full content found
     });
+
+    console.log(`🎯 Returning ${enrichedResults.length} enriched results`);
+    return enrichedResults;
 
   } catch (error) {
     console.error('Error enriching document memories with full content:', error);

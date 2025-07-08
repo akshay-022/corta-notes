@@ -83,13 +83,17 @@ class SuperMemoryProvider implements MemoryProvider {
 
       console.log('SuperMemory search response:', response)
 
-      // Map the response to our standardized interface
+      // Return raw SuperMemory results for flexible processing in enrichResults
       return (response.results || []).map((result: any) => ({
-        id: result.id || result._id || '',
-        content: result.content || result.text || '',
+        id: result.documentId || result.id || result._id || '',
         title: result.title || result.metadata?.title || 'Untitled Document',
         score: result.score || result._score || 0,
-        metadata: result.metadata || {}
+        metadata: result.metadata || {},
+        // Preserve raw SuperMemory structure for content extraction
+        chunks: result.chunks || [],
+        createdAt: result.createdAt,
+        updatedAt: result.updatedAt,
+        documentId: result.documentId
       }))
     } catch (error) {
       console.error('Error searching SuperMemory:', error)
